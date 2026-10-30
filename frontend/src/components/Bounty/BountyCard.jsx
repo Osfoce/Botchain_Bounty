@@ -18,6 +18,8 @@ import {
 } from "react-icons/fi";
 
 import HappyBountyLogo from "../../assets/images/happy-bounty-logo.png";
+import ArcLogo from "../../assets/images/arc.png";
+import BotchainLogo from "../../assets/images/bot.png";
 
 import { formatAmount } from "../../utils/format";
 import { getNativeToken } from "../../utils/chains.address";
@@ -186,12 +188,28 @@ const BountyCard = ({
   const timeRemaining = getTimeRemaining(bounty.deadline);
   const tags = Array.isArray(bounty.tags) ? bounty.tags : [];
 
+  // Detect the bounty's network using its chain ID.
+  const network = supportedChains.find(
+    (chain) => chain.id === Number(bounty.network)
+  );
+
   const networkName =
-    supportedChains.find((c) => c.id === Number(bounty.network))?.name ||
+    network?.name ||
     (bounty.network ? `Chain ${bounty.network}` : "");
 
+  // Select the appropriate network logo.
+  const normalizedNetworkName = String(networkName).toLowerCase();
+
+  const networkLogo = normalizedNetworkName.includes("arc")
+    ? ArcLogo
+    : normalizedNetworkName.includes("botchain")
+      ? BotchainLogo
+      : null;
+
   const tokenSymbol =
-    bounty.token || getNativeToken(bounty.network)?.symbol || "native token";
+    bounty.token ||
+    getNativeToken(bounty.network)?.symbol ||
+    "native token";
 
   const rewardDisplay = `${formatAmount(bounty.reward)} ${tokenSymbol}`;
 
@@ -290,20 +308,22 @@ const BountyCard = ({
   return (
     <article
       className={`
-        group relative flex h-[550px] min-w-0 flex-col
-        overflow-hidden rounded-[18px] border
+        group relative flex h-[560px] min-w-0 flex-col
+        overflow-hidden rounded-[18px]
+        border-0
+        outline-none ring-0
         transition-all duration-300 ease-out
         hover:-translate-y-1
         ${
           dark
-            ? "border-white/[0.08] bg-[#111713] shadow-[0_8px_28px_rgba(0,0,0,0.18)] hover:border-[#00A87D]/35 hover:shadow-[0_20px_45px_rgba(0,0,0,0.3)]"
-            : "border-black/[0.07] bg-white shadow-[0_8px_28px_rgba(15,23,42,0.045)] hover:border-[#00A87D]/30 hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)]"
+            ? "bg-[#111713] shadow-[0_8px_28px_rgba(0,0,0,0.18)] hover:shadow-[0_20px_45px_rgba(0,0,0,0.3)]"
+            : "bg-white shadow-[0_8px_28px_rgba(15,23,42,0.045)] hover:shadow-[0_20px_45px_rgba(15,23,42,0.09)]"
         }
       `}
     >
-      {/* Image banner with stronger light-theme contrast */}
+      {/* Image banner */}
       <div
-        className={`relative h-[108px] shrink-0 overflow-hidden ${
+        className={`relative h-[120px]  shrink-0 overflow-hidden border-0 outline-none ring-0 shadow-none ${
           dark ? "bg-[#07130F]" : "bg-[#CDEFE0]"
         }`}
       >
@@ -354,10 +374,11 @@ const BountyCard = ({
             alt={bounty.title ? `${bounty.title} cover` : "Bounty cover"}
             loading="lazy"
             onError={() => setImageFailed(true)}
-            className="absolute inset-0 z-[1] h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+            className="absolute inset-0 z-[1] h-full w-full border-0 object-cover outline-none ring-0 shadow-none transition-transform duration-500 group-hover:scale-[1.04]"
           />
         )}
 
+        {/* Category and status */}
         <div className="absolute inset-x-0 top-0 z-10 flex items-start justify-between gap-2 p-3">
           <span
             title={bounty.category || "Bounty opportunity"}
@@ -388,14 +409,27 @@ const BountyCard = ({
 
         <div className="absolute inset-x-0 bottom-0 z-[2] h-12 bg-gradient-to-t from-black/65 to-transparent" />
 
+        {/* Network logo indicator */}
         {networkName && (
           <div className="absolute bottom-2.5 left-3 z-[3]">
-            <span
+            <div
               title={networkName}
-              className="rounded-md border border-white/20 bg-black/55 px-2 py-1 text-[11px] font-bold text-white backdrop-blur-md"
+              className="inline-flex items-center gap-2 rounded-lg bg-black/65 px-2.5 py-1.5 text-white shadow-lg backdrop-blur-md"
             >
-              {networkName}
-            </span>
+              {networkLogo ? (
+                <img
+                  src={networkLogo}
+                  alt={`${networkName} logo`}
+                  className="h-5 w-5 shrink-0 object-contain"
+                />
+              ) : (
+                <FiLayers size={15} className="shrink-0" />
+              )}
+
+              <span className="max-w-[120px] truncate text-[11px] font-bold">
+                {networkName}
+              </span>
+            </div>
           </div>
         )}
       </div>
@@ -403,7 +437,7 @@ const BountyCard = ({
       {/* Top accent */}
       <div className="absolute inset-x-0 top-0 z-10 h-[3px] bg-gradient-to-r from-transparent via-[#00D6A0] to-transparent opacity-80" />
 
-      {/* Large centered Happy Bounty logo watermark */}
+      {/* Centered Happy Bounty logo watermark */}
       <div
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center overflow-hidden"
@@ -414,17 +448,13 @@ const BountyCard = ({
           draggable="false"
           className={`
             h-64 w-64 max-w-[85%] select-none object-contain
-            opacity-[0.055]
-            blur-[0.5px]
+            opacity-[0.055] blur-[0.5px]
             transition-transform duration-500
             group-hover:scale-105
-            ${
-              dark
-                ? "brightness-150"
-                : "brightness-95"
-            }
+            ${dark ? "brightness-150" : "brightness-95"}
           `}
         />
+
         <div
           className={`
             absolute h-48 w-48 rounded-full blur-[70px]
@@ -438,7 +468,7 @@ const BountyCard = ({
       </div>
 
       <div className="relative z-[1] flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4">
-        {/* Bold bounty title */}
+        {/* Bounty title */}
         <Link
           to={`/bounty/${bountyId}`}
           onClick={handleViewDetails}
