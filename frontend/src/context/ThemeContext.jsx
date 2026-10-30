@@ -3,13 +3,14 @@ import { useAccount } from "wagmi";
 
 const ThemeContext = createContext(null);
 
+// Both networks use the original Happy Bounty green.
 const NETWORK_THEMES = {
   arc: {
-    accent: "#D4A017",
-    secondary: "#B28B20",
-    foreground: "#171714",
-    accentBg: "rgba(212, 160, 23, 0.12)",
-    accentBorder: "rgba(212, 160, 23, 0.38)",
+    accent: "#00D6A0",
+    secondary: "#00A87D",
+    foreground: "#06251c",
+    accentBg: "rgba(0, 214, 160, 0.1)",
+    accentBorder: "rgba(0, 214, 160, 0.35)",
   },
   botchain: {
     accent: "#00D6A0",
@@ -22,6 +23,7 @@ const NETWORK_THEMES = {
 
 export function ThemeProvider({ children }) {
   const { chainId } = useAccount();
+
   const [dark, setDark] = useState(() => {
     try {
       return localStorage.getItem("theme") === "dark";
@@ -30,12 +32,13 @@ export function ThemeProvider({ children }) {
     }
   });
 
-  // Arc mainnet uses gold. Botchain keeps the existing Happy Bounty green.
+  // Detect the connected network without changing the UI colors.
   const network = chainId === 5042 ? "arc" : "botchain";
   const palette = NETWORK_THEMES[network];
 
   useEffect(() => {
     const root = document.documentElement;
+
     root.classList.toggle("dark", dark);
     root.dataset.theme = dark ? "dark" : "light";
     root.dataset.network = network;
@@ -72,8 +75,10 @@ export function ThemeProvider({ children }) {
 
 export function useTheme() {
   const ctx = useContext(ThemeContext);
+
   if (!ctx) {
     throw new Error("useTheme must be used inside <ThemeProvider>");
   }
+
   return ctx;
 }
