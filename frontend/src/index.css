@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -6,34 +7,27 @@
   --text: #5f5a66;
   --text-h: #111111;
 
-  /* =========================================================
-     MILKY WHITE BACKGROUND
-  ========================================================= */
+  /* MILKY WHITE BACKGROUND */
   --bg: #f3f1ec;
 
   --border: rgba(0, 0, 0, 0.09);
   --code-bg: #ebe9e3;
 
-  /* =========================================================
-     HAPPY BOUNTY
-  ========================================================= */
+  /* HAPPY BOUNTY GREEN */
   --accent: #00D6A0;
   --accent-secondary: #00A87D;
   --accent-bg: rgba(0, 214, 160, 0.1);
   --accent-border: rgba(0, 214, 160, 0.35);
+  --accent-foreground: #06251c;
 
   --social-bg: rgba(0, 0, 0, 0.04);
 
-  /* =========================================================
-     SHADOWS
-  ========================================================= */
+  /* SHADOWS */
   --shadow:
     rgba(0, 0, 0, 0.09) 0 20px 40px -10px,
     rgba(0, 0, 0, 0.05) 0 10px 20px -5px;
 
-  /* =========================================================
-     FONTS
-  ========================================================= */
+  /* FONTS */
   --sans: system-ui, "Segoe UI", Roboto, sans-serif;
   --heading: system-ui, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
@@ -68,7 +62,7 @@ body {
   overflow-x: hidden;
 }
 
-/* Shared application overlays keep dialogs visually consistent across routes. */
+/* Shared application overlays */
 .app-modal-overlay {
   background: rgba(23, 23, 20, 0.62);
   animation: modalOverlayIn 180ms ease-out;
@@ -134,7 +128,9 @@ body {
 }
 
 .dark .app-modal-panel {
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(0, 214, 160, 0.1);
+  box-shadow:
+    0 28px 90px rgba(0, 0, 0, 0.62),
+    0 0 0 1px rgba(0, 214, 160, 0.1);
 }
 
 .dark .skeleton-surface {
@@ -166,12 +162,9 @@ body {
 
 /* =========================================================
    HAPPY BOUNTY — HOW IT WORKS PREMIUM ANIMATIONS
-   Colors/layout remain unchanged
 ========================================================= */
 
-/* =========================================================
-   FLOATING CARDS
-========================================================= */
+/* FLOATING CARDS */
 
 @keyframes howItWorksFloat {
   0%,
@@ -183,8 +176,6 @@ body {
     transform: translateY(-8px);
   }
 }
-
-/* Slightly different movement for each card */
 
 @keyframes howItWorksFloat2 {
   0%,
@@ -208,9 +199,7 @@ body {
   }
 }
 
-/* =========================================================
-   MOVING LIGHT ACROSS CARDS
-========================================================= */
+/* MOVING LIGHT ACROSS CARDS */
 
 @keyframes howItWorksShimmer {
   0% {
@@ -240,9 +229,7 @@ body {
   }
 }
 
-/* =========================================================
-   NUMBER BADGE BREATHING
-========================================================= */
+/* NUMBER BADGE BREATHING */
 
 @keyframes howItWorksPulse {
   0%,
@@ -257,9 +244,7 @@ body {
   }
 }
 
-/* =========================================================
-   PURPLE ORB BREATHING
-========================================================= */
+/* PURPLE ORB BREATHING */
 
 @keyframes howItWorksGlow {
   0%,
@@ -274,9 +259,7 @@ body {
   }
 }
 
-/* =========================================================
-   ORBITING PARTICLE
-========================================================= */
+/* ORBITING PARTICLE */
 
 @keyframes howItWorksOrbit {
   from {
@@ -288,9 +271,7 @@ body {
   }
 }
 
-/* =========================================================
-   SMALL FLOATING PARTICLE
-========================================================= */
+/* SMALL FLOATING PARTICLE */
 
 @keyframes howItWorksParticle {
   0%,
@@ -305,9 +286,7 @@ body {
   }
 }
 
-/* =========================================================
-   ILLUSTRATION FLOATING
-========================================================= */
+/* ILLUSTRATION FLOATING */
 
 @keyframes howItWorksIllustration {
   0%,
@@ -320,9 +299,7 @@ body {
   }
 }
 
-/* =========================================================
-   ENERGY BOLT MOVEMENT
-========================================================= */
+/* ENERGY BOLT MOVEMENT */
 
 @keyframes howItWorksEnergy {
   0%,
@@ -337,9 +314,7 @@ body {
   }
 }
 
-/* =========================================================
-   CARD BORDER BREATHING
-========================================================= */
+/* CARD BORDER BREATHING */
 
 @keyframes howItWorksBorder {
   0%,
@@ -352,9 +327,7 @@ body {
   }
 }
 
-/* =========================================================
-   CARD ANIMATION
-========================================================= */
+/* CARD ANIMATION */
 
 .how-it-works-card-1 {
   animation: howItWorksFloat 5s ease-in-out infinite;
@@ -370,9 +343,7 @@ body {
   animation-delay: -2.5s;
 }
 
-/* =========================================================
-   SHIMMER
-========================================================= */
+/* SHIMMER */
 
 .how-it-works-card {
   position: relative;
@@ -404,33 +375,25 @@ body {
   animation: howItWorksShimmer 7s ease-in-out infinite;
 }
 
-/* =========================================================
-   NUMBER BADGE
-========================================================= */
+/* NUMBER BADGE */
 
 .how-it-works-number {
   animation: howItWorksPulse 3s ease-in-out infinite;
 }
 
-/* =========================================================
-   BACKGROUND GLOWS
-========================================================= */
+/* BACKGROUND GLOWS */
 
 .how-it-works-glow {
   animation: howItWorksGlow 4s ease-in-out infinite;
 }
 
-/* =========================================================
-   CARD 1 ILLUSTRATION
-========================================================= */
+/* CARD 1 ILLUSTRATION */
 
 .how-it-works-wallet {
   animation: howItWorksIllustration 4s ease-in-out infinite;
 }
 
-/* =========================================================
-   CARD 3 ENERGY
-========================================================= */
+/* CARD 3 ENERGY */
 
 .how-it-works-energy {
   animation: howItWorksEnergy 1.8s ease-in-out infinite;
@@ -441,9 +404,7 @@ body {
   animation-delay: -0.8s;
 }
 
-/* =========================================================
-   ORBITING PARTICLE
-========================================================= */
+/* ORBITING PARTICLE */
 
 .how-it-works-orbit {
   position: absolute;
@@ -467,9 +428,7 @@ body {
   pointer-events: none;
 }
 
-/* =========================================================
-   SMALL PARTICLES
-========================================================= */
+/* SMALL PARTICLES */
 
 .how-it-works-particle {
   animation: howItWorksParticle 3s ease-in-out infinite;
@@ -483,9 +442,7 @@ body {
   animation-delay: -2s;
 }
 
-/* =========================================================
-   HOVER — MAKE THE CARD FEEL ALIVE
-========================================================= */
+/* HOVER — MAKE THE CARD FEEL ALIVE */
 
 .how-it-works-card:hover {
   animation-play-state: paused;
@@ -504,9 +461,7 @@ body {
   animation-duration: 0.8s;
 }
 
-/* =========================================================
-   REDUCED MOTION
-========================================================= */
+/* REDUCED MOTION */
 
 @media (prefers-reduced-motion: reduce) {
   .how-it-works-card-1,
@@ -524,9 +479,8 @@ body {
   }
 }
 
-/* Theme changes are deliberately animated so switching modes feels like one
-   interface rather than a sudden flash.  The reduced-motion rule keeps this
-   respectful of users who opt out of motion. */
+/* THEME TRANSITIONS */
+
 html {
   color-scheme: light;
   transition: background-color 280ms ease, color 280ms ease;
@@ -541,9 +495,8 @@ body,
   transition: background-color 280ms ease, color 280ms ease;
 }
 
-/* Informational routes were originally authored with light-only utilities.
-   Scope their dark palette to these pages so the theme toggle remains
-   consistent without altering their content or any API/backend behavior. */
+/* DARK MODE FOR INFORMATIONAL ROUTES */
+
 html.dark .theme-page {
   background-color: #080908;
   color: #f7f8f4;
@@ -583,6 +536,8 @@ html.dark .theme-page [class*="text-black/"] {
   transition-timing-function: ease;
 }
 
+/* REDUCED MOTION */
+
 @media (prefers-reduced-motion: reduce) {
   html,
   body,
@@ -593,105 +548,4 @@ html.dark .theme-page [class*="text-black/"] {
   .theme-page [class*="text-"] {
     transition-duration: 0.01ms;
   }
-}
-
-
-/* =========================================================
-   WALLET-NETWORK BRAND THEMES
-   Arc: gold. Botchain: existing Happy Bounty green.
-   The user's light/dark preference remains independent of network.
-========================================================= */
-
-:root {
-  --accent: #00D6A0;
-  --accent-secondary: #00A87D;
-  --accent-bg: rgba(0, 214, 160, 0.1);
-  --accent-border: rgba(0, 214, 160, 0.35);
-  --accent-foreground: #06251c;
-}
-
-html[data-network="arc"] {
-  --accent: #D4A017;
-  --accent-secondary: #B28B20;
-  --accent-bg: rgba(212, 160, 23, 0.12);
-  --accent-border: rgba(212, 160, 23, 0.38);
-  --accent-foreground: #171714;
-}
-
-/* Re-map existing green Tailwind utility classes when Arc is active.
-   This keeps existing layouts and interactions intact while changing branding. */
-html[data-network="arc"] [class*="text-[#00D6A0]"],
-html[data-network="arc"] [class*="text-[#00b889]"],
-html[data-network="arc"] [class*="text-[#00B889]"],
-html[data-network="arc"] [class*="text-[#00A87D]"] {
-  color: var(--accent) !important;
-}
-
-html[data-network="arc"] [class*="bg-[#00D6A0]"],
-html[data-network="arc"] [class*="bg-[#00b889]"],
-html[data-network="arc"] [class*="bg-[#00B889]"],
-html[data-network="arc"] [class*="bg-[#00A87D]"] {
-  background-color: var(--accent) !important;
-}
-
-html[data-network="arc"] [class*="border-[#00D6A0]"],
-html[data-network="arc"] [class*="border-[#00b889]"],
-html[data-network="arc"] [class*="border-[#00B889]"],
-html[data-network="arc"] [class*="border-[#00A87D]"] {
-  border-color: var(--accent-border) !important;
-}
-
-html[data-network="arc"] [class*="ring-[#00D6A0]"],
-html[data-network="arc"] [class*="shadow-[#00D6A0]"] {
-  --tw-ring-color: var(--accent);
-}
-
-html[data-network="arc"] .app-modal-panel {
-  box-shadow: 0 28px 90px rgba(23, 20, 12, 0.3), 0 0 0 1px rgba(212, 160, 23, 0.1);
-}
-
-html.dark[data-network="arc"] .app-modal-panel {
-  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(212, 160, 23, 0.16);
-}
-
-html[data-network="arc"] .how-it-works-number {
-  --network-glow: rgba(212, 160, 23, 0.18);
-}
-
-html[data-network="arc"] .how-it-works-number {
-  animation-name: howItWorksArcPulse;
-}
-
-@keyframes howItWorksArcPulse {
-  0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(212, 160, 23, 0); }
-  50% { transform: scale(1.06); box-shadow: 0 0 25px rgba(212, 160, 23, 0.2); }
-}
-
-html[data-network="arc"] .how-it-works-number,
-html[data-network="arc"] .how-it-works-energy,
-html[data-network="arc"] .how-it-works-energy-delayed {
-  color: var(--accent);
-}
-
-
-
-/* Keep wallet actions and hover states on the active network palette too. */
-html[data-network="arc"] [class*="text-[#06251c]"] {
-  color: #171714 !important;
-}
-
-html[data-network="arc"] [class*="hover:bg-[#00e6ac]"]:hover {
-  background-color: #e2b52e !important;
-}
-
-html[data-network="arc"] [class*="hover:border-[#00e6ac]"]:hover {
-  border-color: #e2b52e !important;
-}
-
-html[data-network="arc"] [class*="shadow-[0_8px_24px_rgba(0,214,160"] {
-  box-shadow: 0 8px 24px rgba(212, 160, 23, 0.16) !important;
-}
-
-html[data-network="arc"] [class*="shadow-[0_10px_30px_rgba(0,214,160"] {
-  box-shadow: 0 10px 30px rgba(212, 160, 23, 0.24) !important;
 }

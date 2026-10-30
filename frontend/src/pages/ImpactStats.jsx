@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import {
   FiActivity,
@@ -5,6 +6,7 @@ import {
   FiCheckCircle,
   FiDollarSign,
   FiLayers,
+  FiPlus,
   FiUsers,
   FiZap,
 } from "react-icons/fi";
@@ -18,6 +20,66 @@ const INITIAL_STATS = {
   contributors: null,
 };
 
+// Animated number component
+function CountUp({ value, decimals = 0 }) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const target = Number(value) || 0;
+
+    if (target <= 0) {
+      setCount(0);
+      return;
+    }
+
+    const prefersReducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+
+    if (prefersReducedMotion) {
+      setCount(target);
+      return;
+    }
+
+    let animationFrame;
+    let startTime;
+
+    const duration = 1600;
+
+    const animate = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+
+      const elapsed = timestamp - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Smooth ease-out animation
+      const easedProgress = 1 - Math.pow(1 - progress, 4);
+
+      setCount(target * easedProgress);
+
+      if (progress < 1) {
+        animationFrame = requestAnimationFrame(animate);
+      } else {
+        setCount(target);
+      }
+    };
+
+    setCount(0);
+    animationFrame = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(animationFrame);
+  }, [value]);
+
+  return (
+    <>
+      {count.toLocaleString(undefined, {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      })}
+    </>
+  );
+}
+
 const STAT_ITEMS = [
   {
     key: "bountiesCompleted",
@@ -25,7 +87,7 @@ const STAT_ITEMS = [
     description: "Tasks completed successfully",
     icon: FiCheckCircle,
     tag: "COMPLETED WORK",
-    format: (val) => Number(val).toLocaleString(),
+    decimals: 0,
   },
   {
     key: "totalPaid",
@@ -33,10 +95,7 @@ const STAT_ITEMS = [
     description: "Reward units delivered across supported networks",
     icon: FiDollarSign,
     tag: "REWARDS DISTRIBUTED",
-    format: (val) =>
-      `${Number(val).toLocaleString(undefined, {
-        maximumFractionDigits: 2,
-      })}`,
+    decimals: 2,
   },
   {
     key: "contributors",
@@ -44,7 +103,7 @@ const STAT_ITEMS = [
     description: "People participating in bounties",
     icon: FiUsers,
     tag: "COMMUNITY",
-    format: (val) => Number(val).toLocaleString(),
+    decimals: 0,
   },
   {
     key: "bountiesCreated",
@@ -52,7 +111,7 @@ const STAT_ITEMS = [
     description: "Opportunities published",
     icon: FiLayers,
     tag: "OPPORTUNITIES",
-    format: (val) => Number(val).toLocaleString(),
+    decimals: 0,
   },
 ];
 
@@ -66,26 +125,34 @@ export default function ImpactStats() {
 
     async function fetchStats() {
       try {
-        if (!API_URL) throw new Error("VITE_API_URL is not configured");
+        if (!API_URL) {
+          throw new Error("VITE_API_URL is not configured");
+        }
 
         const response = await fetch(`${API_URL}/bounty/stats`, {
           signal: controller.signal,
         });
 
-        if (!response.ok) throw new Error("Failed to load stats");
+        if (!response.ok) {
+          throw new Error("Failed to load stats");
+        }
 
         const data = await response.json();
 
         setStats({
-          bountiesCreated: data.bountiesCreated ?? 0,
-          bountiesCompleted: data.bountiesCompleted ?? 0,
-          totalPaid: data.totalPaid ?? 0,
-          contributors: data.contributors ?? 0,
+          bountiesCreated: Number(data.bountiesCreated) || 0,
+          bountiesCompleted: Number(data.bountiesCompleted) || 0,
+          totalPaid: Number(data.totalPaid) || 0,
+          contributors: Number(data.contributors) || 0,
         });
+
         setHasError(false);
       } catch (error) {
         if (error.name !== "AbortError") {
-          console.error("Failed to load Happy Bounty statistics:", error);
+          console.error(
+            "Failed to load Happy Bounty statistics:",
+            error
+          );
           setHasError(true);
         }
       } finally {
@@ -96,6 +163,7 @@ export default function ImpactStats() {
     }
 
     fetchStats();
+
     return () => controller.abort();
   }, []);
 
@@ -115,7 +183,8 @@ export default function ImpactStats() {
           `,
           backgroundSize: "48px 48px",
           maskImage: "linear-gradient(to bottom, black, transparent 85%)",
-          WebkitMaskImage: "linear-gradient(to bottom, black, transparent 85%)",
+          WebkitMaskImage:
+            "linear-gradient(to bottom, black, transparent 85%)",
         }}
       />
 
@@ -147,13 +216,13 @@ export default function ImpactStats() {
           </h2>
 
           <p className="mx-auto mt-6 max-w-2xl text-sm leading-7 text-gray-600 dark:text-gray-400 sm:text-base sm:leading-8">
-            Every bounty creates an opportunity to contribute, demonstrate your
-            skills, and earn rewards. Here’s a snapshot of activity across Happy
-            Bounty.
+            Every bounty creates an opportunity to contribute, demonstrate
+            your skills, and earn rewards. Here’s a snapshot of activity
+            across Happy Bounty.
           </p>
         </div>
 
-        {/* Small platform label */}
+        {/* Platform label */}
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#008A66] dark:bg-[#00D6A0]" />
@@ -178,11 +247,12 @@ export default function ImpactStats() {
             return (
               <article
                 key={item.key}
-                className="group relative flex min-h-[235px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#008A66]/30 hover:shadow-xl hover:shadow-[#008A66]/[0.06] dark:border-white/[0.09] dark:bg-[#101410] dark:hover:border-[#00D6A0]/30 dark:hover:shadow-[#00D6A0]/[0.04] sm:p-6"
+                className="group relative flex min-h-[245px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#008A66]/30 hover:shadow-xl hover:shadow-[#008A66]/[0.06] dark:border-white/[0.09] dark:bg-[#101410] dark:hover:border-[#00D6A0]/30 dark:hover:shadow-[#00D6A0]/[0.04] sm:p-6"
               >
                 {/* Top accent */}
                 <div className="absolute inset-x-0 top-0 h-[2px] origin-left scale-x-0 bg-gradient-to-r from-[#008A66] to-[#00D6A0] transition-transform duration-500 group-hover:scale-x-100" />
 
+                {/* Card header */}
                 <div className="flex items-start justify-between">
                   <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#008A66]/15 bg-[#008A66]/[0.06] text-[#008A66] transition-colors duration-300 group-hover:bg-[#008A66]/10 dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.06] dark:text-[#00D6A0] dark:group-hover:bg-[#00D6A0]/[0.12]">
                     <Icon size={19} strokeWidth={1.8} />
@@ -193,19 +263,31 @@ export default function ImpactStats() {
                   </span>
                 </div>
 
+                {/* Animated statistic */}
                 <div className="mt-7">
-                  <p
-                    aria-live="polite"
-                    className="break-words text-2xl font-bold leading-tight tracking-[-0.04em] text-[#008A66] dark:text-[#00D6A0] sm:text-3xl"
-                  >
-                    {loading ? (
-                      <span className="inline-block h-8 w-20 animate-pulse rounded-md bg-[#008A66]/10 dark:bg-[#00D6A0]/10" />
-                    ) : hasError ? (
-                      "—"
-                    ) : (
-                      item.format(value)
+                  <div className="flex items-center gap-2">
+                    <p
+                      aria-live="polite"
+                      className="break-words text-3xl font-extrabold leading-tight tracking-[-0.055em] text-[#008A66] dark:text-[#00D6A0] sm:text-4xl"
+                    >
+                      {loading ? (
+                        <span className="inline-block h-9 w-24 animate-pulse rounded-md bg-[#008A66]/10 dark:bg-[#00D6A0]/10" />
+                      ) : hasError ? (
+                        "—"
+                      ) : (
+                        <CountUp
+                          value={value}
+                          decimals={item.decimals}
+                        />
+                      )}
+                    </p>
+
+                    {!loading && !hasError && (
+                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#008A66]/20 bg-[#008A66]/[0.07] text-[#008A66] transition-all duration-300 group-hover:scale-110 group-hover:bg-[#008A66]/15 dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.08] dark:text-[#00D6A0] dark:group-hover:bg-[#00D6A0]/15">
+                        <FiPlus size={13} strokeWidth={2.5} />
+                      </span>
                     )}
-                  </p>
+                  </div>
 
                   <h3 className="mt-3 text-base font-bold tracking-tight">
                     {item.label}
@@ -216,6 +298,7 @@ export default function ImpactStats() {
                   </p>
                 </div>
 
+                {/* Card footer */}
                 <div className="mt-auto flex items-center justify-between gap-3 border-t border-black/[0.07] pt-4 dark:border-white/[0.08]">
                   <span className="text-[9px] font-bold uppercase tracking-[0.12em] text-gray-500 dark:text-gray-500">
                     {item.tag}
