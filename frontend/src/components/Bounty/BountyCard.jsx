@@ -188,21 +188,26 @@ const BountyCard = ({
   const timeRemaining = getTimeRemaining(bounty.deadline);
   const tags = Array.isArray(bounty.tags) ? bounty.tags : [];
 
-  // Detect the bounty's network using its chain ID.
+  // Find the network using its chain ID.
   const network = supportedChains.find(
-    (chain) => chain.id === Number(bounty.network)
+    (chain) => Number(chain.id) === Number(bounty.network)
   );
 
   const networkName =
     network?.name ||
     (bounty.network ? `Chain ${bounty.network}` : "");
 
-  // Select the appropriate network logo.
-  const normalizedNetworkName = String(networkName).toLowerCase();
+  // Normalize the network name to handle spaces and special characters.
+  const normalizedNetworkName = String(networkName)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 
+  // Select the correct network logo.
   const networkLogo = normalizedNetworkName.includes("arc")
     ? ArcLogo
-    : normalizedNetworkName.includes("botchain")
+    : normalizedNetworkName.includes("botchain") ||
+        normalizedNetworkName === "bot" ||
+        normalizedNetworkName.startsWith("bot")
       ? BotchainLogo
       : null;
 
@@ -323,7 +328,7 @@ const BountyCard = ({
     >
       {/* Image banner */}
       <div
-        className={`relative h-[120px]  shrink-0 overflow-hidden border-0 outline-none ring-0 shadow-none ${
+        className={`relative h-[120px] shrink-0 overflow-hidden border-0 outline-none ring-0 shadow-none ${
           dark ? "bg-[#07130F]" : "bg-[#CDEFE0]"
         }`}
       >
