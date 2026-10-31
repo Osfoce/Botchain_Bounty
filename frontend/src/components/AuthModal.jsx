@@ -1,6 +1,8 @@
+
 import { useEffect } from "react";
 import { FiX } from "react-icons/fi";
 import ConnectConfig from "./ConnectConfig";
+import HappyBounty from "../assets/images/happy-bounty-logo.png";
 
 function AuthModal({ isOpen, onClose }) {
   // Prevent background page from scrolling while modal is open
@@ -62,17 +64,42 @@ function AuthModal({ isOpen, onClose }) {
 
         {/* HEADER */}
         <div className="mb-5 text-center">
+
+          {/* HAPPY BOUNTY LOGO */}
           <div
             className="
-              mx-auto mb-3
-              flex h-10 w-10 items-center justify-center
-              rounded-xl
-              bg-[#00D6A0]
-              text-white
-              shadow-[0_8px_25px_rgba(0, 214, 160,0.25)]
+              auth-modal-logo
+              relative mx-auto mb-3
+              flex h-16 w-16
+              items-center justify-center
+              rounded-full
+              p-1
+              bg-[#00D6A0]/10
+              ring-2 ring-[#00D6A0]/40
+              shadow-[0_0_30px_rgba(0,214,160,0.20)]
             "
           >
-            <span className="text-sm font-black">HB</span>
+            <div
+              className="
+                flex h-full w-full
+                items-center justify-center
+                overflow-hidden
+                rounded-full
+                bg-white
+              "
+            >
+              <img
+                src={HappyBounty}
+                alt="Happy Bounty Logo"
+                className="
+                  h-full w-full
+                  object-contain
+                  p-1
+                  transition-transform duration-300
+                  hover:scale-105
+                "
+              />
+            </div>
           </div>
 
           <h2 className="auth-modal-title text-xl font-black tracking-tight sm:text-2xl">
@@ -144,7 +171,7 @@ function AuthModal({ isOpen, onClose }) {
           By connecting, you agree to Happy Bounty's terms and conditions.
         </p>
 
-        {/* GOLD ACCENT */}
+        {/* GREEN ACCENT */}
         <div
           className="
             pointer-events-none
@@ -226,6 +253,11 @@ function AuthModal({ isOpen, onClose }) {
           color: rgba(0, 0, 0, 0.40);
         }
 
+        /* LOGO LIGHT MODE */
+        .auth-modal-logo {
+          background: rgba(0, 214, 160, 0.09);
+        }
+
         /* =====================================================
            DARK MODE
         ===================================================== */
@@ -290,6 +322,12 @@ function AuthModal({ isOpen, onClose }) {
 
         .dark .auth-modal-footer {
           color: rgba(255, 255, 255, 0.40);
+        }
+
+        /* LOGO DARK MODE */
+        .dark .auth-modal-logo {
+          background: rgba(0, 214, 160, 0.12);
+          box-shadow: 0 0 35px rgba(0, 214, 160, 0.13);
         }
 
         /* =====================================================

@@ -594,7 +594,7 @@ export default function AdminPage() {
                 <p className="font-semibold">Switch to Arc Mainnet</p>
                 <p className="mt-1 opacity-80">
                   Contract reads and actions require Arc Mainnet (chain ID{" "}
-                  {ARC_MAINNET_ID}). Switch networks to continue.
+                  {ARC_MAINNET_ID}). s to continue.
                 </p>
               </Notice>
             </div>
