@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNav } from "../hooks/useNav";
 import {
@@ -86,10 +86,8 @@ export default function Hero({ dark }) {
   const [displayText, setDisplayText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const visualRef = useRef(null);
   const { handleNavigate } = useNav();
 
-  // Original typewriter animation preserved.
   useEffect(() => {
     const message = heroMessages[heroText];
     let timer;
@@ -112,43 +110,6 @@ export default function Hero({ dark }) {
     return () => clearTimeout(timer);
   }, [displayText, heroText, isDeleting]);
 
-  // Original interactive tilt effect preserved.
-  useEffect(() => {
-    const visual = visualRef.current;
-
-    if (
-      !visual ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
-
-    const handleMove = (event) => {
-      const bounds = visual.getBoundingClientRect();
-
-      if (!bounds.width || !bounds.height) return;
-
-      const x = (event.clientX - bounds.left) / bounds.width - 0.5;
-      const y = (event.clientY - bounds.top) / bounds.height - 0.5;
-
-      visual.style.setProperty("--tilt-x", `${y * -3}deg`);
-      visual.style.setProperty("--tilt-y", `${x * 3}deg`);
-    };
-
-    const resetTilt = () => {
-      visual.style.setProperty("--tilt-x", "0deg");
-      visual.style.setProperty("--tilt-y", "0deg");
-    };
-
-    visual.addEventListener("pointermove", handleMove);
-    visual.addEventListener("pointerleave", resetTilt);
-
-    return () => {
-      visual.removeEventListener("pointermove", handleMove);
-      visual.removeEventListener("pointerleave", resetTilt);
-    };
-  }, []);
-
   const navigate = (path) => (event) => {
     event.preventDefault();
     handleNavigate(path);
@@ -156,29 +117,25 @@ export default function Hero({ dark }) {
 
   return (
     <section
-      className={`hb-hero relative isolate w-full max-w-none overflow-x-clip overflow-y-hidden transition-colors duration-500 ${
+      className={`hb-hero relative isolate w-full overflow-hidden transition-colors duration-500 ${
         dark ? "bg-[#080B0D] text-white" : "bg-[#F3F5F3] text-[#111916]"
       }`}
     >
-      {/* Background effects */}
-      <div
-        className="hb-grid pointer-events-none absolute inset-0"
-        aria-hidden="true"
-      />
-
-      <div className="hb-glow hb-glow-one pointer-events-none absolute" />
-      <div className="hb-glow hb-glow-two pointer-events-none absolute" />
+      {/* Static background grid */}
+      <div className="hb-grid pointer-events-none absolute inset-0" />
 
       {/* Hero content */}
-      <div className="relative z-10 grid min-h-0 w-full max-w-none grid-cols-1 items-center gap-5 px-4 pb-8 pt-20 sm:gap-8 sm:px-8 sm:pb-12 sm:pt-24 lg:min-h-[720px] lg:grid-cols-2 lg:gap-8 lg:px-12 lg:pb-12 lg:pt-28 xl:px-16 2xl:px-20">
-        {/* Left content */}
-        <div className="mx-auto w-full max-w-2xl text-center sm:text-left lg:mx-0">
+      <div className="relative z-10 grid min-h-0 w-full grid-cols-1 items-center gap-5 px-4 pb-8 pt-20 sm:gap-8 sm:px-8 sm:pb-12 sm:pt-24 lg:min-h-[720px] lg:grid-cols-2 lg:gap-8 lg:px-12 lg:pb-12 lg:pt-28 xl:px-16 2xl:px-20">
+
+        {/* LEFT CONTENT */}
+        <div className="hb-hero-content mx-auto w-full max-w-2xl text-center sm:text-left lg:mx-0">
+
           {/* Platform badge */}
           <div
-            className={`mb-5 inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-semibold tracking-wide backdrop-blur-xl sm:mb-6 sm:gap-2.5 sm:px-4 sm:text-xs ${
+            className={`hb-enter-left hb-delay-1 mb-5 inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-2 text-[10px] font-semibold tracking-wide sm:mb-6 sm:gap-2.5 sm:px-4 sm:text-xs ${
               dark
-                ? "border-[#00D6A0]/25 bg-white/[0.035] text-white/85"
-                : "border-[#00A87D]/25 bg-white/80 text-[#18251F] shadow-sm"
+                ? "border-[#00D6A0]/25 bg-[#101916] text-white/85"
+                : "border-[#00A87D]/25 bg-white text-[#18251F] shadow-sm"
             }`}
           >
             <span className="relative flex h-2 w-2 shrink-0">
@@ -205,7 +162,7 @@ export default function Hero({ dark }) {
 
           {/* Main heading */}
           <h1
-            className={`text-[2.55rem] font-extrabold leading-[1.02] tracking-[-0.06em] min-[390px]:text-[2.8rem] sm:text-5xl md:text-6xl lg:text-[4.4rem] xl:text-[5rem] ${
+            className={`hb-enter-left hb-delay-2 text-[2.55rem] font-extrabold leading-[1.02] tracking-[-0.06em] min-[390px]:text-[2.8rem] sm:text-5xl md:text-6xl lg:text-[4.4rem] xl:text-[5rem] ${
               dark ? "text-white" : "text-[#111916]"
             }`}
           >
@@ -215,16 +172,16 @@ export default function Hero({ dark }) {
           </h1>
 
           {/* Animated headline */}
-          <div className="mt-3 flex min-h-[38px] items-center justify-center overflow-hidden sm:mt-4 sm:min-h-[60px] sm:justify-start">
+          <div className="hb-enter-left hb-delay-3 mt-3 flex min-h-[38px] items-center justify-center overflow-hidden sm:mt-4 sm:min-h-[60px] sm:justify-start">
             <div className="flex max-w-full items-center whitespace-nowrap text-[clamp(1rem,5vw,1.5rem)] font-extrabold tracking-tight sm:text-3xl md:text-4xl">
               <span className="text-[#00D6A0]">{displayText}</span>
-              <span className="ml-1 inline-block h-[0.8em] w-[2px] shrink-0 rounded-full bg-[#00D6A0] sm:w-[3px]" />
+              <span className="hb-cursor ml-1 inline-block h-[0.8em] w-[2px] shrink-0 rounded-full bg-[#00D6A0] sm:w-[3px]" />
             </div>
           </div>
 
           {/* Description */}
           <p
-            className={`mx-auto mt-4 max-w-xl text-[13px] font-medium leading-6 sm:mx-0 sm:mt-5 sm:text-base sm:leading-7 ${
+            className={`hb-enter-left hb-delay-4 mx-auto mt-4 max-w-xl text-[13px] font-medium leading-6 sm:mx-0 sm:mt-5 sm:text-base sm:leading-7 ${
               dark ? "text-white/60" : "text-[#4C5A53]"
             }`}
           >
@@ -234,14 +191,15 @@ export default function Hero({ dark }) {
           </p>
 
           {/* Supported networks */}
-          <div className="mt-4 flex flex-wrap justify-center gap-2 sm:mt-5 sm:justify-start">
-            {networks.map((network) => (
+          <div className="hb-enter-left hb-delay-5 mt-4 flex flex-wrap justify-center gap-2 sm:mt-5 sm:justify-start">
+            {networks.map((network, index) => (
               <span
                 key={network.name}
+                style={{ "--item-index": index }}
                 className={`hb-network-pill ${
                   dark
-                    ? "border-white/10 bg-white/[0.035] text-white/80"
-                    : "border-black/[0.08] bg-white/75 text-[#33443A]"
+                    ? "border-white/10 bg-[#101916] text-white/80"
+                    : "border-black/[0.08] bg-white text-[#33443A]"
                 }`}
               >
                 <NetworkLogo
@@ -255,11 +213,11 @@ export default function Hero({ dark }) {
           </div>
 
           {/* Action buttons */}
-          <div className="mt-6 flex w-full flex-col justify-center gap-3 sm:mt-7 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-start">
+          <div className="hb-enter-left hb-delay-6 mt-6 flex w-full flex-col justify-center gap-3 sm:mt-7 sm:w-auto sm:flex-row sm:flex-wrap sm:justify-start">
             <Link
               to="/dashboard"
               onClick={navigate("/dashboard")}
-              className="hb-primary-btn group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00D6A0] px-6 py-3.5 text-sm font-bold text-[#06251C] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#24E6B4] sm:w-auto"
+              className="hb-primary-btn group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00D6A0] px-6 py-3.5 text-sm font-bold text-[#06251C] transition-all duration-300 hover:-translate-y-1 hover:bg-[#24E6B4] sm:w-auto"
             >
               Explore Bounties
               <FiArrowUpRight className="transition-transform duration-300 group-hover:translate-x-1 group-hover:-translate-y-1" />
@@ -268,10 +226,10 @@ export default function Hero({ dark }) {
             <Link
               to="/create"
               onClick={navigate("/create")}
-              className={`group inline-flex w-full items-center justify-center gap-2 rounded-xl border px-6 py-3.5 text-sm font-bold transition-all duration-300 hover:-translate-y-0.5 sm:w-auto ${
+              className={`hb-secondary-btn group inline-flex w-full items-center justify-center gap-2 rounded-xl border px-6 py-3.5 text-sm font-bold transition-all duration-300 hover:-translate-y-1 sm:w-auto ${
                 dark
-                  ? "border-white/15 bg-white/[0.035] text-white hover:border-[#00D6A0]/60 hover:text-[#00D6A0]"
-                  : "border-black/10 bg-white/80 text-[#17211C] shadow-sm hover:border-[#00A87D]/50 hover:text-[#008A66]"
+                  ? "border-white/15 bg-[#101916] text-white hover:border-[#00D6A0]/60 hover:text-[#00D6A0]"
+                  : "border-black/10 bg-white text-[#17211C] shadow-sm hover:border-[#00A87D]/50 hover:text-[#008A66]"
               }`}
             >
               Create a Bounty
@@ -279,8 +237,8 @@ export default function Hero({ dark }) {
             </Link>
           </div>
 
-          {/* Animated headline indicators */}
-          <div className="mt-6 flex items-center justify-center gap-3 sm:mt-7 sm:justify-start">
+          {/* Headline indicators */}
+          <div className="hb-enter-left hb-delay-7 mt-6 flex items-center justify-center gap-3 sm:mt-7 sm:justify-start">
             <div className="flex gap-1.5">
               {heroMessages.map((message, index) => (
                 <span
@@ -306,32 +264,29 @@ export default function Hero({ dark }) {
           </div>
         </div>
 
-        {/* Right visual */}
-        <div
-          ref={visualRef}
-          className="hb-visual relative mx-auto flex min-h-[300px] w-full max-w-[720px] items-center justify-center sm:min-h-[400px] lg:min-h-[550px] lg:max-w-none"
-        >
+        {/* RIGHT VISUAL */}
+        <div className="hb-visual relative mx-auto flex min-h-[300px] w-full max-w-[720px] items-center justify-center sm:min-h-[400px] lg:min-h-[550px] lg:max-w-none">
           <div className="hb-scene relative flex h-[300px] w-full items-center justify-center sm:h-[430px] lg:h-[540px]">
+
+            {/* Orbit rings */}
             <div className="hb-orbit hb-orbit-one" />
             <div className="hb-orbit hb-orbit-two" />
             <div className="hb-orbit hb-orbit-three" />
-            <div className="hb-center-glow" />
+            <div className="hb-orbit hb-orbit-four" />
 
-            <span className="hb-node hb-node-one" />
-            <span className="hb-node hb-node-two" />
-            <span className="hb-node hb-node-three" />
-            <span className="hb-node hb-node-four" />
+            {/* Rotating ring */}
+            <div className="hb-energy-ring" />
 
             {/* Central platform */}
             <div
               className={`hb-core relative z-10 flex h-36 w-36 items-center justify-center rounded-full border sm:h-48 sm:w-48 ${
                 dark
-                  ? "border-[#00D6A0]/30 bg-[#091511]/90"
-                  : "border-white/90 bg-white/90"
+                  ? "border-[#00D6A0]/40 bg-[#0C1713]"
+                  : "border-[#00A87D]/30 bg-white"
               }`}
             >
-              <div className="flex h-[76%] w-[76%] flex-col items-center justify-center rounded-full border border-[#00D6A0]/20">
-                <FiGlobe className="mb-2 h-7 w-7 text-[#00D6A0] sm:h-9 sm:w-9" />
+              <div className="hb-core-inner flex h-[76%] w-[76%] flex-col items-center justify-center rounded-full border border-[#00D6A0]/30">
+                <FiGlobe className="hb-core-icon mb-2 h-7 w-7 text-[#00D6A0] sm:h-9 sm:w-9" />
 
                 <span
                   className={`text-sm font-extrabold sm:text-lg ${
@@ -347,10 +302,10 @@ export default function Hero({ dark }) {
               </div>
             </div>
 
-            {/* Arc floating card */}
+            {/* Arc card */}
             <div
               className={`hb-orbit-card hb-card-arc ${
-                dark ? "bg-[#0C1713]" : "bg-white"
+                dark ? "bg-[#101916]" : "bg-white"
               }`}
             >
               <NetworkLogo
@@ -364,10 +319,10 @@ export default function Hero({ dark }) {
               </span>
             </div>
 
-            {/* Botchain floating card */}
+            {/* Botchain card */}
             <div
               className={`hb-orbit-card hb-card-botchain ${
-                dark ? "bg-[#0C1713]" : "bg-white"
+                dark ? "bg-[#101916]" : "bg-white"
               }`}
             >
               <NetworkLogo
@@ -385,8 +340,8 @@ export default function Hero({ dark }) {
             <div
               className={`hb-float-card hb-reward-card ${
                 dark
-                  ? "border-white/10 bg-[#111917]/95 text-white"
-                  : "border-white bg-white/95 text-[#15231C]"
+                  ? "border-white/10 bg-[#111917] text-white"
+                  : "border-black/[0.06] bg-white text-[#15231C]"
               }`}
             >
               <span className="hb-card-icon">
@@ -402,8 +357,8 @@ export default function Hero({ dark }) {
             <div
               className={`hb-float-card hb-approval-card ${
                 dark
-                  ? "border-white/10 bg-[#111917]/95 text-white"
-                  : "border-white bg-white/95 text-[#15231C]"
+                  ? "border-white/10 bg-[#111917] text-white"
+                  : "border-black/[0.06] bg-white text-[#15231C]"
               }`}
             >
               <span className="hb-card-icon">
@@ -415,6 +370,7 @@ export default function Hero({ dark }) {
               </span>
             </div>
 
+            {/* Small labels */}
             <div className="hb-mini-label hb-mini-left">
               <FiLayers />
               <span>One platform</span>
@@ -428,13 +384,13 @@ export default function Hero({ dark }) {
         </div>
       </div>
 
-      {/* Moving network ticker */}
-      <div className="relative z-10 w-full max-w-none px-4 pb-8 sm:px-8 sm:pb-10 lg:px-12 xl:px-16 2xl:px-20">
+      {/* NETWORK TICKER */}
+      <div className="relative z-10 w-full px-4 pb-8 sm:px-8 sm:pb-10 lg:px-12 xl:px-16 2xl:px-20">
         <div
           className={`hb-ticker overflow-hidden rounded-2xl border ${
             dark
-              ? "border-white/10 bg-white/[0.025]"
-              : "border-black/[0.07] bg-white/65"
+              ? "border-white/10 bg-[#0E1512]"
+              : "border-black/[0.07] bg-white"
           }`}
         >
           <div className="hb-ticker-track">
@@ -467,18 +423,19 @@ export default function Hero({ dark }) {
         </div>
       </div>
 
-      {/* Feature cards */}
-      <div className="relative z-10 grid w-full max-w-none grid-cols-1 gap-3 px-4 pb-12 sm:grid-cols-2 sm:px-8 sm:pb-16 lg:grid-cols-4 lg:px-12 lg:pb-20 xl:px-16 2xl:px-20">
-        {features.map((feature) => {
+      {/* FEATURE CARDS */}
+      <div className="relative z-10 grid w-full grid-cols-1 gap-3 px-4 pb-12 sm:grid-cols-2 sm:px-8 sm:pb-16 lg:grid-cols-4 lg:px-12 lg:pb-20 xl:px-16 2xl:px-20">
+        {features.map((feature, index) => {
           const Icon = feature.icon;
 
           return (
             <article
               key={feature.title}
-              className={`hb-feature rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 ${
+              style={{ "--item-index": index }}
+              className={`hb-feature rounded-2xl border p-5 ${
                 dark
-                  ? "border-white/[0.08] bg-white/[0.025] hover:border-[#00D6A0]/30"
-                  : "border-black/[0.07] bg-white/70 hover:border-[#00A87D]/30 hover:bg-white"
+                  ? "border-white/[0.08] bg-[#0E1512] hover:border-[#00D6A0]/50"
+                  : "border-black/[0.07] bg-white hover:border-[#00A87D]/50"
               }`}
             >
               <span className="hb-feature-icon">
@@ -505,18 +462,17 @@ export default function Hero({ dark }) {
         })}
       </div>
 
-      {/* Component styles */}
+      {/* ANIMATIONS */}
       <style>{`
         .hb-hero {
           --hb-green: #00D6A0;
           --hb-green-dark: #00A87D;
           isolation: isolate;
-          width: 100%;
-          max-width: none;
         }
 
+        /* Clean background grid */
         .hb-grid {
-          opacity: ${dark ? ".17" : ".10"};
+          opacity: ${dark ? ".15" : ".08"};
           background-image:
             linear-gradient(to right, ${
               dark ? "rgba(255,255,255,.045)" : "rgba(15,55,38,.06)"
@@ -528,43 +484,75 @@ export default function Hero({ dark }) {
           mask-image: linear-gradient(to bottom, black, transparent 95%);
         }
 
-        .hb-glow {
-          position: absolute;
-          width: 25rem;
-          height: 25rem;
-          border-radius: 50%;
-          background: #00D6A0;
-          filter: blur(105px);
-          pointer-events: none;
+        /* LEFT CONTENT: slide in from left */
+        .hb-enter-left {
+          opacity: 0;
+          animation: hbSlideFromLeft .75s cubic-bezier(.2,.75,.25,1) forwards;
         }
 
-        .hb-glow-one {
-          top: 4rem;
-          right: -13rem;
-          opacity: ${dark ? ".10" : ".08"};
+        .hb-delay-1 { animation-delay: .08s; }
+        .hb-delay-2 { animation-delay: .18s; }
+        .hb-delay-3 { animation-delay: .28s; }
+        .hb-delay-4 { animation-delay: .38s; }
+        .hb-delay-5 { animation-delay: .48s; }
+        .hb-delay-6 { animation-delay: .58s; }
+        .hb-delay-7 { animation-delay: .68s; }
+
+        @keyframes hbSlideFromLeft {
+          from {
+            opacity: 0;
+            transform: translateX(-45px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
         }
 
-        .hb-glow-two {
-          bottom: 0;
-          left: -15rem;
-          opacity: ${dark ? ".07" : ".045"};
-        }
-
+        /* Gradient headline */
         .hb-gradient-text {
-          background: linear-gradient(100deg, #00D6A0, #58F4C5, #00A87D);
+          background: linear-gradient(
+            100deg,
+            #00D6A0,
+            #7CF7D2,
+            #00A87D,
+            #00D6A0
+          );
+          background-size: 250% auto;
           -webkit-background-clip: text;
           background-clip: text;
           -webkit-text-fill-color: transparent;
+          animation: hbTextShine 7s linear infinite;
         }
 
+        @keyframes hbTextShine {
+          to { background-position: 250% center; }
+        }
+
+        .hb-cursor {
+          animation: hbCursorBlink .85s step-end infinite;
+        }
+
+        @keyframes hbCursorBlink {
+          50% { opacity: 0; }
+        }
+
+        /* Buttons */
         .hb-primary-btn {
-          box-shadow: 0 10px 30px rgba(0,214,160,.16);
+          position: relative;
+          overflow: hidden;
+          box-shadow: 0 8px 22px rgba(0,214,160,.14);
         }
 
         .hb-primary-btn:hover {
-          box-shadow: 0 14px 36px rgba(0,214,160,.24);
+          box-shadow: 0 12px 28px rgba(0,214,160,.23);
         }
 
+        .hb-secondary-btn:hover {
+          border-color: #00D6A0;
+        }
+
+        /* Network pills */
         .hb-network-pill {
           display: inline-flex;
           align-items: center;
@@ -574,12 +562,15 @@ export default function Hero({ dark }) {
           border-radius: 999px;
           font-size: 11px;
           font-weight: 700;
+          opacity: 0;
+          animation: hbPopIn .55s cubic-bezier(.2,.8,.2,1) forwards;
+          animation-delay: calc(.55s + var(--item-index) * .12s);
           transition: transform .25s ease, border-color .25s ease;
         }
 
         .hb-network-pill:hover {
-          transform: translateY(-2px);
-          border-color: rgba(0,214,160,.55);
+          transform: translateY(-3px);
+          border-color: #00D6A0;
         }
 
         .hb-logo-wrap {
@@ -605,21 +596,31 @@ export default function Hero({ dark }) {
           border-radius: 50%;
         }
 
+        /* RIGHT VISUAL: slide in from right */
         .hb-visual {
-          perspective: 1200px;
-          --tilt-x: 0deg;
-          --tilt-y: 0deg;
+          opacity: 0;
+          animation: hbSlideFromRight .9s cubic-bezier(.2,.75,.25,1) .15s forwards;
+        }
+
+        @keyframes hbSlideFromRight {
+          from {
+            opacity: 0;
+            transform: translateX(55px);
+          }
+          to {
+            opacity: 1;
+            transform: translateX(0);
+          }
         }
 
         .hb-scene {
-          transform: rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
-          transform-style: preserve-3d;
-          transition: transform 450ms cubic-bezier(.16,1,.3,1);
+          transform: none;
         }
 
+        /* Orbit rings */
         .hb-orbit {
           position: absolute;
-          border: 1px solid rgba(0,214,160,.19);
+          border: 1px solid rgba(0,214,160,.2);
           border-radius: 50%;
           pointer-events: none;
         }
@@ -628,7 +629,7 @@ export default function Hero({ dark }) {
           width: 86%;
           height: 43%;
           transform: rotate(-28deg);
-          animation: hbOrbitOne 24s linear infinite;
+          animation: hbOrbitOne 35s linear infinite;
         }
 
         .hb-orbit-two {
@@ -638,7 +639,7 @@ export default function Hero({ dark }) {
             dark ? "rgba(255,255,255,.12)" : "rgba(10,70,48,.13)"
           };
           transform: rotate(35deg);
-          animation: hbOrbitTwo 28s linear infinite;
+          animation: hbOrbitTwo 40s linear infinite;
         }
 
         .hb-orbit-three {
@@ -646,30 +647,84 @@ export default function Hero({ dark }) {
           height: 82%;
           border-color: rgba(0,214,160,.13);
           transform: rotate(55deg);
-          animation: hbOrbitOne 36s linear infinite;
+          animation: hbOrbitOne 48s linear infinite;
         }
 
-        .hb-center-glow {
+        .hb-orbit-four {
+          width: 95%;
+          height: 25%;
+          border-color: rgba(0,214,160,.11);
+          transform: rotate(55deg);
+          animation: hbOrbitTwo 42s linear infinite;
+        }
+
+        @keyframes hbOrbitOne {
+          from { rotate: 0deg; }
+          to { rotate: 360deg; }
+        }
+
+        @keyframes hbOrbitTwo {
+          from { rotate: 0deg; }
+          to { rotate: -360deg; }
+        }
+
+        /* Rotating ring */
+        .hb-energy-ring {
           position: absolute;
-          width: 45%;
-          aspect-ratio: 1;
+          width: 57%;
+          height: 57%;
+          border: 2px solid transparent;
+          border-top-color: rgba(0,214,160,.75);
+          border-right-color: rgba(0,214,160,.15);
           border-radius: 50%;
-          background: rgba(0,214,160,.14);
-          filter: blur(55px);
-          animation: hbGlowPulse 5s ease-in-out infinite;
+          animation: hbSpin 12s linear infinite;
         }
 
+        @keyframes hbSpin {
+          to { rotate: 360deg; }
+        }
+
+        /* Central logo */
         .hb-core {
           border-color: rgba(0,214,160,.3);
           box-shadow:
             0 0 0 10px rgba(0,214,160,.025),
             0 0 0 22px rgba(0,214,160,.025),
-            0 0 75px rgba(0,214,160,.12),
-            inset 0 0 40px rgba(0,214,160,.07);
-          backdrop-filter: blur(18px);
-          animation: hbCoreFloat 6s ease-in-out infinite;
+            0 0 45px rgba(0,214,160,.08);
+          animation: hbCoreEntrance .8s cubic-bezier(.2,.8,.2,1) .65s both,
+                     hbCoreFloat 6s ease-in-out 1.5s infinite;
         }
 
+        @keyframes hbCoreEntrance {
+          from {
+            opacity: 0;
+            transform: scale(.7);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        @keyframes hbCoreFloat {
+          0%, 100% { translate: 0 0; }
+          50% { translate: 0 -7px; }
+        }
+
+        .hb-core-inner {
+          box-shadow: inset 0 0 20px rgba(0,214,160,.06);
+        }
+
+        .hb-core-icon {
+          animation: hbIconBounce 3s ease-in-out infinite;
+        }
+
+        @keyframes hbIconBounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-5px); }
+        }
+
+        /* Network cards */
         .hb-orbit-card {
           position: absolute;
           z-index: 15;
@@ -681,9 +736,13 @@ export default function Hero({ dark }) {
             dark ? "rgba(255,255,255,.12)" : "rgba(15,55,38,.10)"
           };
           border-radius: 16px;
-          box-shadow: 0 14px 38px rgba(0,0,0,.10);
-          backdrop-filter: blur(18px);
-          animation: hbBadgeFloat 6s ease-in-out infinite;
+          box-shadow: 0 12px 30px rgba(0,0,0,.12);
+          transition: transform .3s ease, border-color .3s ease;
+        }
+
+        .hb-orbit-card:hover {
+          transform: translateY(-5px);
+          border-color: rgba(0,214,160,.65);
         }
 
         .hb-token {
@@ -696,7 +755,6 @@ export default function Hero({ dark }) {
           padding: 7px;
           border: 1px solid rgba(255,255,255,.15);
           border-radius: 50%;
-          box-shadow: 0 0 22px rgba(0,214,160,.08);
         }
 
         .hb-token img {
@@ -729,15 +787,45 @@ export default function Hero({ dark }) {
         .hb-card-arc {
           top: 23%;
           left: 2%;
-          animation-delay: -1s;
+          animation: hbCardFromLeft .7s cubic-bezier(.2,.8,.2,1) .75s both,
+                     hbCardFloat 7s ease-in-out 1.5s infinite;
         }
 
         .hb-card-botchain {
           right: 5%;
           bottom: 19%;
-          animation-delay: -2s;
+          animation: hbCardFromRight .7s cubic-bezier(.2,.8,.2,1) .9s both,
+                     hbCardFloat 7s ease-in-out 1.7s infinite;
         }
 
+        @keyframes hbCardFromLeft {
+          from {
+            opacity: 0;
+            translate: -35px 0;
+          }
+          to {
+            opacity: 1;
+            translate: 0 0;
+          }
+        }
+
+        @keyframes hbCardFromRight {
+          from {
+            opacity: 0;
+            translate: 35px 0;
+          }
+          to {
+            opacity: 1;
+            translate: 0 0;
+          }
+        }
+
+        @keyframes hbCardFloat {
+          0%, 100% { margin-top: 0; }
+          50% { margin-top: -7px; }
+        }
+
+        /* Reward and approval cards */
         .hb-float-card {
           position: absolute;
           z-index: 20;
@@ -748,21 +836,47 @@ export default function Hero({ dark }) {
           padding: 11px 13px;
           border: 1px solid;
           border-radius: 15px;
-          box-shadow: 0 18px 48px rgba(0,0,0,.10);
-          backdrop-filter: blur(16px);
-          animation: hbCardFloat 6s ease-in-out infinite;
+          box-shadow: 0 14px 35px rgba(0,0,0,.12);
+          transition: transform .3s ease, border-color .3s ease;
+        }
+
+        .hb-float-card:hover {
+          transform: translateY(-5px);
+          border-color: #00D6A0;
         }
 
         .hb-reward-card {
           top: 5%;
           left: 20%;
-          animation-delay: -2s;
+          animation: hbCardFromTop .65s ease 1s both;
         }
 
         .hb-approval-card {
           bottom: 5%;
           left: 0;
-          animation-delay: -4s;
+          animation: hbCardFromBottom .65s ease 1.1s both;
+        }
+
+        @keyframes hbCardFromTop {
+          from {
+            opacity: 0;
+            transform: translateY(-25px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        @keyframes hbCardFromBottom {
+          from {
+            opacity: 0;
+            transform: translateY(25px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
 
         .hb-card-icon {
@@ -792,6 +906,7 @@ export default function Hero({ dark }) {
           white-space: nowrap;
         }
 
+        /* Small labels */
         .hb-mini-label {
           position: absolute;
           z-index: 15;
@@ -801,6 +916,7 @@ export default function Hero({ dark }) {
           color: ${dark ? "#00D6A0" : "#008A66"};
           font-size: 10px;
           font-weight: 800;
+          animation: hbLabelMove 4s ease-in-out infinite;
         }
 
         .hb-mini-left {
@@ -811,51 +927,17 @@ export default function Hero({ dark }) {
         .hb-mini-right {
           right: 0;
           bottom: 36%;
-        }
-
-        .hb-node {
-          position: absolute;
-          z-index: 5;
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: #00D6A0;
-          box-shadow: 0 0 18px rgba(0,214,160,.8);
-          animation: hbNodePulse 3.5s ease-in-out infinite;
-        }
-
-        .hb-node-one {
-          top: 15%;
-          left: 38%;
-        }
-
-        .hb-node-two {
-          top: 41%;
-          right: 17%;
-          animation-delay: -1s;
-        }
-
-        .hb-node-three {
-          bottom: 24%;
-          left: 21%;
           animation-delay: -2s;
         }
 
-        .hb-node-four {
-          right: 29%;
-          bottom: 12%;
-          animation-delay: -2.5s;
+        @keyframes hbLabelMove {
+          0%, 100% { translate: 0 0; }
+          50% { translate: 0 -5px; }
         }
 
+        /* Ticker */
         .hb-ticker {
           border-color: rgba(0,214,160,.17);
-          mask-image: linear-gradient(
-            to right,
-            transparent,
-            black 3%,
-            black 97%,
-            transparent
-          );
         }
 
         .hb-ticker-track {
@@ -887,9 +969,9 @@ export default function Hero({ dark }) {
           height: 27px;
           flex: 0 0 27px;
           padding: 4px;
-          border: 1px solid rgba(255,255,255,.12);
+          border: 1px solid rgba(0,214,160,.2);
           border-radius: 50%;
-          background: rgba(0,214,160,.10);
+          background: rgba(0,214,160,.08);
         }
 
         .hb-separator {
@@ -898,8 +980,38 @@ export default function Hero({ dark }) {
           font-size: 16px;
         }
 
+        @keyframes hbTickerMove {
+          from { transform: translateX(0); }
+          to { transform: translateX(-50%); }
+        }
+
+        /* Feature cards: staggered entrance */
         .hb-feature {
-          backdrop-filter: blur(10px);
+          position: relative;
+          overflow: hidden;
+          opacity: 0;
+          animation: hbFeatureEnter .7s cubic-bezier(.2,.8,.2,1) forwards;
+          animation-delay: calc(.15s + var(--item-index) * .13s);
+          transition:
+            transform .3s ease,
+            border-color .3s ease,
+            box-shadow .3s ease;
+        }
+
+        @keyframes hbFeatureEnter {
+          from {
+            opacity: 0;
+            transform: translateY(35px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
+        .hb-feature:hover {
+          transform: translateY(-7px);
+          box-shadow: 0 14px 30px rgba(0,214,160,.09);
         }
 
         .hb-feature-icon {
@@ -913,49 +1025,15 @@ export default function Hero({ dark }) {
           background: rgba(0,214,160,.09);
           color: #00D6A0;
           font-size: 18px;
+          transition: transform .3s ease, background .3s ease;
         }
 
-        @keyframes hbOrbitOne {
-          from { transform: rotate(-28deg); }
-          to { transform: rotate(332deg); }
+        .hb-feature:hover .hb-feature-icon {
+          transform: translateY(-3px) scale(1.08);
+          background: rgba(0,214,160,.18);
         }
 
-        @keyframes hbOrbitTwo {
-          from { transform: rotate(35deg); }
-          to { transform: rotate(-325deg); }
-        }
-
-        @keyframes hbGlowPulse {
-          0%, 100% { opacity: .65; transform: scale(.95); }
-          50% { opacity: 1; transform: scale(1.12); }
-        }
-
-        @keyframes hbCoreFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-7px); }
-        }
-
-        @keyframes hbBadgeFloat {
-          0%, 100% { translate: 0 0; }
-          50% { translate: 0 -7px; }
-        }
-
-        @keyframes hbCardFloat {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-7px); }
-        }
-
-        @keyframes hbNodePulse {
-          0%, 100% { opacity: .3; transform: scale(.8); }
-          50% { opacity: 1; transform: scale(1.4); }
-        }
-
-        @keyframes hbTickerMove {
-          from { transform: translateX(0); }
-          to { transform: translateX(-50%); }
-        }
-
-        /* Mobile refinements */
+        /* Mobile */
         @media (max-width: 640px) {
           .hb-visual {
             min-height: 290px;
@@ -978,6 +1056,16 @@ export default function Hero({ dark }) {
           .hb-orbit-three {
             width: 63%;
             height: 82%;
+          }
+
+          .hb-orbit-four {
+            width: 105%;
+            height: 25%;
+          }
+
+          .hb-energy-ring {
+            width: 62%;
+            height: 62%;
           }
 
           .hb-orbit-card {
@@ -1106,21 +1194,25 @@ export default function Hero({ dark }) {
           }
         }
 
+        /* Reduced motion */
         @media (prefers-reduced-motion: reduce) {
-          .hb-glow,
-          .hb-orbit,
-          .hb-center-glow,
-          .hb-core,
-          .hb-orbit-card,
-          .hb-float-card,
-          .hb-node,
-          .hb-ticker-track {
-            animation: none !important;
+          .hb-hero *,
+          .hb-hero *::before,
+          .hb-hero *::after {
+            animation-duration: .01ms !important;
+            animation-iteration-count: 1 !important;
+            scroll-behavior: auto !important;
           }
 
-          .hb-scene {
+          .hb-enter-left,
+          .hb-visual,
+          .hb-feature,
+          .hb-network-pill,
+          .hb-orbit-card,
+          .hb-float-card {
+            opacity: 1 !important;
             transform: none !important;
-            transition: none !important;
+            translate: none !important;
           }
         }
       `}</style>

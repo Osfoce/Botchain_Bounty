@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNav } from "../hooks/useNav";
@@ -58,32 +57,35 @@ function CallToAction() {
               ? "0 24px 90px rgba(0,0,0,0.25)"
               : "0 24px 80px rgba(30,35,25,0.06)"
           };
+          animation: hb-cta-shell-enter .9s cubic-bezier(.22,1,.36,1) both;
         }
 
         .hb-cta-grid {
           background-size: 48px 48px;
           mask-image: linear-gradient(to bottom, black, transparent 92%);
           -webkit-mask-image: linear-gradient(to bottom, black, transparent 92%);
+          animation: hb-cta-grid-enter 1.4s ease both;
         }
 
         .hb-cta-content {
-          animation: hb-cta-enter .7s cubic-bezier(.22,1,.36,1) both;
+          opacity: 0;
+          animation: hb-cta-enter .8s cubic-bezier(.22,1,.36,1) forwards;
         }
 
         .hb-cta-delay-1 {
-          animation-delay: .1s;
+          animation-delay: .12s;
         }
 
         .hb-cta-delay-2 {
-          animation-delay: .2s;
+          animation-delay: .24s;
         }
 
         .hb-cta-delay-3 {
-          animation-delay: .3s;
+          animation-delay: .36s;
         }
 
         .hb-cta-delay-4 {
-          animation-delay: .4s;
+          animation-delay: .48s;
         }
 
         .hb-cta-glow {
@@ -95,17 +97,47 @@ function CallToAction() {
           -webkit-background-clip: text;
           background-clip: text;
           color: transparent;
+          background-size: 200% auto;
+          animation: hb-cta-text-shine 6s ease-in-out infinite;
         }
 
         .hb-cta-step {
+          opacity: 0;
+          transform: translateY(25px) scale(.96);
+          animation: hb-cta-card-enter .75s cubic-bezier(.22,1,.36,1) forwards;
           transition:
-            border-color .25s ease,
-            background-color .25s ease,
-            transform .25s ease;
+            border-color .3s ease,
+            background-color .3s ease,
+            box-shadow .3s ease,
+            transform .3s ease;
+        }
+
+        .hb-cta-step:nth-child(1) {
+          animation-delay: .35s;
+        }
+
+        .hb-cta-step:nth-child(2) {
+          animation-delay: .52s;
+        }
+
+        .hb-cta-step:nth-child(3) {
+          animation-delay: .69s;
         }
 
         .hb-cta-step:hover {
-          transform: translateY(-3px);
+          transform: translateY(-5px) scale(1.015);
+          box-shadow: 0 15px 35px rgba(0,214,160,0.08);
+        }
+
+        .hb-cta-step .hb-cta-step-icon {
+          transition:
+            transform .4s cubic-bezier(.22,1,.36,1),
+            box-shadow .3s ease;
+        }
+
+        .hb-cta-step:hover .hb-cta-step-icon {
+          transform: rotate(-7deg) scale(1.12);
+          box-shadow: 0 0 24px rgba(0,214,160,.16);
         }
 
         .hb-cta-primary,
@@ -119,17 +151,71 @@ function CallToAction() {
 
         .hb-cta-primary:hover,
         .hb-cta-secondary:hover {
-          transform: translateY(-2px);
+          transform: translateY(-3px);
         }
 
         .hb-cta-shimmer {
           animation: hb-cta-shimmer 5s ease-in-out infinite;
         }
 
+        .hb-cta-trust-item {
+          opacity: 0;
+          animation: hb-cta-trust-enter .65s ease forwards;
+        }
+
+        .hb-cta-trust-item:nth-child(1) {
+          animation-delay: .55s;
+        }
+
+        .hb-cta-trust-item:nth-child(2) {
+          animation-delay: .68s;
+        }
+
+        .hb-cta-trust-item:nth-child(3) {
+          animation-delay: .81s;
+        }
+
+        @keyframes hb-cta-shell-enter {
+          from {
+            opacity: 0;
+            transform: translateY(25px) scale(.985);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+
         @keyframes hb-cta-enter {
           from {
             opacity: 0;
-            transform: translateY(15px);
+            transform: translateY(22px);
+            filter: blur(5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+        }
+
+        @keyframes hb-cta-card-enter {
+          from {
+            opacity: 0;
+            transform: translateY(25px) scale(.96);
+            filter: blur(5px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            filter: blur(0);
+          }
+        }
+
+        @keyframes hb-cta-trust-enter {
+          from {
+            opacity: 0;
+            transform: translateY(12px);
           }
           to {
             opacity: 1;
@@ -137,14 +223,32 @@ function CallToAction() {
           }
         }
 
+        @keyframes hb-cta-grid-enter {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+
         @keyframes hb-cta-glow {
           from {
-            opacity: .45;
-            transform: scale(.95);
+            opacity: .35;
+            transform: scale(.9);
           }
           to {
             opacity: .8;
             transform: scale(1.1);
+          }
+        }
+
+        @keyframes hb-cta-text-shine {
+          0%, 100% {
+            background-position: 0% center;
+          }
+          50% {
+            background-position: 100% center;
           }
         }
 
@@ -174,12 +278,15 @@ function CallToAction() {
             animation: none !important;
             scroll-behavior: auto !important;
             transition-duration: .01ms !important;
+            opacity: 1 !important;
+            filter: none !important;
           }
 
+          .hb-cta-step,
           .hb-cta-step:hover,
           .hb-cta-primary:hover,
           .hb-cta-secondary:hover {
-            transform: none;
+            transform: none !important;
           }
         }
       `}</style>
@@ -232,7 +339,7 @@ function CallToAction() {
         </div>
 
         <div className="relative z-10 px-5 py-10 sm:px-8 sm:py-14 md:px-12 md:py-16 lg:px-16 lg:py-20">
-          {/* New eyebrow label */}
+          {/* Eyebrow label */}
           <div className="hb-cta-content flex justify-center">
             <div
               className={`inline-flex items-center gap-2.5 rounded-full border px-4 py-2 ${
@@ -403,7 +510,7 @@ function WorkflowStep({
     >
       <div className="flex items-center justify-between gap-3">
         <div
-          className={`flex h-10 w-10 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] text-[#00A87D] transition-transform duration-300 group-hover:scale-105 ${
+          className={`hb-cta-step-icon flex h-10 w-10 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] text-[#00A87D] ${
             highlighted
               ? "shadow-[0_0_22px_rgba(0,214,160,0.08)]"
               : ""
@@ -442,7 +549,7 @@ function WorkflowStep({
 
 function TrustItem({ dark, icon, label }) {
   return (
-    <div className="flex items-center gap-2">
+    <div className="hb-cta-trust-item flex items-center gap-2">
       <span className="text-[#00A87D]">{icon}</span>
 
       <span

@@ -8,6 +8,7 @@ import { useAccount } from "wagmi";
 
 import {
   FiArrowUpRight,
+  FiAward,
   FiCalendar,
   FiCheckCircle,
   FiClock,
@@ -111,8 +112,8 @@ const BountyCard = ({
       dot: "bg-slate-400",
     },
     completed: {
-      label: "Completed",
-      icon: FiCheckCircle,
+      label: "Winner Announced",
+      icon: FiAward,
       dot: "bg-[#00A87D]",
     },
     cancelled: {
@@ -401,13 +402,20 @@ const BountyCard = ({
                   ? "border-amber-300/30 bg-black/75 text-amber-200"
                   : status === "cancelled"
                     ? "border-red-300/30 bg-black/75 text-red-200"
-                    : status === "ended"
-                      ? "border-white/20 bg-black/75 text-white"
-                      : "border-[#00D6A0]/40 bg-[#07130F]/90 text-[#55DDB1]"
+                    : status === "completed"
+                      ? "border-[#00A87D]/50 bg-black/80 text-[#55DDB1]"
+                      : status === "ended"
+                        ? "border-white/20 bg-black/75 text-white"
+                        : "border-[#00D6A0]/40 bg-[#07130F]/90 text-[#55DDB1]"
               }
             `}
           >
-            <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
+            {status === "completed" ? (
+              <FiAward className="shrink-0 text-[#00D6A0]" size={12} />
+            ) : (
+              <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
+            )}
+
             {statusConfig.label}
           </span>
         </div>
@@ -780,17 +788,26 @@ const BountyCard = ({
                 inline-flex h-[40px] min-w-0 items-center justify-center
                 gap-1.5 rounded-lg border px-2 text-[11px] font-extrabold
                 ${
-                  dark
-                    ? "border-white/[0.08] bg-white/[0.035] text-white/55"
-                    : "border-black/[0.07] bg-[#F4F6F4] text-slate-500"
+                  status === "completed"
+                    ? dark
+                      ? "border-[#00A87D]/40 bg-[#00A87D]/[0.09] text-[#55DDB1]"
+                      : "border-[#00A87D]/40 bg-[#E6F7F0] text-[#008F6A]"
+                    : dark
+                      ? "border-white/[0.08] bg-white/[0.035] text-white/55"
+                      : "border-black/[0.07] bg-[#F4F6F4] text-slate-500"
                 }
               `}
             >
-              <StatusIcon className="shrink-0" size={14} />
+              <StatusIcon
+                className={`shrink-0 ${
+                  status === "completed" ? "text-[#00A87D]" : ""
+                }`}
+                size={14}
+              />
 
               <span className="truncate">
                 {status === "completed"
-                  ? "Completed"
+                  ? "Winner Announced"
                   : status === "cancelled"
                     ? "Cancelled"
                     : status === "ended"
