@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 import {
   FiArrowLeft,
@@ -166,48 +167,54 @@ function useDarkTheme() {
   return dark;
 }
 
+// Each reveal element animates when it enters the viewport.
 function useReveal() {
   const sectionRef = useRef(null);
-  const [isVisible, setIsVisible] = useState(false);
+  const [visibleElements, setVisibleElements] = useState(false);
 
   useEffect(() => {
     const section = sectionRef.current;
-
     if (!section) return;
 
+    const elements = section.querySelectorAll("[data-reveal]");
+
     const reduceMotion =
-      typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (
-      typeof IntersectionObserver === "undefined" ||
-      reduceMotion
+      reduceMotion ||
+      typeof IntersectionObserver === "undefined"
     ) {
-      setIsVisible(true);
+      setVisibleElements(true);
       return;
     }
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.unobserve(entry.target);
-        }
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("hb-community-visible");
+            observer.unobserve(entry.target);
+          }
+        });
       },
-      { threshold: 0.06 },
+      {
+        threshold: 0.08,
+        rootMargin: "0px 0px -35px 0px",
+      }
     );
 
-    observer.observe(section);
+    elements.forEach((element) => observer.observe(element));
 
     return () => observer.disconnect();
   }, []);
 
-  return { sectionRef, isVisible };
+  return { sectionRef, visibleElements };
 }
 
 export default function Testimonials() {
   const dark = useDarkTheme();
-  const { sectionRef, isVisible } = useReveal();
+  const { sectionRef } = useReveal();
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [visibleCount, setVisibleCount] = useState(3);
@@ -218,13 +225,13 @@ export default function Testimonials() {
   const firstSlideRef = useRef(null);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
+  const resumeTimeoutRef = useRef(null);
 
   const maxSlide = Math.max(
     0,
-    communityUseCases.length - visibleCount,
+    communityUseCases.length - visibleCount
   );
 
-  // Keep the number of visible cards responsive.
   useEffect(() => {
     const updateVisibleCount = () => {
       if (window.innerWidth < 640) {
@@ -237,15 +244,13 @@ export default function Testimonials() {
     };
 
     updateVisibleCount();
-
     window.addEventListener("resize", updateVisibleCount);
 
     return () =>
       window.removeEventListener("resize", updateVisibleCount);
   }, []);
 
-  // Measure one card plus the real CSS gap so the track moves
-  // by exactly one card on mobile, tablet, and desktop.
+  // Measure the actual card width and carousel gap.
   useEffect(() => {
     const viewport = viewportRef.current;
     const firstSlide = firstSlideRef.current;
@@ -258,10 +263,10 @@ export default function Testimonials() {
 
       if (!track) return;
 
-      const trackStyles = window.getComputedStyle(track);
+      const styles = window.getComputedStyle(track);
       const gap =
-        parseFloat(trackStyles.columnGap) ||
-        parseFloat(trackStyles.gap) ||
+        parseFloat(styles.columnGap) ||
+        parseFloat(styles.gap) ||
         0;
 
       setSlideStep(slideWidth + gap);
@@ -284,31 +289,40 @@ export default function Testimonials() {
       window.removeEventListener("resize", measureSlide);
   }, [visibleCount]);
 
-  // Keep the active position valid after a responsive layout change.
   useEffect(() => {
     setActiveSlide((current) => Math.min(current, maxSlide));
   }, [maxSlide]);
 
-  // Automatically advance the carousel every 3.5 seconds.
-  // Pause when the section is not visible, when the user is
-  // interacting with it, or when reduced motion is requested.
+  // Automatic carousel movement.
   useEffect(() => {
-    if (!isVisible || isPaused || maxSlide === 0) return;
+    if (!isPaused || maxSlide === 0) {
+      // Continue below when the carousel is allowed to move.
+    } else {
+      return;
+    }
 
-    const motionPreference = window.matchMedia(
-      "(prefers-reduced-motion: reduce)",
-    );
-
-    if (motionPreference.matches) return;
+    if (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
 
     const timer = window.setInterval(() => {
       setActiveSlide((current) =>
-        current >= maxSlide ? 0 : current + 1,
+        current >= maxSlide ? 0 : current + 1
       );
     }, 3500);
 
     return () => window.clearInterval(timer);
-  }, [isVisible, isPaused, maxSlide]);
+  }, [isPaused, maxSlide]);
+
+  useEffect(() => {
+    return () => {
+      if (resumeTimeoutRef.current) {
+        window.clearTimeout(resumeTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const goToSlide = (index) => {
     setActiveSlide(Math.max(0, Math.min(index, maxSlide)));
@@ -316,13 +330,13 @@ export default function Testimonials() {
 
   const nextSlide = () => {
     setActiveSlide((current) =>
-      current >= maxSlide ? 0 : current + 1,
+      current >= maxSlide ? 0 : current + 1
     );
   };
 
   const previousSlide = () => {
     setActiveSlide((current) =>
-      current <= 0 ? maxSlide : current - 1,
+      current <= 0 ? maxSlide : current - 1
     );
   };
 
@@ -331,22 +345,17 @@ export default function Testimonials() {
         section: "border-white/[0.07] bg-[#080908] text-white",
         muted: "text-white/50",
         subtle: "text-white/35",
-        surface: "border-white/[0.08] bg-[#101310]",
-        softSurface: "border-white/[0.07] bg-white/[0.025]",
         heading: "text-white",
         description: "text-white/55",
-        divider: "border-white/[0.08]",
         networkSurface: "border-white/[0.09] bg-white/[0.025]",
       }
     : {
-        section: "border-black/[0.06] bg-[#f6f5ef] text-[#171916]",
+        section:
+          "border-black/[0.06] bg-[#f6f5ef] text-[#171916]",
         muted: "text-[#72776e]",
         subtle: "text-[#8a8e85]",
-        surface: "border-black/[0.07] bg-white",
-        softSurface: "border-black/[0.06] bg-white/70",
         heading: "text-[#171916]",
         description: "text-[#72776e]",
-        divider: "border-black/[0.07]",
         networkSurface: "border-black/[0.07] bg-white/80",
       };
 
@@ -356,42 +365,52 @@ export default function Testimonials() {
         @keyframes hb-section-enter {
           from {
             opacity: 0;
-            transform: translateY(22px);
+            transform: translate3d(0, 30px, 0);
+            filter: blur(5px);
           }
           to {
             opacity: 1;
-            transform: translateY(0);
+            transform: translate3d(0, 0, 0);
+            filter: blur(0);
           }
         }
 
         @keyframes hb-soft-glow {
           0%, 100% {
-            opacity: .4;
+            opacity: .35;
             transform: translateX(-50%) scale(1);
           }
           50% {
-            opacity: .75;
-            transform: translateX(-50%) scale(1.08);
+            opacity: .7;
+            transform: translateX(-50%) scale(1.1);
+          }
+        }
+
+        @keyframes hb-grid-drift {
+          from {
+            background-position: 0 0;
+          }
+          to {
+            background-position: 52px 52px;
+          }
+        }
+
+        @keyframes hb-card-shine {
+          from {
+            transform: translateX(-130%) skewX(-15deg);
+          }
+          to {
+            transform: translateX(230%) skewX(-15deg);
           }
         }
 
         .hb-community-reveal {
           opacity: 0;
+          transform: translateY(24px);
         }
 
         .hb-community-reveal.hb-community-visible {
-          animation: hb-section-enter .75s cubic-bezier(.2,.75,.25,1) forwards;
-        }
-
-        .hb-community-network {
-          transition: transform .25s ease, border-color .25s ease,
-            box-shadow .25s ease;
-        }
-
-        .hb-community-network:hover {
-          transform: translateY(-3px);
-          border-color: rgba(0, 214, 160, .4);
-          box-shadow: 0 12px 35px rgba(0, 214, 160, .07);
+          animation: hb-section-enter .8s cubic-bezier(.2,.75,.25,1) forwards;
         }
 
         .hb-community-grid {
@@ -399,6 +418,7 @@ export default function Testimonials() {
             linear-gradient(rgba(0,214,160,.035) 1px, transparent 1px),
             linear-gradient(90deg, rgba(0,214,160,.035) 1px, transparent 1px);
           background-size: 52px 52px;
+          animation: hb-grid-drift 24s linear infinite;
           mask-image: linear-gradient(to bottom, black, transparent 90%);
           -webkit-mask-image: linear-gradient(to bottom, black, transparent 90%);
         }
@@ -407,7 +427,44 @@ export default function Testimonials() {
           animation: hb-soft-glow 9s ease-in-out infinite;
         }
 
-        /* Curved card carousel */
+        .hb-community-network {
+          position: relative;
+          overflow: hidden;
+          transition:
+            transform .35s cubic-bezier(.2,.75,.25,1),
+            border-color .3s ease,
+            box-shadow .3s ease,
+            background .3s ease;
+        }
+
+        .hb-community-network::after {
+          content: "";
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 35%;
+          pointer-events: none;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(0,214,160,.09),
+            transparent
+          );
+          opacity: 0;
+        }
+
+        .hb-community-network:hover {
+          transform: translateY(-5px);
+          border-color: rgba(0,214,160,.4);
+          box-shadow: 0 15px 40px rgba(0,214,160,.08);
+        }
+
+        .hb-community-network:hover::after {
+          opacity: 1;
+          animation: hb-card-shine .9s ease forwards;
+        }
+
         .hb-curve-viewport {
           overflow: hidden;
           padding: 30px 2px 38px;
@@ -418,7 +475,7 @@ export default function Testimonials() {
           display: flex;
           align-items: center;
           gap: 18px;
-          transition: transform .65s cubic-bezier(.22,.75,.25,1);
+          transition: transform .7s cubic-bezier(.22,.75,.25,1);
           will-change: transform;
         }
 
@@ -426,26 +483,59 @@ export default function Testimonials() {
           flex: 0 0 calc((100% - 36px) / 3);
           min-width: 0;
           transform: translateY(22px) scale(.94);
-          opacity: .78;
+          opacity: .7;
+          filter: saturate(.75);
           transition:
-            transform .65s cubic-bezier(.22,.75,.25,1),
-            opacity .5s ease,
-            filter .5s ease;
+            transform .7s cubic-bezier(.22,.75,.25,1),
+            opacity .55s ease,
+            filter .55s ease;
         }
 
         .hb-curve-slide.is-active {
           transform: translateY(-16px) scale(1);
           opacity: 1;
+          filter: saturate(1);
           z-index: 2;
         }
 
         .hb-curve-slide.is-near {
           transform: translateY(8px) scale(.97);
           opacity: .94;
+          filter: saturate(.9);
         }
 
-        .hb-curve-slide .hb-community-card {
-          height: 100%;
+        .hb-community-card {
+          position: relative;
+          transition:
+            border-color .35s ease,
+            box-shadow .35s ease,
+            background .35s ease;
+        }
+
+        .hb-community-card::before {
+          content: "";
+          position: absolute;
+          top: 0;
+          left: 12%;
+          width: 76%;
+          height: 1px;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(0,214,160,.5),
+            transparent
+          );
+          opacity: 0;
+          transition: opacity .3s ease;
+        }
+
+        .hb-community-card:hover {
+          border-color: rgba(0,214,160,.32);
+          box-shadow: 0 18px 45px rgba(0,0,0,.08);
+        }
+
+        .hb-community-card:hover::before {
+          opacity: 1;
         }
 
         .hb-curve-controls button {
@@ -458,7 +548,9 @@ export default function Testimonials() {
           border: 1px solid rgba(0,214,160,.25);
           background: rgba(0,214,160,.07);
           color: #00A87D;
-          transition: background .2s ease, transform .2s ease,
+          transition:
+            background .2s ease,
+            transform .2s ease,
             border-color .2s ease;
         }
 
@@ -494,6 +586,31 @@ export default function Testimonials() {
         .hb-curve-dot.is-current {
           width: 24px;
           background: #00D6A0;
+        }
+
+        .hb-value-point {
+          transition:
+            transform .3s ease,
+            border-color .3s ease,
+            background .3s ease;
+        }
+
+        .hb-value-point:hover {
+          transform: translateY(-4px);
+        }
+
+        .hb-community-cta {
+          position: relative;
+          overflow: hidden;
+          transition:
+            border-color .3s ease,
+            transform .3s ease,
+            box-shadow .3s ease;
+        }
+
+        .hb-community-cta:hover {
+          border-color: rgba(0,214,160,.3);
+          box-shadow: 0 18px 45px rgba(0,214,160,.06);
         }
 
         @media (max-width: 1023px) {
@@ -541,9 +658,11 @@ export default function Testimonials() {
             opacity: 1;
             animation: none !important;
             transform: none !important;
+            filter: none !important;
           }
 
-          .hb-community-glow {
+          .hb-community-glow,
+          .hb-community-grid {
             animation: none !important;
           }
 
@@ -551,12 +670,16 @@ export default function Testimonials() {
           .hb-curve-track,
           .hb-curve-slide,
           .hb-curve-dot,
-          .hb-curve-controls button {
+          .hb-curve-controls button,
+          .hb-community-card,
+          .hb-value-point,
+          .hb-community-cta {
             transition: none !important;
           }
 
           .hb-community-network:hover,
-          .hb-curve-controls button:hover:not(:disabled) {
+          .hb-curve-controls button:hover:not(:disabled),
+          .hb-value-point:hover {
             transform: none;
           }
         }
@@ -583,11 +706,11 @@ export default function Testimonials() {
         />
 
         <div className="relative mx-auto max-w-[1440px] px-5 py-14 sm:px-8 sm:py-16 md:py-20 lg:px-12 lg:py-24">
+
           {/* Hero heading */}
           <header
-            className={`hb-community-reveal ${
-              isVisible ? "hb-community-visible" : ""
-            } mx-auto max-w-4xl text-center`}
+            data-reveal
+            className="hb-community-reveal mx-auto max-w-4xl text-center"
           >
             <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-[#00D6A0]/20 bg-[#00D6A0]/[0.06] px-4 py-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
@@ -618,21 +741,21 @@ export default function Testimonials() {
 
           {/* Ecosystem cards */}
           <div
-            className={`hb-community-reveal ${
-              isVisible ? "hb-community-visible" : ""
-            } mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-3 sm:mt-12 sm:grid-cols-2 sm:gap-4`}
+            data-reveal
+            className="hb-community-reveal mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-3 sm:mt-12 sm:grid-cols-2 sm:gap-4"
             style={{ animationDelay: "100ms" }}
           >
-            {networks.map((network) => (
+            {networks.map((network, index) => (
               <article
                 key={network.symbol}
-                className={`hb-community-network group flex items-center gap-4 rounded-2xl border p-4 sm:p-5 ${theme.networkSurface}`}
+                className="hb-community-network group flex items-center gap-4 rounded-2xl border p-4 sm:p-5"
+                style={{ transitionDelay: `${index * 80}ms` }}
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/15 bg-[#00D6A0]/[0.06] p-2.5">
                   <img
                     src={network.logo}
                     alt={`${network.name} logo`}
-                    className="h-full w-full object-contain"
+                    className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-110"
                     loading="lazy"
                   />
                 </div>
@@ -654,7 +777,7 @@ export default function Testimonials() {
 
                 <FiArrowUpRight
                   aria-hidden="true"
-                  className={`h-4 w-4 shrink-0 ${
+                  className={`h-4 w-4 shrink-0 transition-transform duration-300 group-hover:-translate-y-1 group-hover:translate-x-1 ${
                     dark ? "text-white/35" : "text-black/35"
                   }`}
                 />
@@ -662,16 +785,19 @@ export default function Testimonials() {
             ))}
           </div>
 
-          <p className={`mt-4 text-center text-[10px] ${theme.subtle}`}>
+          <p
+            data-reveal
+            className={`hb-community-reveal mt-4 text-center text-[10px] ${theme.subtle}`}
+            style={{ animationDelay: "150ms" }}
+          >
             Opportunities across the Arc and BOTCHAIN ecosystems.
           </p>
 
-          {/* Curved carousel heading */}
+          {/* Carousel heading */}
           <div
-            className={`hb-community-reveal ${
-              isVisible ? "hb-community-visible" : ""
-            } mb-3 mt-16 flex flex-col gap-3 sm:mb-5 sm:mt-20 sm:flex-row sm:items-end sm:justify-between`}
-            style={{ animationDelay: "180ms" }}
+            data-reveal
+            className="hb-community-reveal mb-3 mt-16 flex flex-col gap-3 sm:mb-5 sm:mt-20 sm:flex-row sm:items-end sm:justify-between"
+            style={{ animationDelay: "100ms" }}
           >
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#00A87D]">
@@ -704,6 +830,7 @@ export default function Testimonials() {
                 >
                   <FiArrowLeft aria-hidden="true" />
                 </button>
+
                 <button
                   type="button"
                   aria-label="Next community card"
@@ -716,12 +843,11 @@ export default function Testimonials() {
             </div>
           </div>
 
-          {/* Curved community carousel */}
+          {/* Carousel */}
           <div
-            className={`hb-community-reveal ${
-              isVisible ? "hb-community-visible" : ""
-            }`}
-            style={{ animationDelay: "220ms" }}
+            data-reveal
+            className="hb-community-reveal"
+            style={{ animationDelay: "150ms" }}
           >
             <div
               ref={viewportRef}
@@ -753,6 +879,7 @@ export default function Testimonials() {
                 const deltaX =
                   event.changedTouches[0].clientX -
                   touchStartX.current;
+
                 const deltaY =
                   event.changedTouches[0].clientY -
                   touchStartY.current;
@@ -768,8 +895,14 @@ export default function Testimonials() {
                 touchStartX.current = null;
                 touchStartY.current = null;
 
-                // Allow the user to finish the swipe before resuming.
-                window.setTimeout(() => setIsPaused(false), 1800);
+                if (resumeTimeoutRef.current) {
+                  window.clearTimeout(resumeTimeoutRef.current);
+                }
+
+                resumeTimeoutRef.current = window.setTimeout(
+                  () => setIsPaused(false),
+                  1800
+                );
               }}
               onTouchCancel={() => {
                 touchStartX.current = null;
@@ -785,8 +918,11 @@ export default function Testimonials() {
               >
                 {communityUseCases.map((item, index) => {
                   const distance = Math.abs(index - activeSlide);
+
                   const isActive =
-                    index === activeSlide + Math.floor(visibleCount / 2);
+                    index ===
+                    activeSlide + Math.floor(visibleCount / 2);
+
                   const isNear = distance <= 1;
 
                   return (
@@ -800,7 +936,6 @@ export default function Testimonials() {
                       <CommunityCard
                         item={item}
                         dark={dark}
-                        visible={isVisible}
                         index={index}
                       />
                     </div>
@@ -818,7 +953,9 @@ export default function Testimonials() {
                   key={index}
                   type="button"
                   aria-label={`Go to carousel position ${index + 1}`}
-                  aria-current={activeSlide === index ? "true" : undefined}
+                  aria-current={
+                    activeSlide === index ? "true" : undefined
+                  }
                   className={`hb-curve-dot ${
                     activeSlide === index ? "is-current" : ""
                   }`}
@@ -837,10 +974,9 @@ export default function Testimonials() {
 
           {/* Value points */}
           <div
-            className={`hb-community-reveal ${
-              isVisible ? "hb-community-visible" : ""
-            } mt-14 sm:mt-20`}
-            style={{ animationDelay: "250ms" }}
+            data-reveal
+            className="hb-community-reveal mt-14 sm:mt-20"
+            style={{ animationDelay: "100ms" }}
           >
             <div className="mb-6">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#00A87D]">
@@ -853,11 +989,12 @@ export default function Testimonials() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
-              {valuePoints.map((point) => (
+              {valuePoints.map((point, index) => (
                 <ValuePoint
                   key={point.title}
                   point={point}
                   dark={dark}
+                  index={index}
                 />
               ))}
             </div>
@@ -865,14 +1002,13 @@ export default function Testimonials() {
 
           {/* Closing CTA */}
           <div
-            className={`hb-community-reveal ${
-              isVisible ? "hb-community-visible" : ""
-            } mt-8 flex flex-col gap-6 rounded-3xl border p-5 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:p-8 lg:p-9 ${
+            data-reveal
+            className={`hb-community-reveal hb-community-cta mt-8 flex flex-col gap-6 rounded-3xl border p-5 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:p-8 lg:p-9 ${
               dark
                 ? "border-white/[0.08] bg-white/[0.025]"
                 : "border-black/[0.06] bg-white/75"
             }`}
-            style={{ animationDelay: "320ms" }}
+            style={{ animationDelay: "150ms" }}
           >
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.08] text-[#00A87D]">
@@ -901,7 +1037,10 @@ export default function Testimonials() {
           </div>
 
           {/* Brand footer */}
-          <div className={`mt-10 flex items-center justify-center gap-3 text-center text-[9px] font-semibold tracking-[0.2em] sm:mt-12 ${theme.subtle}`}>
+          <div
+            data-reveal
+            className={`hb-community-reveal mt-10 flex items-center justify-center gap-3 text-center text-[9px] font-semibold tracking-[0.2em] sm:mt-12 ${theme.subtle}`}
+          >
             <span className="h-px w-8 bg-[#00D6A0]/40" />
             CREATE. CONTRIBUTE. EARN.
             <span className="h-px w-8 bg-[#00D6A0]/40" />
@@ -912,24 +1051,22 @@ export default function Testimonials() {
   );
 }
 
-function CommunityCard({ item, dark, visible, index }) {
+function CommunityCard({ item, dark, index }) {
   const Icon = item.icon;
 
   return (
     <article
-      className={`hb-community-card hb-community-reveal ${
-        visible ? "hb-community-visible" : ""
-      } group flex min-h-[320px] flex-col overflow-hidden rounded-2xl border p-5 sm:min-h-[340px] sm:rounded-3xl sm:p-6 ${
+      className={`hb-community-card group flex min-h-[320px] flex-col overflow-hidden rounded-2xl border p-5 sm:min-h-[340px] sm:rounded-3xl sm:p-6 ${
         dark
           ? "border-white/[0.08] bg-[#101310]"
           : "border-black/[0.07] bg-white shadow-sm"
       }`}
       style={{
-        animationDelay: `${Math.min(index * 40, 250)}ms`,
+        transitionDelay: `${Math.min(index * 30, 180)}ms`,
       }}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] text-[#00A87D] transition-all duration-300 group-hover:-translate-y-0.5 group-hover:bg-[#00D6A0]/[0.13]">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] text-[#00A87D] transition-all duration-300 group-hover:-translate-y-1 group-hover:rotate-3 group-hover:bg-[#00D6A0]/[0.13]">
           <Icon aria-hidden="true" className="h-5 w-5" />
         </div>
 
@@ -989,25 +1126,26 @@ function CommunityCard({ item, dark, visible, index }) {
 
         <FiArrowUpRight
           aria-hidden="true"
-          className="h-4 w-4 shrink-0 text-[#00A87D] transition-transform duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"
+          className="h-4 w-4 shrink-0 text-[#00A87D] transition-transform duration-300 group-hover:-translate-y-1 group-hover:translate-x-1"
         />
       </div>
     </article>
   );
 }
 
-function ValuePoint({ dark, point }) {
+function ValuePoint({ dark, point, index }) {
   const Icon = point.icon;
 
   return (
     <article
-      className={`group flex items-start gap-4 rounded-2xl border p-4 transition-colors duration-300 hover:border-[#00D6A0]/30 sm:p-5 ${
+      className={`hb-value-point group flex items-start gap-4 rounded-2xl border p-4 hover:border-[#00D6A0]/30 sm:p-5 ${
         dark
           ? "border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]"
           : "border-black/[0.06] bg-white/70 hover:bg-white"
       }`}
+      style={{ transitionDelay: `${index * 50}ms` }}
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] text-[#00A87D] transition-transform duration-300 group-hover:scale-105">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] text-[#00A87D] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
         <Icon aria-hidden="true" className="h-5 w-5" />
       </div>
 
@@ -1031,7 +1169,7 @@ function ValuePoint({ dark, point }) {
 
       <FiCheckCircle
         aria-hidden="true"
-        className="mt-1 h-4 w-4 shrink-0 text-[#00A87D]/60"
+        className="mt-1 h-4 w-4 shrink-0 text-[#00A87D]/60 transition-transform duration-300 group-hover:scale-110"
       />
     </article>
   );

@@ -4,10 +4,7 @@ import { useEffect, useState } from "react";
 function LiveTricker() {
   const items = [
     { label: "Multi-Chain Bounty Platform", type: "WEB3" },
-    {
-      label: "Explore Multi-Chain Bounties",
-      type: "NETWORKS",
-    },
+    { label: "Explore Multi-Chain Bounties", type: "NETWORKS" },
     { label: "Earn Network-Native Rewards", type: "REWARDS" },
     { label: "Complete On-Chain Bounties", type: "BOUNTIES" },
     { label: "Post Work. Reward Contributors.", type: "CREATE" },
@@ -34,7 +31,7 @@ function LiveTricker() {
   return (
     <div
       className={`
-        relative mt-6 md:mt-3 w-full overflow-hidden
+        live-ticker relative mt-6 md:mt-3 w-full overflow-hidden
         border-y transition-all duration-500
         ${
           dark
@@ -43,25 +40,31 @@ function LiveTricker() {
         }
       `}
     >
-      {/* SUBTLE BACKGROUND DOTS */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-50">
-        {Array.from({ length: 10 }, (_, index) => (
-          <span
-            key={index}
-            className={`ticker-bg-dot dot-${index + 1}`}
-          />
-        ))}
-
+      {/* AMBIENT BACKGROUND */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className={`
-            absolute inset-0 transition-all duration-500
+            ticker-ambient absolute inset-0
             ${
               dark
-                ? "bg-[radial-gradient(circle_at_center,rgba(0,214,160,0.055),transparent_65%)]"
-                : "bg-[radial-gradient(circle_at_center,rgba(0,214,160,0.025),transparent_65%)]"
+                ? "bg-[radial-gradient(ellipse_at_center,rgba(0,214,160,0.075),transparent_65%)]"
+                : "bg-[radial-gradient(ellipse_at_center,rgba(0,214,160,0.045),transparent_65%)]"
             }
           `}
         />
+
+        {/* FLOATING PARTICLES */}
+        <div className="ticker-particles absolute inset-0">
+          {Array.from({ length: 10 }, (_, index) => (
+            <span
+              key={index}
+              className={`ticker-bg-dot dot-${index + 1}`}
+            />
+          ))}
+        </div>
+
+        {/* MOVING LIGHT SWEEP */}
+        <div className="ticker-light-sweep absolute inset-y-0 w-40" />
       </div>
 
       {/* LEFT FADE */}
@@ -93,13 +96,12 @@ function LiveTricker() {
       />
 
       {/* CENTER ACCENT */}
-      <div
-        className="
-          pointer-events-none absolute left-1/2 top-1/2 z-0
-          h-8 w-96 -translate-x-1/2 -translate-y-1/2
-          rounded-full bg-[#00D6A0]/[0.04] blur-3xl
-        "
-      />
+      <div className="pointer-events-none absolute left-1/2 top-1/2 z-0 h-8 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#00D6A0]/[0.07] blur-3xl ticker-center-glow" />
+
+      {/* TOP GREEN ACCENT */}
+      <div className="pointer-events-none absolute left-0 right-0 top-0 z-20 h-px overflow-hidden">
+        <div className="ticker-top-line h-full w-1/3 bg-gradient-to-r from-transparent via-[#00D6A0] to-transparent" />
+      </div>
 
       {/* TICKER */}
       <div className="ticker-track relative z-10">
@@ -108,7 +110,7 @@ function LiveTricker() {
             {items.map((item, index) => (
               <div
                 key={`${copy}-${index}`}
-                className="ticker-item"
+                className="ticker-item group"
               >
                 <span className="status-dot" />
 
@@ -137,12 +139,18 @@ function LiveTricker() {
       </div>
 
       <style>{`
-        /* TICKER TRACK */
+        /* MAIN TICKER */
+        .live-ticker {
+          isolation: isolate;
+        }
+
+        /* CONTINUOUS MARQUEE */
         .ticker-track {
           display: flex;
           width: max-content;
-          animation: tickerScroll 28s linear infinite;
+          animation: tickerScroll 32s linear infinite;
           will-change: transform;
+          transform: translate3d(0, 0, 0);
         }
 
         .ticker-track:hover {
@@ -157,12 +165,18 @@ function LiveTricker() {
         }
 
         .ticker-item {
+          position: relative;
           display: flex;
           align-items: center;
           gap: 10px;
-          padding: 13px 18px;
+          padding: 15px 18px;
           white-space: nowrap;
           flex-shrink: 0;
+          transition: transform 0.3s ease;
+        }
+
+        .ticker-item:hover {
+          transform: translateY(-2px);
         }
 
         /* MAIN TEXT */
@@ -171,7 +185,14 @@ function LiveTricker() {
           font-size: 13px;
           font-weight: 800;
           letter-spacing: 0.015em;
-          transition: color 0.5s ease;
+          transition:
+            color 0.3s ease,
+            text-shadow 0.3s ease;
+        }
+
+        .ticker-item:hover .ticker-label {
+          color: ${dark ? "#00D6A0" : "#008765"};
+          text-shadow: 0 0 18px rgba(0, 214, 160, 0.15);
         }
 
         /* CATEGORY BADGE */
@@ -198,9 +219,18 @@ function LiveTricker() {
           letter-spacing: 0.12em;
           white-space: nowrap;
           transition:
-            color 0.5s ease,
-            background 0.5s ease,
-            border-color 0.5s ease;
+            color 0.3s ease,
+            background 0.3s ease,
+            border-color 0.3s ease,
+            box-shadow 0.3s ease,
+            transform 0.3s ease;
+        }
+
+        .ticker-item:hover .ticker-category {
+          background: rgba(0, 214, 160, 0.15);
+          border-color: rgba(0, 214, 160, 0.55);
+          box-shadow: 0 0 16px rgba(0, 214, 160, 0.10);
+          transform: scale(1.04);
         }
 
         /* NETWORK LOGOS */
@@ -210,11 +240,11 @@ function LiveTricker() {
           height: 16px;
           object-fit: contain;
           flex-shrink: 0;
-          transition: transform 0.3s ease;
+          transition: transform 0.35s ease;
         }
 
         .ticker-category:hover .ticker-logo {
-          transform: scale(1.12);
+          transform: scale(1.15) rotate(-5deg);
         }
 
         /* SEPARATOR */
@@ -227,11 +257,13 @@ function LiveTricker() {
           };
           font-size: 18px;
           font-weight: 500;
-          transition: color 0.5s ease;
+          transition: color 0.3s ease;
+          animation: separatorGlow 3s ease-in-out infinite;
         }
 
         /* STATUS DOT */
         .status-dot {
+          position: relative;
           display: inline-block;
           width: 6px;
           height: 6px;
@@ -244,7 +276,16 @@ function LiveTricker() {
           animation: greenPulse 2.5s ease-in-out infinite;
         }
 
-        /* BACKGROUND DOTS */
+        .status-dot::after {
+          content: "";
+          position: absolute;
+          inset: -4px;
+          border: 1px solid rgba(0, 214, 160, 0.45);
+          border-radius: 50%;
+          animation: statusRipple 2.5s ease-out infinite;
+        }
+
+        /* BACKGROUND PARTICLES */
         .ticker-bg-dot {
           position: absolute;
           width: 3px;
@@ -318,27 +359,69 @@ function LiveTricker() {
           animation: bgDotFloat 4s ease-in-out infinite 1.4s;
         }
 
+        /* AMBIENT LIGHT */
+        .ticker-ambient {
+          animation: ambientBreath 7s ease-in-out infinite;
+        }
+
+        .ticker-center-glow {
+          animation: centerGlow 5s ease-in-out infinite;
+        }
+
+        /* LIGHT SWEEP */
+        .ticker-light-sweep {
+          left: -20%;
+          top: 0;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(0, 214, 160, 0.025),
+            rgba(0, 214, 160, 0.08),
+            rgba(0, 214, 160, 0.025),
+            transparent
+          );
+          filter: blur(12px);
+          animation: tickerLightSweep 9s ease-in-out infinite;
+        }
+
+        /* TOP ACCENT */
+        .ticker-top-line {
+          animation: topLineMove 5s ease-in-out infinite alternate;
+          filter: drop-shadow(0 0 5px rgba(0, 214, 160, 0.8));
+        }
+
         /* TICKER MOVEMENT */
         @keyframes tickerScroll {
           from {
-            transform: translateX(0);
+            transform: translate3d(0, 0, 0);
           }
-
           to {
-            transform: translateX(-33.333333%);
+            transform: translate3d(-33.333333%, 0, 0);
           }
         }
 
         /* GREEN PULSE */
         @keyframes greenPulse {
           0%, 100% {
-            opacity: 0.45;
-            transform: scale(0.8);
+            opacity: 0.5;
+            transform: scale(0.85);
           }
-
           50% {
             opacity: 1;
-            transform: scale(1.15);
+            transform: scale(1.2);
+          }
+        }
+
+        /* STATUS RIPPLE */
+        @keyframes statusRipple {
+          0% {
+            opacity: 0.7;
+            transform: scale(0.6);
+          }
+          100% {
+            opacity: 0;
+            transform: scale(2.3);
           }
         }
 
@@ -348,10 +431,67 @@ function LiveTricker() {
             opacity: 0.1;
             transform: translate3d(0, 0, 0) scale(0.8);
           }
-
           50% {
             opacity: 0.45;
             transform: translate3d(0, -5px, 0) scale(1.25);
+          }
+        }
+
+        /* AMBIENT ANIMATION */
+        @keyframes ambientBreath {
+          0%, 100% {
+            opacity: 0.65;
+            transform: scale(1);
+          }
+          50% {
+            opacity: 1;
+            transform: scale(1.08);
+          }
+        }
+
+        @keyframes centerGlow {
+          0%, 100% {
+            opacity: 0.5;
+            transform: translate(-50%, -50%) scale(0.85);
+          }
+          50% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.15);
+          }
+        }
+
+        @keyframes tickerLightSweep {
+          0% {
+            transform: translateX(0);
+            opacity: 0;
+          }
+          20% {
+            opacity: 1;
+          }
+          80% {
+            opacity: 0.8;
+          }
+          100% {
+            transform: translateX(160vw);
+            opacity: 0;
+          }
+        }
+
+        @keyframes topLineMove {
+          from {
+            transform: translateX(-20%);
+          }
+          to {
+            transform: translateX(320%);
+          }
+        }
+
+        @keyframes separatorGlow {
+          0%, 100% {
+            opacity: 0.55;
+          }
+          50% {
+            opacity: 1;
           }
         }
 
@@ -379,11 +519,15 @@ function LiveTricker() {
           }
 
           .ticker-track {
-            animation-duration: 35s;
+            animation-duration: 38s;
           }
 
           .ticker-separator {
             font-size: 16px;
+          }
+
+          .ticker-light-sweep {
+            animation-duration: 12s;
           }
         }
 
@@ -391,8 +535,20 @@ function LiveTricker() {
         @media (prefers-reduced-motion: reduce) {
           .ticker-track,
           .status-dot,
-          .ticker-bg-dot {
+          .status-dot::after,
+          .ticker-bg-dot,
+          .ticker-ambient,
+          .ticker-center-glow,
+          .ticker-light-sweep,
+          .ticker-top-line,
+          .ticker-separator {
             animation: none !important;
+          }
+
+          .ticker-item,
+          .ticker-category,
+          .ticker-logo {
+            transition: none !important;
           }
         }
       `}</style>

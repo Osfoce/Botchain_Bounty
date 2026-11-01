@@ -24,6 +24,7 @@ import Docs from "./pages/Docs";
 import CookieConsent from "./pages/CookieConsent";
 import Privacy from "./pages/Privacy";
 import TermsOfUse from "./pages/TermsOfUse";
+import Security from "./pages/Security";
 
 import LoadingScreen from "./components/LoadingScreen";
 import { useTheme } from "./context/ThemeContext";
@@ -120,6 +121,13 @@ function AppRoutes({ dark, setDark }) {
           element={<TermsOfUse dark={dark} setDark={setDark} />}
         />
 
+        {/* SECURITY */}
+
+        <Route
+          path="/security"
+          element={<Security dark={dark} setDark={setDark} />}
+        />
+
         {/* WALLET-PROTECTED PAGES */}
 
         <Route
@@ -178,7 +186,10 @@ function AppRoutes({ dark, setDark }) {
 
         {/* 404 PAGE */}
 
-        <Route path="*" element={<NotFound />} />
+        <Route
+          path="*"
+          element={<NotFound />}
+        />
       </Routes>
 
       <CookieConsent />

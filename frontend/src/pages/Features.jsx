@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import {
   FiArrowUpRight,
@@ -146,26 +145,98 @@ function Features() {
       : "rgba(0,138,102,0.08)",
   };
 
+  const navigate = (path) => (event) => {
+    event.preventDefault();
+    handleNavigate(path);
+  };
+
   return (
     <>
       <style>{`
-        @keyframes hbReveal {
+        /* =========================================
+           NEW ANIMATION STYLE
+           Crisp movement - no blur or glass effects
+        ========================================= */
+
+        @keyframes hbSlideUp {
           from {
             opacity: 0;
-            transform: translateY(22px);
+            transform: translate3d(0, 30px, 0);
           }
           to {
             opacity: 1;
-            transform: translateY(0);
+            transform: translate3d(0, 0, 0);
           }
         }
 
-        @keyframes hbGlow {
+        @keyframes hbSlideRight {
+          from {
+            opacity: 0;
+            transform: translate3d(-28px, 0, 0);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        @keyframes hbSlideLeft {
+          from {
+            opacity: 0;
+            transform: translate3d(28px, 0, 0);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        @keyframes hbScaleIn {
+          from {
+            opacity: 0;
+            transform: scale(0.94);
+          }
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
+        }
+
+        @keyframes hbLineMove {
+          from {
+            transform: scaleX(0);
+            transform-origin: left;
+          }
+          to {
+            transform: scaleX(1);
+            transform-origin: left;
+          }
+        }
+
+        @keyframes hbBorderMove {
           0%, 100% {
-            opacity: .35;
+            border-color: rgba(0, 214, 160, 0.12);
           }
           50% {
-            opacity: .7;
+            border-color: rgba(0, 214, 160, 0.42);
+          }
+        }
+
+        @keyframes hbIconFloat {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-5px);
+          }
+        }
+
+        @keyframes hbTicker {
+          from {
+            transform: translateX(0);
+          }
+          to {
+            transform: translateX(-50%);
           }
         }
 
@@ -174,46 +245,143 @@ function Features() {
         }
 
         .hb-reveal.hb-visible {
-          animation: hbReveal .7s cubic-bezier(.22,1,.36,1) forwards;
+          animation: hbSlideUp 0.75s cubic-bezier(.2,.75,.25,1) forwards;
+        }
+
+        .hb-reveal-left.hb-visible {
+          animation-name: hbSlideRight;
+        }
+
+        .hb-reveal-right.hb-visible {
+          animation-name: hbSlideLeft;
+        }
+
+        .hb-reveal-scale.hb-visible {
+          animation-name: hbScaleIn;
         }
 
         .hb-card {
+          position: relative;
           transition:
-            transform .3s ease,
-            border-color .3s ease,
-            background-color .3s ease,
-            box-shadow .3s ease;
+            transform 0.35s cubic-bezier(.2,.75,.25,1),
+            border-color 0.3s ease,
+            background-color 0.3s ease;
         }
 
         .hb-card:hover {
-          transform: translateY(-5px);
+          transform: translateY(-7px);
+        }
+
+        .hb-card::after {
+          content: "";
+          position: absolute;
+          left: 0;
+          bottom: 0;
+          width: 100%;
+          height: 2px;
+          background: #00D6A0;
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform 0.35s ease;
+        }
+
+        .hb-card:hover::after {
+          transform: scaleX(1);
         }
 
         .hb-ecosystem-logo {
-          transition: transform .3s ease;
+          transition:
+            transform 0.35s cubic-bezier(.2,.75,.25,1),
+            border-color 0.3s ease;
         }
 
         .hb-ecosystem:hover .hb-ecosystem-logo {
-          transform: scale(1.07);
+          transform: translateY(-4px) rotate(-4deg);
         }
 
         .hb-arrow {
-          transition: transform .25s ease;
+          transition: transform 0.25s ease;
         }
 
         .hb-ecosystem:hover .hb-arrow,
         .hb-cta:hover .hb-arrow {
-          transform: translate(3px, -3px);
+          transform: translate(4px, -4px);
         }
 
-        .hb-orb {
-          animation: hbGlow 6s ease-in-out infinite;
+        .hb-ecosystem-line {
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform 0.4s ease;
+        }
+
+        .hb-ecosystem:hover .hb-ecosystem-line {
+          transform: scaleX(1);
+        }
+
+        .hb-feature-icon {
+          transition:
+            transform 0.35s ease,
+            background-color 0.3s ease;
+        }
+
+        .hb-card:hover .hb-feature-icon {
+          transform: translateY(-4px) rotate(5deg);
+        }
+
+        .hb-cta {
+          transition:
+            transform 0.25s ease,
+            background-color 0.25s ease;
+        }
+
+        .hb-cta:hover {
+          transform: translateY(-3px);
+        }
+
+        .hb-cta:active {
+          transform: translateY(0) scale(0.98);
+        }
+
+        .hb-ecosystem-label {
+          transition: color 0.3s ease;
+        }
+
+        .hb-ecosystem:hover .hb-ecosystem-label {
+          color: #00D6A0;
+        }
+
+        .hb-accent-line {
+          animation: hbLineMove 1s cubic-bezier(.2,.75,.25,1) both;
+        }
+
+        .hb-ticker-track {
+          display: flex;
+          width: max-content;
+          animation: hbTicker 35s linear infinite;
+        }
+
+        .hb-ticker-track:hover {
+          animation-play-state: paused;
+        }
+
+        .hb-orbit-icon {
+          animation: hbIconFloat 4s ease-in-out infinite;
+        }
+
+        .hb-animated-border {
+          animation: hbBorderMove 5s ease-in-out infinite;
+        }
+
+        @media (max-width: 640px) {
+          .hb-ticker-track {
+            animation-duration: 25s;
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {
           .hb-reveal,
           .hb-reveal.hb-visible {
-            opacity: 1;
+            opacity: 1 !important;
             animation: none !important;
             transform: none !important;
           }
@@ -221,13 +389,22 @@ function Features() {
           .hb-card,
           .hb-ecosystem-logo,
           .hb-arrow,
-          .hb-orb {
+          .hb-feature-icon,
+          .hb-cta,
+          .hb-ticker-track,
+          .hb-orbit-icon,
+          .hb-animated-border {
             animation: none !important;
             transition: none !important;
           }
 
-          .hb-card:hover {
+          .hb-card:hover,
+          .hb-cta:hover {
             transform: none;
+          }
+
+          .hb-card::after {
+            display: none;
           }
         }
       `}</style>
@@ -240,46 +417,27 @@ function Features() {
           color: palette.text,
         }}
       >
-        {/* Subtle background texture */}
+        {/* Clean grid background */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-10"
           style={{
             backgroundImage: `
               linear-gradient(
-                ${
-                  dark
-                    ? "rgba(0,214,160,0.025)"
-                    : "rgba(0,138,102,0.035)"
-                } 1px,
+                ${dark
+                  ? "rgba(0,214,160,0.025)"
+                  : "rgba(0,138,102,0.035)"} 1px,
                 transparent 1px
               ),
               linear-gradient(
                 90deg,
-                ${
-                  dark
-                    ? "rgba(0,214,160,0.025)"
-                    : "rgba(0,138,102,0.035)"
-                } 1px,
+                ${dark
+                  ? "rgba(0,214,160,0.025)"
+                  : "rgba(0,138,102,0.035)"} 1px,
                 transparent 1px
               )
             `,
             backgroundSize: "52px 52px",
-            maskImage:
-              "linear-gradient(to bottom, black, transparent 80%)",
-            WebkitMaskImage:
-              "linear-gradient(to bottom, black, transparent 80%)",
-          }}
-        />
-
-        {/* Soft green glow */}
-        <div
-          aria-hidden="true"
-          className="hb-orb pointer-events-none absolute -top-28 left-1/2 -z-10 h-80 w-[min(700px,100%)] -translate-x-1/2 rounded-full blur-[130px]"
-          style={{
-            backgroundColor: dark
-              ? "rgba(0,214,160,0.09)"
-              : "rgba(0,168,125,0.07)",
           }}
         />
 
@@ -297,7 +455,10 @@ function Features() {
                 backgroundColor: palette.accentSoft,
               }}
             >
-              <FiZap size={13} style={{ color: palette.accent }} />
+              <FiZap
+                size={13}
+                style={{ color: palette.accent }}
+              />
 
               <span
                 className="text-[10px] font-bold uppercase tracking-[0.17em] sm:text-[11px]"
@@ -330,15 +491,11 @@ function Features() {
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 to="/dashboard"
-                onClick={(event) => {
-                  event.preventDefault();
-                  handleNavigate("/dashboard");
-                }}
-                className="hb-cta group inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-300 hover:-translate-y-0.5 sm:w-auto sm:gap-3 sm:px-6 sm:py-3.5 sm:text-sm"
+                onClick={navigate("/dashboard")}
+                className="hb-cta group inline-flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold sm:w-auto sm:gap-3 sm:px-6 sm:py-3.5 sm:text-sm"
                 style={{
                   backgroundColor: palette.accent,
                   color: "#06130E",
-                  boxShadow: "0 8px 28px rgba(0,214,160,0.13)",
                 }}
               >
                 Explore opportunities
@@ -355,7 +512,7 @@ function Features() {
                   borderColor: palette.border,
                 }}
               >
-                <FiLayers className="h-4 w-4 shrink-0 sm:h-4 sm:w-4" />
+                <FiLayers className="h-4 w-4 shrink-0" />
                 Explore ecosystems
               </a>
             </div>
@@ -424,23 +581,20 @@ function Features() {
               {ecosystems.map((network, index) => (
                 <article
                   key={network.name}
-                  className={`hb-card hb-ecosystem hb-reveal ${
+                  className={`hb-card hb-ecosystem hb-reveal hb-reveal-scale ${
                     isVisible ? "hb-visible" : ""
                   } group relative flex min-h-[220px] flex-col overflow-hidden rounded-2xl border p-5 sm:p-7`}
                   style={{
-                    animationDelay: `${180 + index * 100}ms`,
+                    animationDelay: `${180 + index * 130}ms`,
                     backgroundColor: palette.card,
                     borderColor: palette.border,
-                    boxShadow: dark
-                      ? "0 16px 40px rgba(0,0,0,0.12)"
-                      : "0 12px 34px rgba(20,40,28,0.035)",
                   }}
                 >
                   <div
                     aria-hidden="true"
-                    className="pointer-events-none absolute inset-x-5 top-0 h-px opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+                    className="hb-ecosystem-line absolute inset-x-0 top-0 h-[2px]"
                     style={{
-                      background: `linear-gradient(90deg, transparent, ${network.color}, transparent)`,
+                      backgroundColor: network.color,
                     }}
                   />
 
@@ -474,7 +628,7 @@ function Features() {
 
                   <div className="mt-6 flex items-end justify-between gap-3">
                     <div className="min-w-0">
-                      <h4 className="text-lg font-bold tracking-tight">
+                      <h4 className="hb-ecosystem-label text-lg font-bold tracking-tight">
                         {network.name}
                       </h4>
 
@@ -508,7 +662,7 @@ function Features() {
           {/* Benefits */}
           <div className="mt-20 sm:mt-24">
             <div
-              className={`hb-reveal ${
+              className={`hb-reveal hb-reveal-left ${
                 isVisible ? "hb-visible" : ""
               } mb-8 max-w-2xl`}
               style={{ animationDelay: "250ms" }}
@@ -545,14 +699,14 @@ function Features() {
                       isVisible ? "hb-visible" : ""
                     } group flex min-h-[245px] flex-col rounded-2xl border p-5 sm:p-6`}
                     style={{
-                      animationDelay: `${300 + index * 100}ms`,
+                      animationDelay: `${300 + index * 110}ms`,
                       backgroundColor: palette.card,
                       borderColor: palette.border,
                     }}
                   >
                     <div className="flex items-start justify-between">
                       <div
-                        className="flex h-11 w-11 items-center justify-center rounded-xl border"
+                        className="hb-feature-icon flex h-11 w-11 items-center justify-center rounded-xl border"
                         style={{
                           color: palette.accent,
                           backgroundColor: palette.accentSoft,
@@ -604,7 +758,7 @@ function Features() {
 
           {/* Final call to action */}
           <div
-            className={`hb-reveal ${
+            className={`hb-reveal hb-reveal-right ${
               isVisible ? "hb-visible" : ""
             } mt-16 overflow-hidden rounded-3xl border sm:mt-20`}
             style={{
@@ -614,7 +768,7 @@ function Features() {
             }}
           >
             <div
-              className="h-1 w-full"
+              className="hb-accent-line h-1 w-full"
               style={{
                 background:
                   "linear-gradient(90deg, transparent, #00D6A0, #008A66, transparent)",
@@ -622,14 +776,6 @@ function Features() {
             />
 
             <div className="relative flex flex-col gap-7 p-6 sm:p-9 md:flex-row md:items-center md:justify-between md:p-12">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -right-12 -top-24 h-64 w-64 rounded-full blur-[90px]"
-                style={{
-                  backgroundColor: "rgba(0,214,160,0.08)",
-                }}
-              />
-
               <div className="relative max-w-2xl">
                 <div
                   className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl border"
@@ -657,11 +803,8 @@ function Features() {
 
               <Link
                 to="/dashboard"
-                onClick={(event) => {
-                  event.preventDefault();
-                  handleNavigate("/dashboard");
-                }}
-                className="hb-cta group relative inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all duration-300 hover:-translate-y-0.5 sm:gap-3 sm:px-6 sm:py-3.5 sm:text-sm"
+                onClick={navigate("/dashboard")}
+                className="hb-cta group relative inline-flex shrink-0 items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold sm:gap-3 sm:px-6 sm:py-3.5 sm:text-sm"
                 style={{
                   color: "#06130E",
                   backgroundColor: palette.accent,

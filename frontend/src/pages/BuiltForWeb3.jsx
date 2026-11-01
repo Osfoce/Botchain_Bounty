@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FiArrowUpRight,
   FiCheckCircle,
@@ -72,12 +72,40 @@ const features = [
 ];
 
 export default function BuiltForWeb3() {
+  const sectionRef = useRef(null);
+  const [isVisible, setIsVisible] = useState(false);
+
   const [dark, setDark] = useState(() =>
     typeof document !== "undefined"
       ? document.documentElement.classList.contains("dark")
       : true
   );
 
+  // Detect when the section enters the viewport.
+  useEffect(() => {
+    const section = sectionRef.current;
+
+    if (!section) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(section);
+        }
+      },
+      {
+        threshold: 0.12,
+        rootMargin: "0px 0px -40px 0px",
+      }
+    );
+
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Keep the component synchronized with the global theme.
   useEffect(() => {
     const root = document.documentElement;
 
@@ -120,7 +148,10 @@ export default function BuiltForWeb3() {
 
   return (
     <section
-      className="web3-section relative isolate overflow-hidden px-4 py-20 transition-colors duration-500 sm:px-8 sm:py-24 lg:px-10 lg:py-28"
+      ref={sectionRef}
+      className={`web3-section relative isolate overflow-hidden px-4 py-20 transition-colors duration-500 sm:px-8 sm:py-24 lg:px-10 lg:py-28 ${
+        isVisible ? "web3-visible" : ""
+      }`}
       style={{
         backgroundColor: colors.background,
         color: colors.text,
@@ -131,6 +162,7 @@ export default function BuiltForWeb3() {
           --web3-accent: #00D6A0;
         }
 
+        /* Background grid */
         .web3-grid {
           background-size: 52px 52px;
           animation: web3GridDrift 32s linear infinite;
@@ -140,20 +172,59 @@ export default function BuiltForWeb3() {
           animation: web3AmbientFloat 12s ease-in-out infinite alternate;
         }
 
+        /* Scroll reveal */
+        .web3-reveal {
+          opacity: 0;
+          transform: translateY(28px);
+          transition:
+            opacity 850ms cubic-bezier(.22, 1, .36, 1),
+            transform 850ms cubic-bezier(.22, 1, .36, 1);
+        }
+
+        .web3-visible .web3-reveal {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        .web3-delay-1 {
+          transition-delay: 100ms;
+        }
+
+        .web3-delay-2 {
+          transition-delay: 200ms;
+        }
+
+        .web3-delay-3 {
+          transition-delay: 300ms;
+        }
+
+        .web3-delay-4 {
+          transition-delay: 400ms;
+        }
+
+        /* Network cards */
         .web3-network-card {
           position: relative;
           isolation: isolate;
-          animation: web3FadeUp 650ms cubic-bezier(.22, 1, .36, 1) both;
+          opacity: 0;
+          transform: translateY(35px) scale(.97);
           transition:
-            transform 300ms ease,
+            opacity 750ms cubic-bezier(.22, 1, .36, 1),
+            transform 750ms cubic-bezier(.22, 1, .36, 1),
             border-color 300ms ease,
             background-color 300ms ease,
             box-shadow 300ms ease;
         }
 
+        .web3-visible .web3-network-card {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+
         .web3-network-card:hover {
-          transform: translateY(-4px);
-          border-color: rgba(0, 214, 160, 0.3) !important;
+          transform: translateY(-5px) !important;
+          border-color: rgba(0, 214, 160, 0.35) !important;
+          box-shadow: 0 20px 45px rgba(0, 0, 0, 0.12);
         }
 
         .web3-network-glow {
@@ -167,63 +238,97 @@ export default function BuiltForWeb3() {
           filter: blur(60px);
           opacity: 0.07;
           pointer-events: none;
-          transition: opacity 300ms ease;
+          transition: opacity 350ms ease;
         }
 
         .web3-network-card:hover .web3-network-glow {
-          opacity: 0.17;
+          opacity: 0.2;
         }
 
         .web3-network-logo {
           transition:
-            transform 350ms ease,
+            transform 350ms cubic-bezier(.22, 1, .36, 1),
             box-shadow 350ms ease;
         }
 
         .web3-network-card:hover .web3-network-logo {
-          transform: scale(1.04);
+          transform: scale(1.08) rotate(-3deg);
         }
 
+        /* Feature cards */
         .web3-feature-card {
           position: relative;
           overflow: hidden;
-          animation: web3FadeUp 650ms cubic-bezier(.22, 1, .36, 1) both;
+          opacity: 0;
+          transform: translateY(35px);
           transition:
-            transform 300ms ease,
+            opacity 750ms cubic-bezier(.22, 1, .36, 1),
+            transform 750ms cubic-bezier(.22, 1, .36, 1),
             border-color 300ms ease,
             box-shadow 300ms ease;
         }
 
+        .web3-visible .web3-feature-card {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
         .web3-feature-card:hover {
-          transform: translateY(-5px);
-          border-color: rgba(0, 214, 160, 0.25) !important;
+          transform: translateY(-6px) !important;
+          border-color: rgba(0, 214, 160, 0.3) !important;
           box-shadow: 0 18px 45px rgba(0, 0, 0, 0.10);
         }
 
         .web3-feature-icon {
           transition:
-            transform 300ms ease,
-            background-color 300ms ease;
+            transform 350ms ease,
+            background-color 350ms ease,
+            box-shadow 350ms ease;
         }
 
         .web3-feature-card:hover .web3-feature-icon {
-          transform: translateY(-2px);
+          transform: translateY(-3px) scale(1.06);
           background-color: rgba(0, 214, 160, 0.13) !important;
+          box-shadow: 0 8px 25px rgba(0, 214, 160, 0.12);
         }
 
+        /* Transparency panel */
         .web3-transparency {
-          transition: border-color 300ms ease;
+          transition:
+            border-color 300ms ease,
+            transform 350ms ease,
+            box-shadow 350ms ease;
         }
 
         .web3-transparency:hover {
-          border-color: rgba(0, 214, 160, 0.25) !important;
+          border-color: rgba(0, 214, 160, 0.3) !important;
+          transform: translateY(-3px);
+          box-shadow: 0 15px 35px rgba(0, 0, 0, 0.08);
         }
 
+        /* Heading gradient */
         .web3-heading-accent {
-          background: linear-gradient(100deg, #00D6A0 0%, #53E8B9 55%, #00B98B 100%);
+          background: linear-gradient(
+            100deg,
+            #00D6A0 0%,
+            #53E8B9 55%,
+            #00B98B 100%
+          );
           background-clip: text;
           -webkit-background-clip: text;
           color: transparent;
+        }
+
+        /* Bottom information */
+        .web3-bottom-item {
+          transition:
+            color 250ms ease,
+            transform 250ms ease;
+        }
+
+        .web3-bottom-item:hover {
+          transform: translateY(-3px);
+          color: #00D6A0 !important;
         }
 
         @keyframes web3GridDrift {
@@ -244,17 +349,6 @@ export default function BuiltForWeb3() {
           }
         }
 
-        @keyframes web3FadeUp {
-          from {
-            opacity: 0;
-            transform: translateY(14px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
         @media (max-width: 639px) {
           .web3-grid {
             background-size: 36px 36px;
@@ -265,8 +359,9 @@ export default function BuiltForWeb3() {
           }
 
           .web3-network-card:hover,
-          .web3-feature-card:hover {
-            transform: none;
+          .web3-feature-card:hover,
+          .web3-transparency:hover {
+            transform: none !important;
           }
         }
 
@@ -279,14 +374,16 @@ export default function BuiltForWeb3() {
             transition-duration: 0.01ms !important;
           }
 
-          .web3-network-card:hover,
-          .web3-feature-card:hover {
-            transform: none;
+          .web3-reveal,
+          .web3-network-card,
+          .web3-feature-card {
+            opacity: 1 !important;
+            transform: none !important;
           }
         }
       `}</style>
 
-      {/* Background details */}
+      {/* Background grid */}
       <div
         aria-hidden="true"
         className="web3-grid pointer-events-none absolute inset-0"
@@ -312,6 +409,7 @@ export default function BuiltForWeb3() {
         }}
       />
 
+      {/* Ambient glow */}
       <div
         aria-hidden="true"
         className="web3-ambient pointer-events-none absolute left-1/2 top-0 -z-10 h-72 w-[min(700px,100%)] -translate-x-1/2 rounded-full blur-[120px]"
@@ -323,8 +421,9 @@ export default function BuiltForWeb3() {
       />
 
       <div className="relative z-10 mx-auto max-w-7xl">
+
         {/* Main heading */}
-        <header className="mx-auto max-w-3xl text-center">
+        <header className="web3-reveal mx-auto max-w-3xl text-center">
           <div
             className="mb-6 inline-flex items-center gap-2.5 rounded-full border px-4 py-2"
             style={{
@@ -374,7 +473,7 @@ export default function BuiltForWeb3() {
 
         {/* Supported networks */}
         <div className="mx-auto mt-12 max-w-5xl sm:mt-16">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+          <div className="web3-reveal mb-5 flex flex-wrap items-end justify-between gap-3">
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
@@ -412,7 +511,9 @@ export default function BuiltForWeb3() {
                 style={{
                   backgroundColor: colors.card,
                   borderColor: colors.border,
-                  animationDelay: `${index * 120}ms`,
+                  transitionDelay: isVisible
+                    ? `${index * 160}ms`
+                    : "0ms",
                 }}
               >
                 <div
@@ -512,7 +613,7 @@ export default function BuiltForWeb3() {
         </div>
 
         {/* Feature heading */}
-        <div className="mt-16 max-w-2xl sm:mt-20">
+        <div className="web3-reveal mt-16 max-w-2xl sm:mt-20">
           <p
             className="text-[10px] font-bold uppercase tracking-[0.18em]"
             style={{ color: colors.accentText }}
@@ -549,7 +650,9 @@ export default function BuiltForWeb3() {
                 style={{
                   backgroundColor: colors.card,
                   borderColor: colors.border,
-                  animationDelay: `${index * 100}ms`,
+                  transitionDelay: isVisible
+                    ? `${index * 110}ms`
+                    : "0ms",
                 }}
               >
                 <div className="flex items-start justify-between">
@@ -617,7 +720,7 @@ export default function BuiltForWeb3() {
 
         {/* Transparency panel */}
         <div
-          className="web3-transparency relative mt-5 overflow-hidden rounded-2xl border"
+          className="web3-transparency web3-reveal web3-delay-2 relative mt-5 overflow-hidden rounded-2xl border"
           style={{
             backgroundColor: colors.card,
             borderColor: colors.border,
@@ -704,7 +807,7 @@ export default function BuiltForWeb3() {
 
         {/* Bottom information strip */}
         <div
-          className="mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 border-t pt-6"
+          className="web3-reveal mt-8 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 border-t pt-6"
           style={{ borderColor: colors.border }}
         >
           {bottomItems.map((item) => {
@@ -713,7 +816,7 @@ export default function BuiltForWeb3() {
             return (
               <span
                 key={item.label}
-                className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.13em]"
+                className="web3-bottom-item flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.13em]"
                 style={{ color: colors.muted }}
               >
                 <Icon size={14} style={{ color: colors.accentText }} />

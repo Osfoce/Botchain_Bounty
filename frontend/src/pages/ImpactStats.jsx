@@ -1,5 +1,5 @@
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   FiActivity,
   FiArrowUpRight,
@@ -21,10 +21,15 @@ const INITIAL_STATS = {
 };
 
 // Animated number component
-function CountUp({ value, decimals = 0 }) {
+function CountUp({ value, decimals = 0, start = false }) {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
+    if (!start) {
+      setCount(0);
+      return;
+    }
+
     const target = Number(value) || 0;
 
     if (target <= 0) {
@@ -52,7 +57,6 @@ function CountUp({ value, decimals = 0 }) {
       const elapsed = timestamp - startTime;
       const progress = Math.min(elapsed / duration, 1);
 
-      // Smooth ease-out animation
       const easedProgress = 1 - Math.pow(1 - progress, 4);
 
       setCount(target * easedProgress);
@@ -68,7 +72,7 @@ function CountUp({ value, decimals = 0 }) {
     animationFrame = requestAnimationFrame(animate);
 
     return () => cancelAnimationFrame(animationFrame);
-  }, [value]);
+  }, [value, start]);
 
   return (
     <>
@@ -116,10 +120,50 @@ const STAT_ITEMS = [
 ];
 
 export default function ImpactStats() {
+  const sectionRef = useRef(null);
+
   const [stats, setStats] = useState(INITIAL_STATS);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
 
+  // Trigger animations when the section enters the viewport.
+  useEffect(() => {
+    const section = sectionRef.current;
+
+    if (!section) return;
+
+    if (
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setIsVisible(true);
+      return;
+    }
+
+    if (!("IntersectionObserver" in window)) {
+      setIsVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.unobserve(section);
+        }
+      },
+      {
+        threshold: 0.12,
+        rootMargin: "0px 0px -40px 0px",
+      }
+    );
+
+    observer.observe(section);
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Fetch platform statistics.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -153,6 +197,7 @@ export default function ImpactStats() {
             "Failed to load Happy Bounty statistics:",
             error
           );
+
           setHasError(true);
         }
       } finally {
@@ -169,13 +214,195 @@ export default function ImpactStats() {
 
   return (
     <section
+      ref={sectionRef}
       id="impact"
-      className="relative isolate overflow-hidden bg-[#F6F5EF] py-20 text-[#17211B] transition-colors duration-300 dark:bg-[#080908] dark:text-white sm:py-24 lg:py-28"
+      className={`impact-section relative isolate overflow-hidden bg-[#F6F5EF] py-20 text-[#17211B] transition-colors duration-300 dark:bg-[#080908] dark:text-white sm:py-24 lg:py-28 ${
+        isVisible ? "impact-visible" : ""
+      }`}
     >
+      <style>{`
+        .impact-section {
+          --impact-accent: #00D6A0;
+        }
+
+        /* Background animation */
+        .impact-grid {
+          animation: impactGridDrift 35s linear infinite;
+        }
+
+        .impact-glow {
+          animation: impactGlowFloat 11s ease-in-out infinite alternate;
+        }
+
+        @keyframes impactGridDrift {
+          from {
+            background-position: 0 0;
+          }
+          to {
+            background-position: 48px 48px;
+          }
+        }
+
+        @keyframes impactGlowFloat {
+          from {
+            transform: translate(-50%, 0) scale(.95);
+          }
+          to {
+            transform: translate(calc(-50% + 18px), 18px) scale(1.08);
+          }
+        }
+
+        /* Section reveal */
+        .impact-reveal {
+          opacity: 0;
+          transform: translateY(25px);
+          transition:
+            opacity 800ms cubic-bezier(.22, 1, .36, 1),
+            transform 800ms cubic-bezier(.22, 1, .36, 1);
+        }
+
+        .impact-visible .impact-reveal {
+          opacity: 1;
+          transform: translateY(0);
+        }
+
+        .impact-heading {
+          transition-delay: 80ms;
+        }
+
+        .impact-label {
+          transition-delay: 180ms;
+        }
+
+        .impact-bottom {
+          transition-delay: 350ms;
+        }
+
+        /* Statistics cards */
+        .impact-card {
+          opacity: 0;
+          transform: translateY(35px) scale(.97);
+          transition:
+            opacity 750ms cubic-bezier(.22, 1, .36, 1),
+            transform 750ms cubic-bezier(.22, 1, .36, 1),
+            border-color 300ms ease,
+            box-shadow 300ms ease,
+            background-color 300ms ease;
+        }
+
+        .impact-visible .impact-card {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+
+        .impact-card:hover {
+          transform: translateY(-6px) !important;
+          box-shadow: 0 20px 45px rgba(0, 0, 0, .10);
+        }
+
+        .impact-card-icon {
+          transition:
+            transform 350ms cubic-bezier(.22, 1, .36, 1),
+            background-color 300ms ease,
+            box-shadow 300ms ease;
+        }
+
+        .impact-card:hover .impact-card-icon {
+          transform: translateY(-3px) scale(1.08);
+          box-shadow: 0 8px 24px rgba(0, 214, 160, .12);
+        }
+
+        .impact-card-accent {
+          transform: scaleX(0);
+          transform-origin: left;
+          transition: transform 600ms cubic-bezier(.22, 1, .36, 1);
+        }
+
+        .impact-card:hover .impact-card-accent {
+          transform: scaleX(1);
+        }
+
+        .impact-card-number {
+          transition: transform 350ms ease;
+        }
+
+        .impact-card:hover .impact-card-number {
+          transform: translateY(-2px);
+        }
+
+        .impact-card-arrow {
+          transition:
+            transform 300ms ease,
+            color 300ms ease;
+        }
+
+        .impact-card:hover .impact-card-arrow {
+          transform: translate(2px, -2px);
+        }
+
+        .impact-plus {
+          animation: impactPlusPulse 2.8s ease-in-out infinite;
+        }
+
+        @keyframes impactPlusPulse {
+          0%, 100% {
+            box-shadow: 0 0 0 0 rgba(0, 214, 160, 0);
+          }
+          50% {
+            box-shadow: 0 0 0 5px rgba(0, 214, 160, .07);
+          }
+        }
+
+        /* Bottom message */
+        .impact-bottom-card {
+          transition:
+            border-color 300ms ease,
+            transform 350ms ease,
+            box-shadow 350ms ease;
+        }
+
+        .impact-bottom-card:hover {
+          transform: translateY(-3px);
+          border-color: rgba(0, 214, 160, .25);
+          box-shadow: 0 12px 30px rgba(0, 0, 0, .06);
+        }
+
+        .impact-bottom-icon {
+          transition: transform 350ms ease;
+        }
+
+        .impact-bottom-card:hover .impact-bottom-icon {
+          transform: rotate(8deg) scale(1.08);
+        }
+
+        @media (max-width: 639px) {
+          .impact-card:hover,
+          .impact-bottom-card:hover {
+            transform: none !important;
+          }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .impact-section *,
+          .impact-section *::before,
+          .impact-section *::after {
+            animation: none !important;
+            scroll-behavior: auto !important;
+            transition-duration: 0.01ms !important;
+          }
+
+          .impact-reveal,
+          .impact-card {
+            opacity: 1 !important;
+            transform: none !important;
+          }
+        }
+      `}</style>
+
       {/* Background grid */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-10"
+        className="impact-grid pointer-events-none absolute inset-0 -z-10"
         style={{
           backgroundImage: `
             linear-gradient(rgba(0,138,102,0.035) 1px, transparent 1px),
@@ -191,17 +418,19 @@ export default function ImpactStats() {
       {/* Ambient glow */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-80 w-[min(700px,100%)] -translate-x-1/2 rounded-full bg-[#00D6A0]/10 blur-[120px] dark:bg-[#00D6A0]/[0.07]"
+        className="impact-glow pointer-events-none absolute -top-40 left-1/2 -z-10 h-80 w-[min(700px,100%)] -translate-x-1/2 rounded-full bg-[#00D6A0]/10 blur-[120px] dark:bg-[#00D6A0]/[0.07]"
       />
 
       <div className="mx-auto max-w-7xl px-5 sm:px-8 lg:px-10">
+
         {/* Section heading */}
-        <div className="mx-auto mb-12 max-w-3xl text-center sm:mb-16">
+        <div className="impact-reveal impact-heading mx-auto mb-12 max-w-3xl text-center sm:mb-16">
           <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-[#008A66]/20 bg-[#008A66]/[0.06] px-4 py-2 dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.06]">
             <FiActivity
               size={14}
               className="text-[#008A66] dark:text-[#00D6A0]"
             />
+
             <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#008A66] dark:text-[#00D6A0] sm:text-[11px]">
               The impact so far
             </span>
@@ -223,9 +452,10 @@ export default function ImpactStats() {
         </div>
 
         {/* Platform label */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="impact-reveal impact-label mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-[#008A66] dark:bg-[#00D6A0]" />
+
             <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-gray-500 dark:text-gray-400">
               Platform overview
             </span>
@@ -247,18 +477,23 @@ export default function ImpactStats() {
             return (
               <article
                 key={item.key}
-                className="group relative flex min-h-[245px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-[#008A66]/30 hover:shadow-xl hover:shadow-[#008A66]/[0.06] dark:border-white/[0.09] dark:bg-[#101410] dark:hover:border-[#00D6A0]/30 dark:hover:shadow-[#00D6A0]/[0.04] sm:p-6"
+                className="impact-card group relative flex min-h-[245px] flex-col overflow-hidden rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm hover:border-[#008A66]/30 hover:shadow-xl hover:shadow-[#008A66]/[0.06] dark:border-white/[0.09] dark:bg-[#101410] dark:hover:border-[#00D6A0]/30 dark:hover:shadow-[#00D6A0]/[0.04] sm:p-6"
+                style={{
+                  transitionDelay: isVisible
+                    ? `${index * 130}ms`
+                    : "0ms",
+                }}
               >
                 {/* Top accent */}
-                <div className="absolute inset-x-0 top-0 h-[2px] origin-left scale-x-0 bg-gradient-to-r from-[#008A66] to-[#00D6A0] transition-transform duration-500 group-hover:scale-x-100" />
+                <div className="impact-card-accent absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-[#008A66] to-[#00D6A0]" />
 
                 {/* Card header */}
                 <div className="flex items-start justify-between">
-                  <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#008A66]/15 bg-[#008A66]/[0.06] text-[#008A66] transition-colors duration-300 group-hover:bg-[#008A66]/10 dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.06] dark:text-[#00D6A0] dark:group-hover:bg-[#00D6A0]/[0.12]">
+                  <div className="impact-card-icon flex h-11 w-11 items-center justify-center rounded-xl border border-[#008A66]/15 bg-[#008A66]/[0.06] text-[#008A66] dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.06] dark:text-[#00D6A0]">
                     <Icon size={19} strokeWidth={1.8} />
                   </div>
 
-                  <span className="text-[10px] font-semibold tracking-[0.15em] text-gray-400 dark:text-gray-600">
+                  <span className="impact-card-number text-[10px] font-semibold tracking-[0.15em] text-gray-400 dark:text-gray-600">
                     0{index + 1}
                   </span>
                 </div>
@@ -278,12 +513,13 @@ export default function ImpactStats() {
                         <CountUp
                           value={value}
                           decimals={item.decimals}
+                          start={isVisible}
                         />
                       )}
                     </p>
 
                     {!loading && !hasError && (
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#008A66]/20 bg-[#008A66]/[0.07] text-[#008A66] transition-all duration-300 group-hover:scale-110 group-hover:bg-[#008A66]/15 dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.08] dark:text-[#00D6A0] dark:group-hover:bg-[#00D6A0]/15">
+                      <span className="impact-plus flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#008A66]/20 bg-[#008A66]/[0.07] text-[#008A66] transition-all duration-300 group-hover:scale-110 group-hover:bg-[#008A66]/15 dark:border-[#00D6A0]/20 dark:bg-[#00D6A0]/[0.08] dark:text-[#00D6A0] dark:group-hover:bg-[#00D6A0]/15">
                         <FiPlus size={13} strokeWidth={2.5} />
                       </span>
                     )}
@@ -306,7 +542,7 @@ export default function ImpactStats() {
 
                   <FiArrowUpRight
                     size={14}
-                    className="shrink-0 text-gray-400 transition-all duration-300 group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[#008A66] dark:group-hover:text-[#00D6A0]"
+                    className="impact-card-arrow shrink-0 text-gray-400 group-hover:text-[#008A66] dark:group-hover:text-[#00D6A0]"
                   />
                 </div>
               </article>
@@ -315,9 +551,9 @@ export default function ImpactStats() {
         </div>
 
         {/* Bottom message */}
-        <div className="mt-8 flex flex-col gap-4 rounded-2xl border border-black/[0.07] bg-white/70 p-5 dark:border-white/[0.08] dark:bg-white/[0.025] sm:flex-row sm:items-center sm:justify-between sm:px-6">
+        <div className="impact-reveal impact-bottom impact-bottom-card mt-8 flex flex-col gap-4 rounded-2xl border border-black/[0.07] bg-white/70 p-5 dark:border-white/[0.08] dark:bg-white/[0.025] sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#008A66]/[0.07] text-[#008A66] dark:bg-[#00D6A0]/[0.08] dark:text-[#00D6A0]">
+            <div className="impact-bottom-icon mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#008A66]/[0.07] text-[#008A66] dark:bg-[#00D6A0]/[0.08] dark:text-[#00D6A0]">
               <FiZap size={17} />
             </div>
 
@@ -353,7 +589,7 @@ export default function ImpactStats() {
           </div>
         </div>
 
-        <p className="mt-6 text-center text-[10px] leading-5 text-gray-400 dark:text-gray-600">
+        <p className="impact-reveal impact-bottom mt-6 text-center text-[10px] leading-5 text-gray-400 dark:text-gray-600">
           Statistics are aggregated from platform data across supported
           networks. Reward amounts are shown in native units and are not
           converted between tokens.
