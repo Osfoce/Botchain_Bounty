@@ -48,6 +48,10 @@ const userSchema = new mongoose.Schema(
         default: 0,
         min: 0,
       },
+      completedDistributionKeys: {
+        type: [String],
+        default: [],
+      },
       submissions: {
         pending: {
           type: Number,

@@ -4,6 +4,11 @@ const express = require("express");
 const cors = require("cors");
 const { connectDB } = require("./config/db");
 const startStatusUpdateJob = require("./jobs/updateStatusJob");
+const DistributionSync = require("./modules/distributionSync.module");
+const DistributionScanCheckpoint = require("./modules/distributionScanCheckpoint.module");
+const {
+  startRewardDistributionReconcileJob,
+} = require("./jobs/rewardDistributionReconcileJob");
 
 // Import routes
 const userRoutes = require("./routes/user.route");
@@ -52,9 +57,15 @@ const startServer = async () => {
     await connectDB();
 
     console.log("Connected to database");
+    await Promise.all([
+      DistributionSync.init(),
+      DistributionScanCheckpoint.init(),
+    ]);
+    console.log("Distribution synchronization indexes are ready");
 
     // Start the cron job only after DB is ready
     startStatusUpdateJob();
+    startRewardDistributionReconcileJob();
 
     app.listen(port, () => {
       console.log(`Server running on port ${port}`);

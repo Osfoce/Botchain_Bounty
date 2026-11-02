@@ -1,4 +1,6 @@
-# Happy Bounty — BOT Chain Multi-Network Integration
+# Happy Bounty — BOT Chain Integration Notes
+
+> **Historical note:** This document contains the original BOT Chain Testnet (Bohr) integration requirements and setup instructions. The application no longer supports BOT Chain Testnet (chain ID `968`). Current production support is Arc Mainnet (`5042`) and BOT Chain (`677`); use the root README and source configuration for current settings.
 
 ## 1. Project Context
 
