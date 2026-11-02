@@ -33,7 +33,8 @@ export function ThemeProvider({ children }) {
   });
 
   // Detect the connected network without changing the UI colors.
-  const network = chainId === 5042 ? "arc" : "botchain";
+  const network =
+    chainId === 5042 || chainId === 5042002 ? "arc" : "botchain";
   const palette = NETWORK_THEMES[network];
 
   useEffect(() => {

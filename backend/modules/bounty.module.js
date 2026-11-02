@@ -166,7 +166,7 @@ const bountySchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
       enum: {
-        values: ["5042002", "5042", "968"],
+        values: ["5042002", "5042", "677", "968"],
         message: "{VALUE} is not a supported network",
       },
     },

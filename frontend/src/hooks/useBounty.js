@@ -97,6 +97,7 @@ export const useBounty = () => {
     setIsConfirming(false);
     setTxError(null);
     let hash = null;
+    let transactionConfirmed = false;
     try {
       // Send transaction
       hash = await writeContractAsync(txConfig);
@@ -119,8 +120,11 @@ export const useBounty = () => {
       // console.log("Full receipt:", receipt);
 
       if (receipt.status !== "success") {
-        throw new Error("Transaction reverted");
+        const error = new Error("Transaction reverted");
+        error.transactionStatus = receipt.status;
+        throw error;
       }
+      transactionConfirmed = true;
 
       // Success showToast
       showToast.success(successMessage, { id: hash });
@@ -142,11 +146,19 @@ export const useBounty = () => {
       return { hash, receipt, eventData };
     } catch (err) {
       console.error(err);
+      if (hash && err && typeof err === "object") {
+        err.transactionHash = hash;
+        err.transactionConfirmed = transactionConfirmed;
+      }
       setTxError(err);
       setIsPending(false);
       setIsConfirming(false);
       showToast.error(
-        err.shortMessage || err.message || "Transaction failed",
+        hash && err.transactionStatus !== "reverted"
+          ? transactionConfirmed
+            ? "Transaction confirmed. Application synchronization is still required."
+            : "Transaction submitted. Confirmation is not available yet."
+          : err.shortMessage || err.message || "Transaction failed",
         hash ? { id: hash } : undefined,
       );
       throw err;
@@ -241,24 +253,40 @@ export const useBounty = () => {
   /*                         READ HOOKS                                 */
   /* ------------------------------------------------------------------ */
 
-  const useClaimableReward = (bountyId, user) => {
+  const useClaimableReward = (bountyId, user, targetChainId = chainId) => {
+    const config =
+      bountyId && user && targetChainId
+        ? getClaimableConfig({
+            bountyId,
+            user,
+            chainId: targetChainId,
+          })
+        : null;
+
     return useReadContract({
-      ...(bountyId && user && chainId
-        ? getClaimableConfig({ bountyId, user, chainId })
-        : {}),
+      ...config,
+      chainId: config?.address ? targetChainId : undefined,
       query: {
-        enabled: !!bountyId && !!user && !!chainId,
+        enabled: Boolean(bountyId && user && config?.address),
       },
     });
   };
 
-  const useClaimedStatus = (bountyId, user) => {
+  const useClaimedStatus = (bountyId, user, targetChainId = chainId) => {
+    const config =
+      bountyId && user && targetChainId
+        ? getClaimedConfig({
+            bountyId,
+            user,
+            chainId: targetChainId,
+          })
+        : null;
+
     return useReadContract({
-      ...(bountyId && user && chainId
-        ? getClaimedConfig({ bountyId, user, chainId })
-        : {}),
+      ...config,
+      chainId: config?.address ? targetChainId : undefined,
       query: {
-        enabled: !!bountyId && !!user && !!chainId,
+        enabled: Boolean(bountyId && user && config?.address),
       },
     });
   };

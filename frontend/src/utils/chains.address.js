@@ -1,10 +1,18 @@
 export const CHAIN_IDS = {
   ARC_MAINNET: 5042,
+  BOTCHAIN_MAINNET: 677,
+  ARC_TESTNET: 5042002,
   BOTCHAIN_TESTNET: 968,
 };
 
 export const CONTRACT_ADDRESSES = {
   [CHAIN_IDS.ARC_MAINNET]: {
+    bounty: "0x498482e334269a10d0621D3AC5e726734B01DDCe",
+  },
+  [CHAIN_IDS.BOTCHAIN_MAINNET]: {
+    bounty: "0x498482e334269a10d0621D3AC5e726734B01DDCe",
+  },
+  [CHAIN_IDS.ARC_TESTNET]: {
     bounty: "0x498482e334269a10d0621D3AC5e726734B01DDCe",
   },
   [CHAIN_IDS.BOTCHAIN_TESTNET]: {
@@ -14,6 +22,16 @@ export const CONTRACT_ADDRESSES = {
 
 export const NATIVE_TOKENS = {
   [CHAIN_IDS.ARC_MAINNET]: {
+    name: "USDC",
+    symbol: "USDC",
+    decimals: 18,
+  },
+  [CHAIN_IDS.BOTCHAIN_MAINNET]: {
+    name: "BOT",
+    symbol: "BOT",
+    decimals: 18,
+  },
+  [CHAIN_IDS.ARC_TESTNET]: {
     name: "USDC",
     symbol: "USDC",
     decimals: 18,
@@ -29,6 +47,14 @@ export const BLOCK_EXPLORERS = {
   [CHAIN_IDS.ARC_MAINNET]: {
     name: "Arc Explorer",
     url: "https://explorer.arc.io",
+  },
+  [CHAIN_IDS.BOTCHAIN_MAINNET]: {
+    name: "BOT Chain Explorer",
+    url: "https://scan.botchain.ai",
+  },
+  [CHAIN_IDS.ARC_TESTNET]: {
+    name: "ArcScan",
+    url: "https://testnet.arcscan.app",
   },
   [CHAIN_IDS.BOTCHAIN_TESTNET]: {
     name: "BohrScan",

@@ -7,15 +7,17 @@ Happy Bounty is a Web3 platform for publishing bounties, submitting work, assign
 | Network | Chain ID | Native token | Explorer |
 |---|---:|---|---|
 | Arc | `5042` | USDC | [explorer.arc.io](https://explorer.arc.io) |
+| BOT Chain | `677` | BOT | [scan.botchain.ai](https://scan.botchain.ai) |
+| Arc Testnet | `5042002` | USDC | [testnet.arcscan.app](https://testnet.arcscan.app) |
 | BOT Chain Testnet (Bohr) | `968` | BOT | [scan.bohr.life](https://scan.bohr.life) |
 
-Each chain has independent contract state. See the [BOT Chain integration guide](./BOTCHAIN_INTEGRATION.md) for network setup, environment variables, faucet guidance, deployment notes, and the manual testing checklist.
+The same bounty contract address is configured on all four networks, with independent on-chain state. Testnet support is for testing only; use test tokens and testnet bounties.
 
 ## Architecture
 
 - **Frontend:** React, Vite, TailwindCSS, Wagmi, RainbowKit, and Viem.
 - **Backend:** Express 5 API with Mongoose models and MongoDB.
-- **Contract configuration:** Chain definitions are in `frontend/src/rainbowChains.jsx`; contract addresses, native tokens, and explorers are in `frontend/src/utils/chains.address.js`.
+- **Contract configuration:** Chain definitions are in `frontend/src/rainbowChains.jsx`; contract addresses, native tokens, and explorers are in `frontend/src/utils/chains.address.js`. Backend RPC and reconciliation settings are in `backend/config/chains.js`.
 - **API routes:** The frontend uses bounty, user, submission, enrollment, and reward endpoints under the backend `/api` prefix.
 
 ## Local development
