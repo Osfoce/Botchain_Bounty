@@ -293,7 +293,7 @@ function Footer() {
 
               <li>
                 <a
-                  href="mailto:YOUR_EMAIL_ADDRESS"
+                  href="mailto:happybounty9@gmail.com"
                   className={linkStyle}
                 >
                   <FaEnvelope className={iconStyle} />
