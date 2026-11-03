@@ -466,7 +466,7 @@ export default function Analytics({ dark = true, setDark }) {
   }, [platform, role, address]);
 
   const fetchAnalytics = useCallback(
-    async (isRefresh = false) => {
+    async (isRefresh = false, signal) => {
       if (!endpoint) {
         setData(null);
         setError(
@@ -481,72 +481,50 @@ export default function Analytics({ dark = true, setDark }) {
 
       if (isRefresh) {
         setRefreshing(true);
-      } else {
-        setLoading(true);
       }
+      setLoading(true);
 
       setError("");
 
       try {
-        const response = await axios.get(endpoint);
-        setData(response.data || {});
+        const response = await axios.get(endpoint, { signal });
+        if (
+          !response.data ||
+          typeof response.data !== "object" ||
+          !response.data.overview ||
+          typeof response.data.overview !== "object"
+        ) {
+          throw new Error("The analytics service returned an invalid response.");
+        }
+        setData(response.data);
       } catch (err) {
+        if (signal?.aborted) return;
         console.error("Error fetching analytics:", err);
 
+        setData(null);
         setError(
           err.response?.data?.message ||
+            err.response?.data?.error ||
+            err.message ||
             "Unable to load analytics right now. Please try again."
         );
       } finally {
-        setLoading(false);
-        setRefreshing(false);
+        if (!signal?.aborted) {
+          setLoading(false);
+          setRefreshing(false);
+        }
       }
     },
     [endpoint]
   );
 
   useEffect(() => {
-    let active = true;
-
-    const load = async () => {
-      if (!endpoint) {
-        setData(null);
-        setError(
-          !API_URL
-            ? "The API URL is not configured."
-            : "Connect your wallet to view personal analytics."
-        );
-        setLoading(false);
-        return;
-      }
-
-      setLoading(true);
-      setError("");
-
-      try {
-        const response = await axios.get(endpoint);
-
-        if (active) setData(response.data || {});
-      } catch (err) {
-        console.error("Error fetching analytics:", err);
-
-        if (active) {
-          setError(
-            err.response?.data?.message ||
-              "Unable to load analytics right now. Please try again."
-          );
-        }
-      } finally {
-        if (active) setLoading(false);
-      }
-    };
-
-    load();
-
+    const controller = new AbortController();
+    fetchAnalytics(false, controller.signal);
     return () => {
-      active = false;
+      controller.abort();
     };
-  }, [endpoint]);
+  }, [fetchAnalytics]);
 
   const overview = data?.overview || {};
   const submissions = data?.submissions || {};
@@ -872,35 +850,6 @@ export default function Analytics({ dark = true, setDark }) {
           </div>
         </section>
 
-        {/* Error */}
-        {error && (
-          <div
-            className={`mb-6 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
-              dark
-                ? "border-red-500/20 bg-red-500/[0.06] text-red-300"
-                : "border-red-200 bg-red-50 text-red-700"
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <FiXCircle className="mt-0.5 shrink-0 text-lg" />
-
-              <div>
-                <p className="text-sm font-bold">Analytics unavailable</p>
-                <p className="mt-1 text-xs leading-5 opacity-80">{error}</p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => fetchAnalytics(true)}
-              className="inline-flex w-fit shrink-0 items-center gap-2 rounded-lg border border-current/20 px-3 py-2 text-xs font-bold transition hover:bg-black/5"
-            >
-              <FiRefreshCw />
-              Try again
-            </button>
-          </div>
-        )}
-
         {/* Loading */}
         {loading ? (
           <div className="space-y-6">
@@ -934,6 +883,34 @@ export default function Analytics({ dark = true, setDark }) {
                 />
               ))}
             </div>
+          </div>
+        ) : error ? (
+          <div
+            role="alert"
+            className={`flex min-h-64 flex-col items-center justify-center rounded-3xl border px-5 py-10 text-center ${
+              dark
+                ? "border-red-500/20 bg-red-500/[0.06]"
+                : "border-red-200 bg-red-50"
+            }`}
+          >
+            <FiXCircle className="text-3xl text-red-500" />
+            <h2 className="mt-4 text-lg font-bold">Analytics unavailable</h2>
+            <p
+              className={`mt-2 max-w-lg text-sm leading-6 ${
+                dark ? "text-white/60" : "text-gray-600"
+              }`}
+            >
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={() => fetchAnalytics(true)}
+              disabled={refreshing}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#00D6A0] px-4 py-2.5 text-sm font-bold text-[#06271D] transition hover:bg-[#00bd8e] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <FiRefreshCw className={refreshing ? "animate-spin" : ""} />
+              {refreshing ? "Retrying..." : "Try again"}
+            </button>
           </div>
         ) : (
           <>

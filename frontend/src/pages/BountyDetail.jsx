@@ -35,10 +35,26 @@ import {
 } from "../utils/chains.address";
 import { supportedChains } from "../rainbowChains";
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
-import { formatEther } from "viem";
+import { createPublicClient, formatEther, http } from "viem";
 import { useBounty } from "../hooks/useBounty";
 import { formatAmount } from "../utils/format";
 import { BountyDetailSkeleton } from "../components/UI/Skeleton";
+import {
+  clearDistributionSyncRecord,
+  getDistributionSyncStorageKey,
+  isValidDistributionSyncRecord,
+  readDistributionSyncRecord,
+  saveDistributionSyncRecord,
+} from "../utils/distributionSync";
+
+const getBrowserStorage = () => {
+  try {
+    return window.localStorage;
+  } catch (error) {
+    console.warn("Browser storage is unavailable:", error);
+    return null;
+  }
+};
 
 // Nigeria timezone: West Africa Time (UTC+1).
 const NIGERIA_TIME_ZONE = "Africa/Lagos";
@@ -120,6 +136,7 @@ const BountyDetail = () => {
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [distributing, setDistributing] = useState(false);
+  const [pendingDistributionSync, setPendingDistributionSync] = useState(null);
   const [submissionImage, setSubmissionImage] = useState(null);
   const [submissionDescription, setSubmissionDescription] = useState("");
   const [submissionLink, setSubmissionLink] = useState("");
@@ -137,19 +154,42 @@ const BountyDetail = () => {
   const API_URL = import.meta.env.VITE_API_URL;
   const fileInputRef = useRef(null);
 
+  useEffect(() => {
+    if (!bounty?.network || !id) return;
+    const key = getDistributionSyncStorageKey(Number(bounty.network), id);
+    const record = readDistributionSyncRecord(getBrowserStorage(), key);
+    if (
+      record &&
+      record.bountyId === String(id) &&
+      record.chainId === Number(bounty.network) &&
+      String(record.blockchainId) === String(bounty.blockchainId)
+    ) {
+      setPendingDistributionSync(record);
+    }
+  }, [bounty, id]);
+
   const blockchainId =
     bounty?.blockchainId !== null && bounty?.blockchainId !== undefined
       ? Number(bounty.blockchainId)
       : null;
+  const parsedBountyChainId =
+    bounty?.network != null ? Number(bounty.network) : undefined;
+  const bountyChainId = Number.isInteger(parsedBountyChainId)
+    ? parsedBountyChainId
+    : undefined;
 
   const { data: onChainClaimable, refetch: refetchClaimable } =
-    useClaimableReward(blockchainId, address);
+    useClaimableReward(blockchainId, address, bountyChainId);
 
-  const { data: onChainClaimed } = useClaimedStatus(blockchainId, address);
+  const { data: onChainClaimed } = useClaimedStatus(
+    blockchainId,
+    address,
+    bountyChainId,
+  );
 
   useEffect(() => {
     if (blockchainId !== null && address) refetchClaimable();
-  }, [blockchainId, address, refetchClaimable]);
+  }, [blockchainId, address, bountyChainId, refetchClaimable]);
 
   useEffect(() => {
     const handleScroll = () => setShowScrollTop(window.scrollY > 350);
@@ -667,6 +707,71 @@ const BountyDetail = () => {
     }
   };
 
+  const persistPendingDistribution = (record) => {
+    try {
+      saveDistributionSyncRecord(getBrowserStorage(), record);
+      setPendingDistributionSync(record);
+      return true;
+    } catch (error) {
+      console.error("Could not persist pending distribution sync:", error);
+      const saved = readDistributionSyncRecord(
+        getBrowserStorage(),
+        getDistributionSyncStorageKey(record.chainId, record.bountyId),
+      );
+      setPendingDistributionSync(saved || record);
+      showToast.error(
+        "Could not save recovery information in this browser. Keep this page open while synchronization is pending.",
+      );
+      return false;
+    }
+  };
+
+  const synchronizeRewardAssignment = async (record) => {
+    let data;
+    try {
+      ({ data } = await axios.post(
+        `${API_URL}/bounty/${record.bountyId}/distribute`,
+        {
+          txHash: record.txHash,
+          blockchainId: record.blockchainId,
+          chainId: record.chainId,
+          bountyContract: record.bountyContract,
+        },
+      ));
+    } catch (error) {
+      if (error.response?.data?.code === "TRANSACTION_REVERTED") {
+        clearDistributionSyncRecord(getBrowserStorage(), record);
+        setPendingDistributionSync(null);
+      }
+      throw error;
+    }
+
+    if (data.status !== "synced") {
+      throw new Error(
+        data.code === "SYNC_PENDING"
+          ? "Synchronization is still processing. Retry in a moment."
+          : data.error || "Distribution synchronization is incomplete.",
+      );
+    }
+
+    clearDistributionSyncRecord(getBrowserStorage(), record);
+    setPendingDistributionSync(null);
+    setSelectedWinners([]);
+    setShowDistributeModal(false);
+    await loadWinnersData(record.bountyId);
+    showToast.success("Rewards distributed and synchronized successfully.");
+  };
+
+  const executeRewardAssignment = async (valid) => {
+    if (valid.length === 1) {
+      return assignSingleWinner(blockchainId, valid[0]);
+    }
+
+    const percentages =
+      bounty.payoutType === "MULTI_PERCENTAGE" ? bounty.percentages : [];
+    return assignMultipleWinners(blockchainId, valid, percentages);
+  };
+
   const handleDistributeReward = async () => {
     const valid = winnerAddresses.map((value) => value.trim());
 
@@ -682,13 +787,38 @@ const BountyDetail = () => {
 
     if (blockchainId === null) {
       return showToast.error("This bounty is not on-chain");
+    if (pendingDistributionSync) {
+      return showToast.error(
+        "A previous distribution is still synchronizing. Retry synchronization instead of submitting another transaction.",
+      );
     }
 
-    if (Number(currentChainId) !== Number(bounty.network)) {
+    const chainId = Number(bounty.network);
+    const bountyContract = getBountyContract(chainId);
+    if (!bountyContract) {
+      return showToast.error(
+        `Contract not configured for chain ${chainId}`,
+      );
+    }
+
+    const storageKey = getDistributionSyncStorageKey(chainId, id);
+    const unresolvedRecord = readDistributionSyncRecord(
+      getBrowserStorage(),
+      storageKey,
+    );
+    if (unresolvedRecord) {
+      setPendingDistributionSync(unresolvedRecord);
+      return showToast.error(
+        "A previous distribution is still unresolved. Retry its synchronization first.",
+      );
+    }
+
+    if (Number(currentChainId) !== chainId) {
       try {
         await switchChainAsync({
           chainId: Number(bounty.network),
         });
+        await switchChainAsync({ chainId });
       } catch {
         return showToast.error(
           "Please switch network manually in your wallet",
@@ -699,24 +829,44 @@ const BountyDetail = () => {
     setDistributing(true);
 
     const toastId = showToast.loading("Distributing rewards...");
-
+    const toastId = showToast.loading("Assigning winners on-chain...");
+    let tx;
     try {
-      let tx;
-
-      if (valid.length === 1) {
-        tx = await assignSingleWinner(blockchainId, valid[0]);
+      tx = await executeRewardAssignment(valid);
+    } catch (error) {
+      const txHash = error.transactionHash;
+      if (txHash && error.transactionStatus === "reverted") {
+        showToast.error("The winner-assignment transaction reverted on-chain.", {
+          id: toastId,
+        });
+      } else if (txHash) {
+        const pendingRecord = {
+          bountyId: String(id),
+          blockchainId: String(blockchainId),
+          chainId,
+          bountyContract,
+          txHash,
+          status: error.transactionConfirmed
+            ? "pending_sync"
+            : "pending_confirmation",
+          createdAt: new Date().toISOString(),
+        };
+        persistPendingDistribution(pendingRecord);
+        showToast.error(
+          error.transactionConfirmed
+            ? "The blockchain transaction succeeded, but synchronization is still required. Do not assign winners again; retry synchronization."
+            : "The transaction was submitted, but confirmation is still unknown. Do not assign winners again; check its status and retry synchronization when confirmed.",
+          { id: toastId },
+        );
       } else {
-        const percentages =
-          bounty.payoutType === "MULTI_PERCENTAGE"
-            ? bounty.percentages
-            : [];
-
-        tx = await assignMultipleWinners(
-          blockchainId,
-          valid,
-          percentages,
+        showToast.error(
+          error.shortMessage || error.message || "Transaction submission failed",
+          { id: toastId },
         );
       }
+      setDistributing(false);
+      return;
+    }
 
       const bountyContract = getBountyContract(bounty.network);
 
@@ -742,10 +892,69 @@ const BountyDetail = () => {
       setShowDistributeModal(false);
 
       await loadWinnersData(id);
+    const pendingRecord = {
+      bountyId: String(id),
+      blockchainId: String(blockchainId),
+      chainId,
+      bountyContract,
+      txHash: tx.hash,
+      status: "pending_sync",
+      createdAt: new Date().toISOString(),
+    };
+    persistPendingDistribution(pendingRecord);
+
+    try {
+      await synchronizeRewardAssignment(pendingRecord);
     } catch (error) {
+      console.error("Distribution synchronization failed:", error);
       showToast.error(
-        error.shortMessage || error.message || "Distribution failed",
+        `Blockchain transaction succeeded, but application records are still synchronizing. Retry sync for ${tx.hash}.`,
         { id: toastId },
+      );
+    } finally {
+      setDistributing(false);
+    }
+  };
+
+  const retryDistributionSync = async () => {
+    if (!pendingDistributionSync || distributing) return;
+    setDistributing(true);
+    try {
+      let record = pendingDistributionSync;
+      if (!isValidDistributionSyncRecord(record)) {
+        throw new Error("Pending distribution recovery data is invalid.");
+      }
+
+      if (record.status === "pending_confirmation") {
+        const chain = supportedChains.find(
+          (supportedChain) => supportedChain.id === record.chainId,
+        );
+        if (!chain) {
+          throw new Error(`No wallet chain configuration for ${record.chainId}`);
+        }
+        const client = createPublicClient({
+          chain,
+          transport: http(chain.rpcUrls.default.http[0]),
+        });
+        const receipt = await client.getTransactionReceipt({
+          hash: record.txHash,
+        });
+        if (receipt.status !== "success") {
+          clearDistributionSyncRecord(getBrowserStorage(), record);
+          setPendingDistributionSync(null);
+          throw new Error("The winner-assignment transaction reverted on-chain.");
+        }
+        record = { ...record, status: "pending_sync" };
+        persistPendingDistribution(record);
+      }
+
+      await synchronizeRewardAssignment(record);
+    } catch (error) {
+      console.error("Could not retry distribution synchronization:", error);
+      showToast.error(
+        error.response?.data?.error ||
+          error.message ||
+          "Synchronization is still pending. You can safely retry.",
       );
     } finally {
       setDistributing(false);
@@ -1054,6 +1263,51 @@ const BountyDetail = () => {
               Bounty #{id}
             </span>
           </div>
+
+          {pendingDistributionSync && (
+            <section
+              className="mb-6 rounded-2xl border border-amber-400/40 bg-amber-50 p-4 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100"
+              aria-live="polite"
+            >
+              <h2 className="font-bold">
+                {pendingDistributionSync.status === "pending_confirmation"
+                  ? "Winner assignment confirmation is pending"
+                  : "Distribution synchronization is pending"}
+              </h2>
+              <p className="mt-1 text-sm leading-6">
+                The saved transaction will be checked/synchronized without
+                submitting another winner-assignment transaction.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <a
+                  href={
+                    getExplorerUrl(
+                      pendingDistributionSync.chainId,
+                      pendingDistributionSync.txHash,
+                    ) || undefined
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 break-all font-mono text-xs underline"
+                >
+                  {pendingDistributionSync.txHash}
+                  <FiExternalLink size={13} />
+                </a>
+                <button
+                  type="button"
+                  onClick={retryDistributionSync}
+                  disabled={distributing}
+                  className={`${primaryButton} !px-4 !py-2.5`}
+                >
+                  {distributing
+                    ? "Checking..."
+                    : pendingDistributionSync.status === "pending_confirmation"
+                      ? "Check confirmation & retry synchronization"
+                      : "Retry synchronization"}
+                </button>
+              </div>
+            </section>
+          )}
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_310px]">
             <div className="min-w-0 space-y-6">
@@ -2358,6 +2612,13 @@ const BountyDetail = () => {
                       Confirm distribution
                     </>
                   )}
+                <button disabled={distributing} onClick={() => setShowDistributeModal(false)} className={`${secondaryButton} flex-1`}>Cancel</button>
+                <button disabled={distributing || Boolean(pendingDistributionSync) || isContractPending || isContractConfirming} onClick={handleDistributeReward} className={`${primaryButton} flex-1`}>
+                  {distributing || isContractPending || isContractConfirming
+                    ? "Processing..."
+                    : pendingDistributionSync
+                      ? "Synchronization required"
+                      : <><FiShield size={16} /> Confirm distribution</>}
                 </button>
               </div>
 

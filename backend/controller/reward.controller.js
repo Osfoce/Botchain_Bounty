@@ -1,12 +1,15 @@
 const mongoose = require("mongoose");
-const { formatEther, parseEventLogs } = require("viem");
+const { formatEther } = require("viem");
 
 const Bounty = require("../modules/bounty.module");
 const Reward = require("../modules/reward.module");
 const User = require("../modules/user.module");
-const Submission = require("../modules/submission.module");
-const { getPublicClient } = require("../config/chains");
-const { BOUNTY_ABI } = require("../config/abi");
+const { CHAINS, getPublicClient } = require("../config/chains");
+const DistributionSync = require("../modules/distributionSync.module");
+const { synchronizeDistribution } = require("../services/distributionSync.service");
+const {
+  verifyRewardsAssignedEvent,
+} = require("../services/verifiedDistributionEvent.service");
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const isAddress = (a) => typeof a === "string" && /^0x[a-fA-F0-9]{40}$/.test(a);
@@ -17,180 +20,254 @@ const isAddress = (a) => typeof a === "string" && /^0x[a-fA-F0-9]{40}$/.test(a);
 // ─────────────────────────────────────────────────────────────
 const distributeRewards = async (req, res) => {
   const { id } = req.params;
-  const { txHash, blockchainId, chainId, bountyContract } = req.body;
-  console.log("DISTRIBUTE DEBUG:", {
-    id,
-    txHash,
-    blockchainId,
-    chainId,
-    bountyContract,
-    types: {
-      txHash: typeof txHash,
-      blockchainId: typeof blockchainId,
-      chainId: typeof chainId,
-      bountyContract: typeof bountyContract,
-    },
-    falsy: {
-      txHash: !txHash,
-      blockchainId: !blockchainId,
-      chainId: !chainId,
-      bountyContract: !bountyContract,
-    },
-  });
+  const { txHash, blockchainId, chainId } = req.body;
 
   if (!isValidId(id)) {
-    return res.status(400).json({ error: "Invalid bounty ID" });
+    return res
+      .status(400)
+      .json({ code: "INVALID_BOUNTY_ID", error: "Invalid bounty ID" });
   }
 
-  // Normalize chainId — accept both number and string
   const chainIdNum = Number(chainId);
-  if (!Number.isFinite(chainIdNum) || chainIdNum <= 0) {
-    return res.status(400).json({ error: "Invalid chainId" });
+  if (!Number.isSafeInteger(chainIdNum) || chainIdNum <= 0) {
+    return res.status(400).json({ code: "INVALID_CHAIN_ID", error: "Invalid chainId" });
   }
-
-  if (!txHash || !blockchainId) {
-    return res.status(400).json({ error: "Missing txHash or blockchainId" });
+  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash || "")) {
+    return res.status(400).json({ code: "INVALID_TX_HASH", error: "Invalid transaction hash" });
+  }
+  if (
+    blockchainId == null ||
+    !/^[0-9]+$/.test(String(blockchainId)) ||
+    BigInt(blockchainId) <= 0n
+  ) {
+    return res.status(400).json({
+      code: "INVALID_BLOCKCHAIN_ID",
+      error: "Invalid on-chain bounty ID",
+    });
   }
 
   try {
     const bounty = await Bounty.findById(id);
     if (!bounty) {
-      return res.status(404).json({ error: "Bounty not found" });
+      return res.status(404).json({ code: "BOUNTY_NOT_FOUND", error: "Bounty not found" });
     }
 
-    const contractAddress = bounty.bountyContract || bountyContract;
-
-    if (!contractAddress) {
-      return res.status(400).json({
-        error: "No contract address linked to this bounty",
+    if (Number(bounty.network) !== chainIdNum) {
+      return res.status(409).json({
+        code: "EVENT_MISMATCH",
+        error: "The requested chain does not match the bounty network",
       });
     }
 
-    // Guard: don't re-distribute the same bounty.
+    if (String(bounty.blockchainId) !== String(blockchainId)) {
+      return res.status(409).json({
+        code: "EVENT_MISMATCH",
+        error: "The on-chain bounty ID does not match the stored bounty",
+      });
+    }
+
+    const chainConfig = CHAINS[chainIdNum];
+    const expectedContract = chainConfig?.bountyContract;
+    if (!expectedContract || !isAddress(expectedContract)) {
+      return res.status(400).json({
+        code: "UNSUPPORTED_CHAIN",
+        error: `No bounty contract is configured for chain ${chainIdNum}`,
+      });
+    }
+
+    const contractAddress = expectedContract.toLowerCase();
+    if (
+      bounty.bountyContract &&
+      !isAddress(bounty.bountyContract)
+    ) {
+      return res.status(409).json({
+        code: "EVENT_MISMATCH",
+        error: "The bounty has an invalid configured contract address",
+      });
+    }
+    if (
+      bounty.bountyContract &&
+      bounty.bountyContract.toLowerCase() !== contractAddress
+    ) {
+      return res.status(409).json({
+        code: "EVENT_MISMATCH",
+        error: "The bounty contract does not match the trusted chain configuration",
+      });
+    }
+
+    const normalizedTxHash = txHash.toLowerCase();
+    if (
+      bounty.rewardsAssignedOnChain &&
+      !bounty.distributionTxHash
+    ) {
+      return res.status(409).json({
+        code: "CONFLICTING_DISTRIBUTION",
+        error: "A distribution is already recorded without a transaction identity",
+      });
+    }
+    if (
+      bounty.distributionTxHash &&
+      bounty.distributionTxHash.toLowerCase() !== normalizedTxHash
+    ) {
+      return res.status(409).json({
+        code: "CONFLICTING_DISTRIBUTION",
+        error: "A different transaction is already recorded for this bounty",
+      });
+    }
+
     if (bounty.rewardsAssignedOnChain) {
-      return res.status(400).json({ error: "Rewards already distributed" });
-    }
-
-    // 🔥 STEP 1: receipt
-    const publicClient = getPublicClient(chainIdNum);
-    if (!publicClient) {
-      return res
-        .status(400)
-        .json({ error: `No RPC client configured for chain ${chainIdNum}` });
-    }
-    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
-
-    if (receipt.status !== "success") {
-      throw new Error("Transaction failed on-chain");
-    }
-
-    // 🔥 STEP 2: parse RewardsAssigned event
-    const events = parseEventLogs({
-      abi: BOUNTY_ABI,
-      logs: receipt.logs,
-      eventName: "RewardsAssigned",
-    });
-
-    if (!events.length) {
-      throw new Error("RewardsAssigned event not found");
-    }
-
-    const winners = events[0].args.winners;
-
-    // 🔥 STEP 3: read authoritative amounts from the contract
-    const winnerDetails = await Promise.all(
-      winners.map(async (winner) => {
-        const amountWei = await publicClient.readContract({
-          address: contractAddress,
-          abi: BOUNTY_ABI,
-          functionName: "claimableRewards",
-          args: [BigInt(blockchainId), winner],
+      const completedSync = await DistributionSync.findOne({
+        bountyId: bounty._id,
+        blockchainId: String(blockchainId),
+        chainId: chainIdNum,
+        bountyContract: contractAddress,
+        transactionHash: normalizedTxHash,
+        status: "synced",
+      }).lean();
+      if (completedSync) {
+        const rewards = await Reward.find({ bountyId: bounty._id }).lean();
+        return res.status(200).json({
+          status: "synced",
+          alreadySynced: true,
+          txHash: normalizedTxHash,
+          chainId: chainIdNum,
+          winners: rewards.map((reward) => ({
+            winnerAddress: reward.winnerAddress,
+            amountWei: reward.amount,
+            amountFormatted: reward.amountFormatted,
+          })),
         });
-
-        return {
-          winnerAddress: winner.toLowerCase(),
-          amountWei: amountWei.toString(), // keep as string
-          amountFormatted: formatEther(amountWei), // human-readable
-        };
-      }),
-    );
-
-    // 🔥 STEP 4: persist rewards (one doc per winner)
-    const rewardDocs = winnerDetails.map((w) => ({
-      bountyId: bounty._id,
-      blockchainId,
-      chainId: chainIdNum,
-      bountyContract,
-      bountyTitle: bounty.title,
-      winnerAddress: w.winnerAddress,
-      amount: w.amountWei,
-      amountFormatted: w.amountFormatted,
-      status: "assigned",
-      distributionTxHash: txHash,
-      assignedAt: new Date(),
-    }));
-
-    // insertMany with ordered:false so one dup doesn't kill the batch
-    try {
-      await Reward.insertMany(rewardDocs, { ordered: false });
-    } catch (e) {
-      // Duplicate key (already distributed this winner) → safe to ignore
-      if (e.code !== 11000 && !e.writeErrors?.every((w) => w.code === 11000)) {
-        throw e;
       }
     }
 
-    // 🔥 STEP 5: update Bounty summary + mark distributed
-    bounty.rewardsAssignedOnChain = true;
-    bounty.distributionTxHash = txHash;
-    bounty.distributedAt = new Date();
-    bounty.assignedCount = winnerDetails.length;
-    bounty.winners.assigned = winnerDetails.map((w) => w.winnerAddress);
-    await bounty.save();
+    const publicClient = getPublicClient(chainIdNum);
+    let rpcChainId;
+    try {
+      rpcChainId = await publicClient.getChainId();
+    } catch (error) {
+      console.warn("Could not verify configured RPC chain:", error.message);
+      return res.status(503).json({
+        code: "RPC_UNAVAILABLE",
+        error: "Could not verify the configured blockchain RPC",
+        retryable: true,
+        txHash: normalizedTxHash,
+        chainId: chainIdNum,
+      });
+    }
+    if (rpcChainId !== chainIdNum) {
+      console.error(
+        `RPC chain mismatch: configured ${chainIdNum}, endpoint reports ${rpcChainId}`,
+      );
+      return res.status(503).json({
+        code: "RPC_CHAIN_MISMATCH",
+        error: "The configured RPC endpoint reports a different chain",
+        retryable: false,
+        txHash: normalizedTxHash,
+        chainId: chainIdNum,
+      });
+    }
 
-    // 🔥 STEP 5b: update submission statuses
-    // Winners → accepted, everyone else on this bounty → rejected
-    const winnerAddresses = winnerDetails.map((w) => w.winnerAddress);
+    let verified;
+    try {
+      verified = await verifyRewardsAssignedEvent({
+        publicClient,
+        transactionHash: normalizedTxHash,
+        contractAddress,
+        blockchainId,
+      });
+    } catch (error) {
+      if (error.code === "TRANSACTION_NOT_CONFIRMED") {
+        return res.status(503).json({
+          status: "pending_confirmation",
+          code: error.code,
+          error: error.message,
+          retryable: true,
+          txHash: normalizedTxHash,
+          chainId: chainIdNum,
+        });
+      }
+      if (
+        error.code === "TRANSACTION_REVERTED" ||
+        error.code === "EVENT_NOT_FOUND"
+      ) {
+        return res.status(400).json({
+          code: error.code,
+          error: error.message,
+          txHash: normalizedTxHash,
+          chainId: chainIdNum,
+        });
+      }
+      if (error.code === "EVENT_MISMATCH") {
+        return res.status(409).json({
+          code: error.code,
+          error: error.message,
+          txHash: normalizedTxHash,
+          chainId: chainIdNum,
+        });
+      }
+      throw error;
+    }
 
-    await Submission.updateMany(
-      {
+    const result = await synchronizeDistribution({
+      bounty,
+      publicClient,
+      identity: {
         bountyId: bounty._id,
-        user: { $in: winnerAddresses },
+        blockchainId: String(blockchainId),
+        chainId: chainIdNum,
+        bountyContract: contractAddress,
+        transactionHash: normalizedTxHash,
       },
-      { $set: { status: "accepted" } },
-    );
+      event: verified.event,
+    });
 
-    await Submission.updateMany(
-      {
-        bountyId: bounty._id,
-        user: { $nin: winnerAddresses },
-      },
-      { $set: { status: "rejected" } },
-    );
+    if (result.status === "pending") {
+      return res.status(202).json({
+        status: "pending",
+        code: "SYNC_PENDING",
+        retryable: true,
+        txHash: normalizedTxHash,
+        chainId: chainIdNum,
+      });
+    }
 
-    // 🔥 STEP 6: increment completed tasks for each winner
-    await Promise.all(
-      winnerDetails.map((w) =>
-        User.updateOne(
-          { walletAddress: w.winnerAddress },
-          {
-            $inc: { "stats.tasksCompleted": 1 },
-            $set: { lastLogin: new Date() },
-          },
-          { upsert: true },
-        ),
-      ),
-    );
+    const winnerDetails = result.winners || (await Promise.all(
+      verified.event.winners.map(async (winner) => {
+        const reward = await Reward.findOne({
+          bountyId: bounty._id,
+          winnerAddress: winner,
+        }).lean();
+        return {
+          winnerAddress: winner,
+          amountWei: reward?.amount,
+          amountFormatted: reward?.amountFormatted,
+        };
+      }),
+    ));
 
     return res.status(200).json({
-      message: "Distribution synced from blockchain",
-      winners: winnerDetails,
+      status: "synced",
+      alreadySynced: result.alreadySynced,
+      txHash: normalizedTxHash,
       chainId: chainIdNum,
-      txHash,
+      winners: winnerDetails,
     });
   } catch (err) {
-    console.error("🔥 DISTRIBUTION ERROR:", err);
-    return res.status(500).json({ error: err.message });
+    if (err.code === "CONFLICTING_DISTRIBUTION") {
+      return res.status(409).json({
+        code: err.code,
+        error: err.message,
+      });
+    }
+    console.error("Distribution synchronization failed:", err);
+    return res.status(503).json({
+      status: "failed",
+      code: "SYNC_FAILED",
+      error: "Distribution was confirmed on-chain but application synchronization failed",
+      retryable: true,
+      txHash: typeof txHash === "string" ? txHash.toLowerCase() : undefined,
+      chainId: Number.isSafeInteger(Number(chainId)) ? Number(chainId) : undefined,
+    });
   }
 };
 
@@ -209,7 +286,9 @@ const getWinners = async (req, res) => {
       return res.status(404).json({ error: "Bounty not found" });
     }
 
-    const rewards = await Reward.find({ bountyId: id }).lean();
+    const rewards = bounty.rewardsAssignedOnChain
+      ? await Reward.find({ bountyId: id }).lean()
+      : [];
 
     const assigned = rewards
       .filter((r) => r.status === "assigned")
@@ -228,7 +307,7 @@ const getWinners = async (req, res) => {
       winners: assigned,
       claimed,
       distributedAt: bounty.winners?.assignedAt || null,
-      isDistributed: rewards.length > 0,
+      isDistributed: Boolean(bounty.rewardsAssignedOnChain),
       payoutType: bounty.payoutType || null,
     });
   } catch (err) {
@@ -255,6 +334,12 @@ const getClaimable = async (req, res) => {
     const bounty = await Bounty.findById(id).lean();
     if (!bounty) {
       return res.status(404).json({ error: "Bounty not found" });
+    }
+    if (!bounty.rewardsAssignedOnChain) {
+      return res.status(200).json({
+        claimable: 0,
+        message: "Reward distribution synchronization is pending",
+      });
     }
 
     const reward = await Reward.findOne({
@@ -308,6 +393,17 @@ const claimReward = async (req, res) => {
   }
 
   try {
+    const bounty = await Bounty.findById(id).select("rewardsAssignedOnChain");
+    if (!bounty) {
+      return res.status(404).json({ error: "Bounty not found" });
+    }
+    if (!bounty.rewardsAssignedOnChain) {
+      return res.status(409).json({
+        code: "SYNC_PENDING",
+        error: "Reward distribution synchronization is pending",
+      });
+    }
+
     const reward = await Reward.findOne({
       bountyId: id,
       winnerAddress: winnerAddress.toLowerCase(),

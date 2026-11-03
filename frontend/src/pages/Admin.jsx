@@ -18,17 +18,20 @@ import {
   prepareTransferOwnershipTx,
   prepareWithdrawTx,
 } from "../services/bountyService";
-import { getBountyContract } from "../utils/chains.address";
+import {
+  CHAIN_IDS,
+  getBountyContract,
+  getNativeToken,
+} from "../utils/chains.address";
 import Skeleton from "../components/UI/Skeleton";
 
-const ARC_MAINNET_ID = 5042;
 const ACCENT = "#00D6A0";
 const ACCENT_DARK = "#008A66";
 const CONFIRM_TIMEOUT_MS = 6000;
 
 const ADMIN_ADDRESSES = [
   "0x75DDb0a7161c717a0443967803c6516cf1e39cA6",
-  "0x579F49Af31375Da97b6Ba3cf0Aa4a887A0E6c98b2",
+  "0x579F49Af31375Da97b6Ba3cf0Aa4a887A0E6c98b",
 ];
 
 const shortAddress = (address) =>
@@ -175,8 +178,18 @@ export default function AdminPage() {
   const [formError, setFormError] = useState("");
   const [confirmAction, setConfirmAction] = useState(null);
 
-  const isArcMainnet = chainId === ARC_MAINNET_ID;
+  const isSupportedNetwork = [
+    CHAIN_IDS.ARC_MAINNET,
+    CHAIN_IDS.BOTCHAIN_MAINNET,
+  ].includes(chainId);
   const contractAddress = getBountyContract(chainId);
+  const networkName =
+    chainId === CHAIN_IDS.ARC_MAINNET
+      ? "Arc Mainnet"
+      : chainId === CHAIN_IDS.BOTCHAIN_MAINNET
+        ? "BOT Chain"
+        : null;
+  const nativeTokenSymbol = getNativeToken(chainId)?.symbol || "native token";
 
   const isAdmin =
     isConnected &&
@@ -194,7 +207,7 @@ export default function AdminPage() {
   } = useReadContract({
     ...getOwnerConfig({ chainId }),
     query: {
-      enabled: isArcMainnet && Boolean(contractAddress),
+      enabled: isSupportedNetwork && Boolean(contractAddress),
     },
   });
 
@@ -205,7 +218,7 @@ export default function AdminPage() {
   } = useReadContract({
     ...getTotalFeesConfig({ chainId }),
     query: {
-      enabled: isArcMainnet && Boolean(contractAddress),
+      enabled: isSupportedNetwork && Boolean(contractAddress),
     },
   });
 
@@ -215,7 +228,7 @@ export default function AdminPage() {
   } = useReadContract({
     ...getBountyCounterConfig({ chainId }),
     query: {
-      enabled: isArcMainnet && Boolean(contractAddress),
+      enabled: isSupportedNetwork && Boolean(contractAddress),
     },
   });
 
@@ -225,7 +238,7 @@ export default function AdminPage() {
   } = useReadContract({
     ...getFeePercentConfig({ chainId }),
     query: {
-      enabled: isArcMainnet && Boolean(contractAddress),
+      enabled: isSupportedNetwork && Boolean(contractAddress),
     },
   });
 
@@ -305,8 +318,8 @@ export default function AdminPage() {
       return null;
     }
 
-    if (!isArcMainnet) {
-      setFormError("Switch to Arc Mainnet before withdrawing fees.");
+    if (!isSupportedNetwork) {
+      setFormError("Switch to Arc Mainnet or BOT Chain before withdrawing fees.");
       return null;
     }
 
@@ -328,8 +341,10 @@ export default function AdminPage() {
       return null;
     }
 
-    if (!isArcMainnet) {
-      setFormError("Switch to Arc Mainnet before transferring ownership.");
+    if (!isSupportedNetwork) {
+      setFormError(
+        "Switch to Arc Mainnet or BOT Chain before transferring ownership.",
+      );
       return null;
     }
 
@@ -405,7 +420,7 @@ export default function AdminPage() {
     );
   };
 
-  const totalUsdcFees =
+  const formattedTotalFees =
     totalFeesRaw == null
       ? "—"
       : Number(formatEther(totalFeesRaw)).toLocaleString(undefined, {
@@ -535,7 +550,9 @@ export default function AdminPage() {
           <div className="mt-auto rounded-xl border border-[#e5e7e2] bg-white/70 p-3 dark:border-white/[0.08] dark:bg-white/[0.02]">
             <div className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
-              <span className="text-xs font-semibold">Arc Mainnet</span>
+              <span className="text-xs font-semibold">
+                {networkName || "Unsupported network"}
+              </span>
             </div>
 
             <p className="mt-2 break-all font-mono text-[10px] leading-4 text-[#858b83] dark:text-white/40">
@@ -575,7 +592,7 @@ export default function AdminPage() {
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-2 rounded-lg border border-[#e5e7e2] bg-white px-3 py-2 text-[11px] font-medium dark:border-white/10 dark:bg-[#111311]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
-                Arc Mainnet
+                {networkName || "Unsupported network"}
               </span>
 
               <button
@@ -588,28 +605,29 @@ export default function AdminPage() {
             </div>
           </header>
 
-          {!isArcMainnet && (
+          {!isSupportedNetwork && (
             <div className="mb-5">
               <Notice type="warning">
-                <p className="font-semibold">Switch to Arc Mainnet</p>
+                <p className="font-semibold">Switch to a supported network</p>
                 <p className="mt-1 opacity-80">
-                  Contract reads and actions require Arc Mainnet (chain ID{" "}
-                  {ARC_MAINNET_ID}). s to continue.
+                  Contract reads and actions are available on Arc Mainnet
+                  (chain ID {CHAIN_IDS.ARC_MAINNET}) and BOT Chain (chain ID{" "}
+                  {CHAIN_IDS.BOTCHAIN_MAINNET}).
                 </p>
               </Notice>
             </div>
           )}
 
-          {isArcMainnet && !contractAddress && (
+          {isSupportedNetwork && !contractAddress && (
             <div className="mb-5">
               <Notice type="error">
-                No bounty contract is configured for Arc Mainnet. Contract
+                No bounty contract is configured for this network. Contract
                 information and actions may be unavailable.
               </Notice>
             </div>
           )}
 
-          {isArcMainnet && contractAddress && ownerError && (
+          {isSupportedNetwork && contractAddress && ownerError && (
             <div className="mb-5">
               <Notice type="warning">
                 Could not read the contract owner. Check the network and
@@ -630,13 +648,13 @@ export default function AdminPage() {
 
             <StatCard
               icon="$"
-              label="Total fees collected"
+              label={`Total fees collected (${nativeTokenSymbol})`}
               value={
                 feesLoading
                   ? "…"
-                  : totalUsdcFees === "—"
+                  : formattedTotalFees === "—"
                     ? "—"
-                    : `${totalUsdcFees} USDC`
+                    : `${formattedTotalFees} ${nativeTokenSymbol}`
               }
               note="Contract-reported fee total"
             />
@@ -674,12 +692,12 @@ export default function AdminPage() {
             <article className="rounded-xl border border-[#e5e7e2] bg-white p-4 dark:border-white/[0.08] dark:bg-[#111311] sm:p-5">
               <SectionHeading
                 eyebrow="Treasury"
-                title="Withdraw USDC fees"
+                title={`Withdraw ${nativeTokenSymbol} fees`}
               />
 
               <p className="mb-5 max-w-xl text-xs leading-5 text-[#777d76] dark:text-white/45">
-                Send collected USDC fees to a recipient wallet. This
-                transaction requires the current contract owner and
+                Send collected {nativeTokenSymbol} fees to a recipient wallet.
+                This transaction requires the current contract owner and
                 confirmation in your wallet.
               </p>
 
@@ -704,7 +722,7 @@ export default function AdminPage() {
                 <button
                   onClick={handleWithdrawClick}
                   disabled={
-                    !isArcMainnet ||
+                    !isSupportedNetwork ||
                     !isOwner ||
                     txLoading ||
                     !withdrawAddress.trim() ||
@@ -720,11 +738,11 @@ export default function AdminPage() {
                     ? "Transaction pending…"
                     : confirmAction === "withdraw"
                       ? "Click again to confirm"
-                      : "Withdraw USDC"}
+                      : `Withdraw ${nativeTokenSymbol}`}
                 </button>
 
                 <span className="text-[11px] text-[#858b83] dark:text-white/40">
-                  USDC only · Arc Mainnet
+                  {nativeTokenSymbol} · {networkName || "Unsupported network"}
                 </span>
               </div>
             </article>
@@ -766,7 +784,7 @@ export default function AdminPage() {
               <button
                 onClick={handleTransferClick}
                 disabled={
-                  !isArcMainnet ||
+                  !isSupportedNetwork ||
                   !isOwner ||
                   txLoading ||
                   !newOwnerAddress.trim() ||
@@ -815,7 +833,7 @@ export default function AdminPage() {
             <div className="mb-4">
               <Notice type="success">
                 {withdrawSuccess
-                  ? "USDC withdrawal confirmed on-chain."
+                  ? `${nativeTokenSymbol} withdrawal confirmed on-chain.`
                   : "Ownership transfer confirmed on-chain."}
               </Notice>
             </div>
@@ -833,8 +851,8 @@ export default function AdminPage() {
                   Network
                 </p>
                 <p className="mt-1.5 text-xs font-semibold">
-                  {isArcMainnet
-                    ? "Arc Mainnet"
+                  {isSupportedNetwork
+                    ? networkName
                     : `Unsupported network · ${chainId ?? "not connected"}`}
                 </p>
               </div>
