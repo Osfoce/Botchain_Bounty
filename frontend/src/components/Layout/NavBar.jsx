@@ -11,10 +11,12 @@ import {
   FiFileText,
 } from "react-icons/fi";
 import { useTheme } from "../../context/ThemeContext";
+import { useAuth } from "../../hooks/useAuth";
 
 function NavBar() {
   const { dark, setDark } = useTheme();
   const { address, isConnected } = useAccount();
+  const { isAuthenticated } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [resourcesHovered, setResourcesHovered] = useState(false);
@@ -35,14 +37,14 @@ function NavBar() {
     if (pathname !== "/") return;
 
     const timer = setTimeout(() => {
-      if (address && isConnected) {
+      if (address && isConnected && isAuthenticated) {
         navigate("/dashboard");
         console.log(`Connected account: ${address}`);
       }
     }, 500);
 
     return () => clearTimeout(timer);
-  }, [address, isConnected, pathname, navigate]);
+  }, [address, isAuthenticated, isConnected, pathname, navigate]);
 
   // Handle logo click
   const handleLogoClick = (event) => {
