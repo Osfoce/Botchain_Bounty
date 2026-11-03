@@ -12,7 +12,7 @@ const rewardSchema = new mongoose.Schema(
     bountyTitle: { type: String, required: true, trim: true },
     blockchainId: { type: Number, required: true }, // on-chain bounty id
     chainId: { type: String, required: true },
-    bountyContract: { type: String, required: true },
+    bountyContract: { type: String, required: true, lowercase: true },
 
     winnerAddress: {
       type: String,
@@ -30,11 +30,14 @@ const rewardSchema = new mongoose.Schema(
       index: true,
     },
 
-    distributionTxHash: { type: String, required: true },
+    distributionTxHash: { type: String, required: true, lowercase: true },
     assignedAt: { type: Date, default: Date.now },
 
     claimedAt: { type: Date, default: null },
-    claimTxHash: { type: String, default: null },
+    claimTxHash: { type: String, default: null, lowercase: true },
+    claimLogIndex: { type: Number, default: null },
+    claimBlockNumber: { type: String, default: null },
+    claimBlockHash: { type: String, default: null },
   },
   { timestamps: true },
 );
@@ -44,6 +47,16 @@ rewardSchema.index({ bountyId: 1, winnerAddress: 1 }, { unique: true });
 
 // Fast "unclaimed rewards for this wallet" queries
 rewardSchema.index({ winnerAddress: 1, status: 1 });
+rewardSchema.index(
+  { chainId: 1, bountyContract: 1, claimTxHash: 1, claimLogIndex: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      claimTxHash: { $type: "string" },
+      claimLogIndex: { $type: "number" },
+    },
+  },
+);
 
 const Reward = mongoose.model("Reward", rewardSchema);
 

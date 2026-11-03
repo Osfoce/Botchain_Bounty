@@ -127,6 +127,15 @@ const bountySchema = new mongoose.Schema(
       enum: ["completed", "cancelled"],
       default: null,
     },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedBy: {
+      type: String,
+      default: null,
+      lowercase: true,
+    },
     createdAt: {
       type: Date,
       default: Date.now,
@@ -174,6 +183,14 @@ const bountySchema = new mongoose.Schema(
       type: Number,
       required: [true, "Reward is required"],
       min: [0, "Reward cannot be negative"],
+    },
+    rewardWei: {
+      type: String,
+      default: null,
+      validate: {
+        validator: (value) => value == null || /^[0-9]+$/.test(value),
+        message: "Reward base units must be a non-negative integer string",
+      },
     },
     token: {
       type: String,

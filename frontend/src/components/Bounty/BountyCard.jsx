@@ -1,10 +1,11 @@
 
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import axios from "axios";
+import apiClient from "../../services/apiClient";
 import { useNav } from "../../hooks/useNav";
 import { showToast } from "../UI/Toast";
 import { useAccount } from "wagmi";
+import { useAuth } from "../../hooks/useAuth";
 
 import {
   FiArrowUpRight,
@@ -33,12 +34,12 @@ const BountyCard = ({
 }) => {
   const { handleNavigate } = useNav();
   const { address, isConnected } = useAccount();
+  const { isAuthenticated } = useAuth();
 
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isEnrolledLocal, setIsEnrolledLocal] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
 
-  const API_URL = import.meta.env.VITE_API_URL;
   const bountyId = bounty._id || bounty.id;
 
   const enrolledFromServer = enrolledBountyIds.some(
@@ -266,6 +267,10 @@ const BountyCard = ({
       showToast.error("Please connect your wallet first");
       return;
     }
+    if (!isAuthenticated) {
+      showToast.error("Sign in with your wallet before enrolling.");
+      return;
+    }
 
     if (isEnrolling) return;
 
@@ -274,9 +279,8 @@ const BountyCard = ({
     const loadingToast = showToast.loading("Enrolling in bounty...");
 
     try {
-      const response = await axios.post(`${API_URL}/user/enrollment`, {
+      const response = await apiClient.post("/user/enrollment", {
         bountyId: bounty._id,
-        user: address,
       });
 
       if (response.status === 200 || response.status === 201) {

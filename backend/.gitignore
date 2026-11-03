@@ -14,6 +14,7 @@ lerna-debug.log*
 #Files to skip
 bountyRoutes
 userRoutes
+*.test
 
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
@@ -82,6 +83,8 @@ web_modules/
 
 # dotenv environment variable files
 .env
+.env.*
+!.env.example
 .env.development.local
 .env.test.local
 .env.production.local

@@ -9,6 +9,7 @@ import {
 } from "react-router-dom";
 
 import { useAccount } from "wagmi";
+import { useAuth } from "./hooks/useAuth";
 
 import LandingPage from "./pages/LandingPage";
 import Dashboard from "./pages/Dashboard";
@@ -31,6 +32,7 @@ import { useTheme } from "./context/ThemeContext";
 
 function RequireWallet({ children }) {
   const { address, isConnected, status } = useAccount();
+  const { isAuthenticated } = useAuth();
 
   if (status === "connecting" || status === "reconnecting") {
     return (
@@ -46,7 +48,7 @@ function RequireWallet({ children }) {
     );
   }
 
-  if (!address || !isConnected) {
+  if (!address || !isConnected || !isAuthenticated) {
     return <Navigate to="/" replace />;
   }
 

@@ -16,36 +16,28 @@
  */
 
 const paginate = (query) => {
-  let { page = 1, limit = 6 } = query;
+  const page = Number(query.page ?? 1);
+  const limit = Number(query.limit ?? 6);
 
-  page = Number(page);
-  limit = Number(limit);
-
-  /*
-    Safety checks
-  */
-
-  if (isNaN(page) || page < 1) {
-    page = 1;
-  }
-
-  if (isNaN(limit) || limit < 1) {
-    limit = 6;
-  }
-
-  /*
-    Prevent someone doing:
-
-    ?limit=1000000
-
-    and killing your server
-  */
-
-  if (limit > 100) {
-    limit = 100;
+  if (
+    !Number.isSafeInteger(page) ||
+    page < 1 ||
+    page > 10_000 ||
+    !Number.isSafeInteger(limit) ||
+    limit < 1 ||
+    limit > 100
+  ) {
+    const error = new Error("Invalid pagination parameters");
+    error.status = 400;
+    throw error;
   }
 
   const skip = (page - 1) * limit;
+  if (!Number.isSafeInteger(skip)) {
+    const error = new Error("Invalid pagination parameters");
+    error.status = 400;
+    throw error;
+  }
 
   return {
     page,

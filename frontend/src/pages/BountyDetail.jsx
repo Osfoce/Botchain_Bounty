@@ -2,6 +2,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
+import apiClient from "../services/apiClient";
+import { useAuth } from "../hooks/useAuth";
 import { showToast } from "../components/UI/Toast";
 import {
   FiArrowLeft,
@@ -40,6 +42,7 @@ import { createPublicClient, formatEther, http } from "viem";
 import { useBounty } from "../hooks/useBounty";
 import { formatAmount } from "../utils/format";
 import { BountyDetailSkeleton } from "../components/UI/Skeleton";
+import { safeExternalUrl } from "../utils/safeExternalUrl";
 import {
   clearDistributionSyncRecord,
   getDistributionSyncStorageKey,
@@ -47,6 +50,7 @@ import {
   readDistributionSyncRecord,
   saveDistributionSyncRecord,
 } from "../utils/distributionSync";
+import { retryUntilVerified } from "../services/transactionSync";
 
 const getBrowserStorage = () => {
   try {
@@ -57,10 +61,31 @@ const getBrowserStorage = () => {
   }
 };
 
+const getPendingClaimSyncKey = (bountyId, walletAddress) =>
+  `happy-bounty:pending-claim:${String(bountyId)}:${walletAddress.toLowerCase()}`;
+
+const readPendingClaimSync = (storage, key) => {
+  try {
+    return storage?.getItem(key) || null;
+  } catch (error) {
+    console.warn("Could not read pending claim synchronization:", error);
+    return null;
+  }
+};
+
+const clearPendingClaimSync = (storage, key) => {
+  try {
+    storage?.removeItem(key);
+  } catch (error) {
+    console.warn("Could not clear pending claim synchronization:", error);
+  }
+};
+
 const BountyDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { address } = useAccount();
+  const { isAuthenticated } = useAuth();
   const currentChainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
@@ -108,6 +133,7 @@ const BountyDetail = () => {
 
   const API_URL = import.meta.env.VITE_API_URL;
   const fileInputRef = useRef(null);
+  const pendingClaimSyncRef = useRef(null);
 
   useEffect(() => {
     if (!bounty?.network || !id) return;
@@ -191,12 +217,8 @@ const BountyDetail = () => {
   };
 
   const getHostname = (url) => {
-    if (!url) return "";
-    try {
-      return new URL(url).hostname;
-    } catch {
-      return url;
-    }
+    const safeUrl = safeExternalUrl(url);
+    return safeUrl ? new URL(safeUrl).hostname : "";
   };
 
   const shortenAddress = (value) =>
@@ -228,6 +250,7 @@ const BountyDetail = () => {
 
   const isValidUrl = (value) => {
     if (!value) return "";
+    if (value.length > 2048) return "URL must be 2048 characters or fewer.";
     let url;
 
     try {
@@ -238,6 +261,9 @@ const BountyDetail = () => {
 
     if (!["http:", "https:"].includes(url.protocol))
       return "Only HTTP and HTTPS links are allowed";
+
+    if (url.username || url.password)
+      return "URLs containing embedded credentials are not allowed";
 
     if (
       !/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*\.[A-Za-z]{2,}$/.test(
@@ -300,8 +326,9 @@ const BountyDetail = () => {
 
   const checkUserEnrollment = async (wallet, bountyId) => {
     try {
-      const { data } = await axios.get(
-        `${API_URL}/user/get-enrollment/${wallet}`,
+      const { data } = await apiClient.get(
+        `/user/get-enrollment/${wallet}`,
+        { params: { bountyId } },
       );
 
       return (data.enrollments || []).some(
@@ -314,8 +341,9 @@ const BountyDetail = () => {
 
   const checkUserSubmission = async (wallet, bountyId) => {
     try {
-      const { data } = await axios.get(
-        `${API_URL}/bounty/user/submissions/${wallet}`,
+      const { data } = await apiClient.get(
+        `/bounty/user/submissions/${wallet}`,
+        { params: { bountyId } },
       );
 
       const existing = (data.submissions || []).find(
@@ -348,6 +376,56 @@ const BountyDetail = () => {
     }
   };
 
+  useEffect(() => {
+    if (!id || !address || !isAuthenticated) return;
+    const storage = getBrowserStorage();
+    if (!storage) return;
+
+    const key = getPendingClaimSyncKey(id, address);
+    if (pendingClaimSyncRef.current === key) return;
+    let record;
+    try {
+      record = JSON.parse(readPendingClaimSync(storage, key) || "null");
+    } catch (error) {
+      console.error("Could not read pending claim synchronization:", error);
+      return;
+    }
+    if (
+      !record ||
+      record.bountyId !== String(id) ||
+      record.walletAddress !== address.toLowerCase() ||
+      !/^0x[a-fA-F0-9]{64}$/.test(record.txHash || "")
+    ) {
+      return;
+    }
+
+    pendingClaimSyncRef.current = key;
+    let cancelled = false;
+    retryUntilVerified(() =>
+      apiClient.post(`/bounty/${id}/claim`, { txHash: record.txHash }),
+    )
+      .then(async () => {
+        if (cancelled) return;
+        clearPendingClaimSync(storage, key);
+        await loadWinnersData(id);
+        await refetchClaimable();
+      })
+      .catch((error) => {
+        if (error.code !== "TRANSACTION_SYNC_PENDING") {
+          if ([401, 403].includes(error.response?.status)) {
+            pendingClaimSyncRef.current = null;
+          } else {
+            clearPendingClaimSync(storage, key);
+          }
+        }
+        console.warn("Pending claim synchronization is not complete:", error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [id, address, isAuthenticated]);
+
   const loadComments = async (bountyId) => {
     try {
       const { data } = await axios.get(`${API_URL}/comments/${bountyId}`);
@@ -379,9 +457,14 @@ const BountyDetail = () => {
       setShowFullDescription(false);
 
       try {
-        const { data } = await axios.get(`${API_URL}/bounty/${id}`, {
-          params: { wallet: address },
-        });
+        let detailResponse;
+        try {
+          detailResponse = await apiClient.get(`/bounty/${id}`);
+        } catch (error) {
+          if (error.response?.status !== 401) throw error;
+          detailResponse = await axios.get(`${API_URL}/bounty/${id}`);
+        }
+        const { data } = detailResponse;
 
         let bountyData = data.bounty || data;
 
@@ -403,10 +486,6 @@ const BountyDetail = () => {
           const fetchedId = await fetchBountyIdFromTx(bountyData.txHash);
 
           if (fetchedId !== undefined && fetchedId !== null) {
-            await axios.patch(`${API_URL}/bounty/update/${id}`, {
-              blockchainId: fetchedId,
-            });
-
             bountyData = { ...bountyData, blockchainId: fetchedId };
           }
         }
@@ -417,15 +496,17 @@ const BountyDetail = () => {
         setAllSubmissions(bountyData.submissions?.items || []);
 
         if (address) {
-          setIsCreator(
-            bountyData.creator?.toLowerCase() === address.toLowerCase(),
-          );
+          setIsCreator(Boolean(bountyData.submissions?.isCreatorView));
 
-          const enrolled = await checkUserEnrollment(address, id);
-          if (!cancelled)
-            setEnrollmentStatus(enrolled ? "enrolled" : "not-enrolled");
+          if (isAuthenticated) {
+            const enrolled = await checkUserEnrollment(address, id);
+            if (!cancelled)
+              setEnrollmentStatus(enrolled ? "enrolled" : "not-enrolled");
 
-          await checkUserSubmission(address, id);
+            await checkUserSubmission(address, id);
+          } else {
+            setEnrollmentStatus("not-enrolled");
+          }
           await loadWinnersData(id);
         } else {
           setEnrollmentStatus("not-enrolled");
@@ -448,20 +529,21 @@ const BountyDetail = () => {
     return () => {
       cancelled = true;
     };
-  }, [id, address]);
+  }, [id, address, isAuthenticated]);
 
   const submissionLinkError = isValidUrl(submissionLink);
 
   const handleEnroll = async () => {
     if (!address) return showToast.error("Please connect your wallet");
+    if (!isAuthenticated)
+      return showToast.error("Sign in with your wallet before enrolling.");
 
     setIsEnrolling(true);
     const toastId = showToast.loading("Enrolling in bounty...");
 
     try {
-      await axios.post(`${API_URL}/user/enrollment`, {
+      await apiClient.post("/user/enrollment", {
         bountyId: id,
-        user: address,
       });
 
       showToast.success("Successfully enrolled!", { id: toastId });
@@ -491,8 +573,10 @@ const BountyDetail = () => {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setImageSizeWarning("Please select a valid image file.");
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setImageSizeWarning("Please select a JPEG, PNG, or WebP image.");
+      setSubmissionImage(null);
+      setImagePreview(null);
       return;
     }
 
@@ -526,6 +610,8 @@ const BountyDetail = () => {
     event.preventDefault();
 
     if (!address) return showToast.error("Please connect your wallet");
+    if (!isAuthenticated)
+      return showToast.error("Sign in with your wallet before submitting.");
     if (!submissionDescription.trim() || !submissionLink.trim())
       return showToast.error("Please provide a description and proof link");
 
@@ -539,7 +625,6 @@ const BountyDetail = () => {
     try {
       const formData = new FormData();
       formData.append("bountyId", id);
-      formData.append("user", address);
       formData.append("description", submissionDescription.trim());
       formData.append("projectLink", submissionLink.trim());
 
@@ -548,7 +633,7 @@ const BountyDetail = () => {
         formData.append("image", compressed);
       }
 
-      const { data } = await axios.post(`${API_URL}/bounty/submit`, formData, {
+      const { data } = await apiClient.post("/bounty/submit", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
@@ -581,14 +666,39 @@ const BountyDetail = () => {
 
   const handleClaimReward = async () => {
     if (!address) return showToast.error("Please connect your wallet");
+    if (!isAuthenticated)
+      return showToast.error("Sign in with your wallet before claiming rewards.");
     if (blockchainId === null) return showToast.error("This bounty is not on-chain");
 
     if (Number(currentChainId) !== Number(bounty.network)) {
       try {
         await switchChainAsync({ chainId: Number(bounty.network) });
+        showToast.info(
+          "Network switched. Sign in again on this network, then continue.",
+        );
       } catch {
         return showToast.error("Please switch network manually in your wallet");
       }
+      return;
+    }
+
+    const storage = getBrowserStorage();
+    const pendingKey = getPendingClaimSyncKey(id, address);
+    const pendingClaim = readPendingClaimSync(storage, pendingKey);
+    if (pendingClaim) {
+      try {
+        const record = JSON.parse(pendingClaim);
+        await retryUntilVerified(() =>
+          apiClient.post(`/bounty/${id}/claim`, { txHash: record.txHash }),
+        );
+        clearPendingClaimSync(storage, pendingKey);
+        showToast.success("Reward claimed and synchronized successfully.");
+        await loadWinnersData(id);
+        await refetchClaimable();
+      } catch (error) {
+        showToast.error(error.message || "Claim synchronization is still pending.");
+      }
+      return;
     }
 
     if (!onChainClaimable || onChainClaimable === 0n)
@@ -598,17 +708,42 @@ const BountyDetail = () => {
 
     try {
       const { hash } = await claimReward(blockchainId);
-
-      await axios.post(`${API_URL}/bounty/${id}/claim`, {
-        winnerAddress: address,
-        txHash: hash,
-      });
+      if (storage) {
+        try {
+          storage.setItem(
+            pendingKey,
+            JSON.stringify({
+              bountyId: String(id),
+              walletAddress: address.toLowerCase(),
+              txHash: hash,
+            }),
+          );
+        } catch (error) {
+          console.error("Could not persist pending claim synchronization:", error);
+          showToast.error(
+            "Claim transaction succeeded, but browser recovery storage is unavailable.",
+          );
+        }
+      } else {
+        showToast.error(
+          "Claim transaction succeeded, but browser recovery storage is unavailable.",
+        );
+      }
+      await retryUntilVerified(() =>
+        apiClient.post(`/bounty/${id}/claim`, { txHash: hash }),
+      );
+      clearPendingClaimSync(storage, pendingKey);
 
       showToast.success("Reward claimed successfully!");
       await loadWinnersData(id);
       await refetchClaimable();
     } catch (error) {
-      showToast.error(error.shortMessage || error.message || "Claim failed");
+      showToast.error(
+        error.response?.data?.error ||
+          error.shortMessage ||
+          error.message ||
+          "Claim failed",
+      );
     }
   };
 
@@ -634,14 +769,13 @@ const BountyDetail = () => {
   const synchronizeRewardAssignment = async (record) => {
     let data;
     try {
-      ({ data } = await axios.post(
-        `${API_URL}/bounty/${record.bountyId}/distribute`,
-        {
+      ({ data } = await retryUntilVerified(() =>
+        apiClient.post(`/bounty/${record.bountyId}/distribute`, {
           txHash: record.txHash,
           blockchainId: record.blockchainId,
           chainId: record.chainId,
           bountyContract: record.bountyContract,
-        },
+        }),
       ));
     } catch (error) {
       if (error.response?.data?.code === "TRANSACTION_REVERTED") {
@@ -678,6 +812,9 @@ const BountyDetail = () => {
   };
 
   const handleDistributeReward = async () => {
+    if (!isAuthenticated)
+      return showToast.error("Sign in with your wallet before distributing rewards.");
+
     const valid = winnerAddresses.map((value) => value.trim());
 
     if (
@@ -721,9 +858,13 @@ const BountyDetail = () => {
     if (Number(currentChainId) !== chainId) {
       try {
         await switchChainAsync({ chainId });
+        showToast.info(
+          "Network switched. Sign in again on this network, then distribute rewards.",
+        );
       } catch {
         return showToast.error("Please switch network manually in your wallet");
       }
+      return;
     }
 
     setDistributing(true);
@@ -792,6 +933,8 @@ const BountyDetail = () => {
 
   const retryDistributionSync = async () => {
     if (!pendingDistributionSync || distributing) return;
+    if (!isAuthenticated)
+      return showToast.error("Sign in with your wallet before syncing rewards.");
     setDistributing(true);
     try {
       let record = pendingDistributionSync;
@@ -883,13 +1026,14 @@ const BountyDetail = () => {
 
   const handleAddComment = async () => {
     if (!address) return showToast.error("Please connect your wallet");
+    if (!isAuthenticated)
+      return showToast.error("Sign in with your wallet before commenting.");
     if (!newComment.trim()) return showToast.error("Write a comment first");
 
     setCommentSubmitting(true);
 
     try {
-      const { data } = await axios.post(`${API_URL}/comments/add/${id}`, {
-        user: address,
+      const { data } = await apiClient.post(`/comments/add/${id}`, {
         text: newComment.trim(),
       });
 
@@ -1244,12 +1388,12 @@ const BountyDetail = () => {
                         </p>
                       </div>
 
-                      {bounty.originLink && (
+                      {safeExternalUrl(bounty.originLink) && (
                         <div className="min-w-0 rounded-xl border border-[#dfe5df] bg-[#f8faf7] p-4 dark:border-white/10 dark:bg-white/[0.025] sm:col-span-2">
                           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[#899189] dark:text-white/40">
                             Project resources
                           </p>
-                          <a href={bounty.originLink} target="_blank" rel="noopener noreferrer" className="inline-flex max-w-full items-center gap-2 text-sm font-semibold text-[#008a66] hover:underline dark:text-[#00D6A0]">
+                          <a href={safeExternalUrl(bounty.originLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project resources in a new tab" className="inline-flex max-w-full items-center gap-2 text-sm font-semibold text-[#008a66] hover:underline dark:text-[#00D6A0]">
                             <FiGlobe size={15} className="shrink-0" />
                             <span className="break-all">{getHostname(bounty.originLink)}</span>
                             <FiExternalLink size={13} className="shrink-0" />
@@ -1376,15 +1520,15 @@ const BountyDetail = () => {
                     </div>
 
                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                      {userSubmission.projectLink && (
-                        <a href={userSubmission.projectLink} target="_blank" rel="noopener noreferrer" className={`${secondaryButton} min-w-0 justify-start`}>
+                      {safeExternalUrl(userSubmission.projectLink) && (
+                        <a href={safeExternalUrl(userSubmission.projectLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project link in a new tab" className={`${secondaryButton} min-w-0 justify-start`}>
                           <FiLink className="shrink-0 text-[#008a66] dark:text-[#00D6A0]" />
                           <span className="truncate">{getHostname(userSubmission.projectLink)}</span>
                           <FiExternalLink className="shrink-0" />
                         </a>
                       )}
-                      {userSubmission.image && (
-                        <a href={userSubmission.image} target="_blank" rel="noopener noreferrer" className={`${secondaryButton} justify-start`}>
+                      {safeExternalUrl(userSubmission.image, { httpsOnly: true }) && (
+                        <a href={safeExternalUrl(userSubmission.image, { httpsOnly: true })} target="_blank" rel="noopener noreferrer" aria-label="Open submission image in a new tab" className={`${secondaryButton} justify-start`}>
                           <FiExternalLink className="text-[#008a66] dark:text-[#00D6A0]" />
                           View submission image
                         </a>
@@ -1509,15 +1653,15 @@ const BountyDetail = () => {
 
                                 {(submission.projectLink || submission.image) && (
                                   <div className="mt-3 flex flex-wrap gap-2">
-                                    {submission.projectLink && (
-                                      <a href={submission.projectLink} target="_blank" rel="noopener noreferrer" className={`${secondaryButton} min-w-0 flex-1 !px-3 !py-2.5`}>
+                                    {safeExternalUrl(submission.projectLink) && (
+                                      <a href={safeExternalUrl(submission.projectLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project link in a new tab" className={`${secondaryButton} min-w-0 flex-1 !px-3 !py-2.5`}>
                                         <FiLink className="shrink-0" />
                                         <span className="truncate">{getHostname(submission.projectLink)}</span>
                                         <FiExternalLink className="shrink-0" />
                                       </a>
                                     )}
-                                    {submission.image && (
-                                      <a href={submission.image} target="_blank" rel="noopener noreferrer" className={`${secondaryButton} !px-3 !py-2.5`}>
+                                    {safeExternalUrl(submission.image, { httpsOnly: true }) && (
+                                      <a href={safeExternalUrl(submission.image, { httpsOnly: true })} target="_blank" rel="noopener noreferrer" aria-label="Open submission image in a new tab" className={`${secondaryButton} !px-3 !py-2.5`}>
                                         <FiExternalLink /> View image
                                       </a>
                                     )}
@@ -1632,8 +1776,8 @@ const BountyDetail = () => {
                     <p className="mt-1 break-words text-2xl font-extrabold text-[#008a66] dark:text-[#00D6A0]">{formatAmount(bounty.reward)} <span className="text-sm">{token}</span></p>
                   </div>
 
-                  {bounty.originLink && (
-                    <a href={bounty.originLink} target="_blank" rel="noopener noreferrer" className={`${secondaryButton} w-full`}>
+                  {safeExternalUrl(bounty.originLink) && (
+                    <a href={safeExternalUrl(bounty.originLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project website in a new tab" className={`${secondaryButton} w-full`}>
                       <FiGlobe size={16} /> Visit project <FiExternalLink size={13} />
                     </a>
                   )}
@@ -1679,10 +1823,10 @@ const BountyDetail = () => {
                     <>
                       <FiUploadCloud size={27} className="mb-3 text-[#008a66] dark:text-[#00D6A0]" />
                       <span className="text-sm font-semibold">Choose an image</span>
-                      <span className="mt-1 text-xs text-[#899189] dark:text-white/40">PNG, JPG, or another supported image format</span>
+                      <span className="mt-1 text-xs text-[#899189] dark:text-white/40">JPEG, PNG, or WebP</span>
                     </>
                   )}
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageUpload} className="sr-only" />
+                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} className="sr-only" />
                 </label>
                 {imagePreview && (
                   <button type="button" onClick={() => { setSubmissionImage(null); setImagePreview(null); setImageSizeWarning(""); if (fileInputRef.current) fileInputRef.current.value = ""; }} className="mt-2 text-xs font-semibold text-red-500">Remove image</button>

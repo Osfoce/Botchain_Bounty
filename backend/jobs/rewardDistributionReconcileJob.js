@@ -6,6 +6,8 @@ const Bounty = require("../modules/bounty.module");
 const DistributionSync = require("../modules/distributionSync.module");
 const DistributionScanCheckpoint = require("../modules/distributionScanCheckpoint.module");
 const { synchronizeDistribution } = require("../services/distributionSync.service");
+const { getSafeErrorCode, logSecurityEvent } = require("../utils/requestLogger");
+const { recordSecurityAudit } = require("../services/securityAudit.service");
 const {
   verifyRewardsAssignedEvent,
 } = require("../services/verifiedDistributionEvent.service");
@@ -14,7 +16,6 @@ const LEASE_MS = 3 * 60 * 1000;
 const DEFAULT_BLOCK_RANGE = 500;
 const DEFAULT_OVERLAP_BLOCKS = 12;
 const MAX_RETRY_RECORDS = 25;
-const MAX_AUTOMATIC_SYNC_ATTEMPTS = 12;
 const MAX_BLOCK_RANGES_PER_RUN = 20;
 
 const positiveEnvInteger = (name, fallback) => {
@@ -82,18 +83,26 @@ const acquireCheckpoint = async (config) => {
 const applyLog = async (config, publicClient, log) => {
   const blockchainId = String(log.args?.bountyId ?? "");
   if (!/^[0-9]+$/.test(blockchainId)) {
-    console.warn("Skipping RewardsAssigned log without a valid bounty ID", {
+    logSecurityEvent({
+      event: "transaction_verification_failed",
+      severity: "warn",
+      outcome: "failure",
+      errorCode: "INVALID_BOUNTY_ID",
       chainId: config.chainId,
-      transactionHash: log.transactionHash,
+      transactionId: log.transactionHash,
     });
     return;
   }
   const numericBlockchainId = Number(blockchainId);
   if (!Number.isSafeInteger(numericBlockchainId)) {
-    console.warn("Skipping bounty ID outside the supported database range", {
+    logSecurityEvent({
+      event: "transaction_verification_failed",
+      severity: "warn",
+      outcome: "failure",
+      errorCode: "BOUNTY_ID_OUT_OF_RANGE",
       chainId: config.chainId,
-      blockchainId,
-      transactionHash: log.transactionHash,
+      resourceId: blockchainId,
+      transactionId: log.transactionHash,
     });
     return;
   }
@@ -104,31 +113,57 @@ const applyLog = async (config, publicClient, log) => {
     isOnChain: true,
   });
   if (!bounty) {
-    console.warn(
-      "Skipping RewardsAssigned event without a matching on-chain bounty record",
-      { chainId: config.chainId, blockchainId, transactionHash: log.transactionHash },
-    );
+    await recordSecurityAudit({
+      event: "transaction_verification_failed",
+      severity: "warn",
+      outcome: "failure",
+      errorCode: "EVENT_BOUNTY_MISMATCH",
+      chainId: config.chainId,
+      resourceId: blockchainId,
+      transactionId: log.transactionHash,
+    });
     return;
   }
   if (
     bounty.bountyContract &&
     bounty.bountyContract.toLowerCase() !== config.bountyContract.toLowerCase()
   ) {
-    console.warn("Skipping event whose bounty contract differs from its record", {
-      bountyId: bounty.id,
+    await recordSecurityAudit({
+      event: "transaction_verification_failed",
+      severity: "warn",
+      outcome: "failure",
+      errorCode: "EVENT_EMITTER_MISMATCH",
+      resourceId: String(bounty._id),
       chainId: config.chainId,
     });
     return;
   }
 
-  const verified = await verifyRewardsAssignedEvent({
-    publicClient,
-    transactionHash: log.transactionHash,
-    contractAddress: config.bountyContract,
-    blockchainId,
-    expectedLogIndex: Number(log.logIndex),
-    expectedBlockHash: log.blockHash,
-  });
+  let verified;
+  try {
+    verified = await verifyRewardsAssignedEvent({
+      publicClient,
+      transactionHash: log.transactionHash,
+      contractAddress: config.bountyContract,
+      blockchainId,
+      expectedLogIndex: Number(log.logIndex),
+      expectedBlockHash: log.blockHash,
+    });
+  } catch (error) {
+    await recordSecurityAudit({
+      event:
+        error.code === "RPC_UNAVAILABLE"
+          ? "rpc_unavailable"
+          : "transaction_verification_failed",
+      severity: "warn",
+      outcome: "failure",
+      errorCode: getSafeErrorCode(error, "EVENT_VERIFICATION_FAILED"),
+      resourceId: String(bounty._id),
+      transactionId: log.transactionHash,
+      chainId: config.chainId,
+    });
+    throw error;
+  }
 
   const result = await synchronizeDistribution({
     bounty,
@@ -144,9 +179,13 @@ const applyLog = async (config, publicClient, log) => {
     event: verified.event,
   });
   if (result.status !== "synced") {
-    console.info("Distribution sync remains pending for reconciliation", {
+    logSecurityEvent({
+      event: "distribution_sync_pending",
+      severity: "info",
+      outcome: "attempt",
       chainId: config.chainId,
-      transactionHash: log.transactionHash,
+      resourceId: String(bounty._id),
+      transactionId: log.transactionHash,
     });
   }
 };
@@ -254,17 +293,14 @@ const retryPendingSyncs = async () => {
     $or: [
       {
         status: { $in: ["pending", "failed"] },
-        attempts: { $lt: MAX_AUTOMATIC_SYNC_ATTEMPTS },
         $or: [{ nextRetryAt: null }, { nextRetryAt: { $lte: now } }],
       },
       {
         status: "processing",
-        attempts: { $lt: MAX_AUTOMATIC_SYNC_ATTEMPTS },
         leaseExpiresAt: { $lte: now },
       },
       {
         status: "processing",
-        attempts: { $lt: MAX_AUTOMATIC_SYNC_ATTEMPTS },
         leaseExpiresAt: null,
       },
     ],
@@ -333,7 +369,7 @@ const retryPendingSyncs = async () => {
         {
           $set: {
             status: "failed",
-            lastError: error.message,
+            lastError: getSafeErrorCode(error, "DISTRIBUTION_SYNC_FAILED"),
             nextRetryAt: retryAt,
             leaseOwner: null,
             leaseExpiresAt: null,
@@ -341,10 +377,14 @@ const retryPendingSyncs = async () => {
           $inc: { attempts: 1 },
         },
       );
-      console.error("Could not reconcile pending distribution:", {
-        transactionHash: record.transactionHash,
-        chainId: record.chainId,
-        error: error.message,
+      await recordSecurityAudit({
+        event: "distribution_sync_failed",
+        severity: "error",
+        outcome: "failure",
+        errorCode: getSafeErrorCode(error, "DISTRIBUTION_SYNC_FAILED"),
+        resourceId: String(record.bountyId),
+        transactionId: record.transactionHash,
+        chainId: Number(record.chainId),
       });
     }
   }
@@ -355,35 +395,84 @@ let runInProgress = false;
 const runReconciliation = async () => {
   if (runInProgress) return;
   runInProgress = true;
+  let failures = 0;
+  logSecurityEvent({
+    event: "distribution_reconciliation_run_started",
+    severity: "info",
+    outcome: "attempt",
+  });
   try {
     for (const config of supportedScanConfigs()) {
       try {
         await scanChain(config);
       } catch (error) {
-        console.error(`Reward distribution scan failed on ${config.chainId}:`, error);
+        failures += 1;
+        await recordSecurityAudit({
+          event:
+            error.code === "RPC_UNAVAILABLE"
+              ? "rpc_unavailable"
+              : "reconciliation_failed",
+          severity: "error",
+          outcome: "failure",
+          errorCode: getSafeErrorCode(error, "RECONCILIATION_FAILED"),
+          chainId: config.chainId,
+        });
       }
     }
     await retryPendingSyncs();
+  } catch (error) {
+    failures += 1;
+    await recordSecurityAudit({
+      event: "reconciliation_failed",
+      severity: "error",
+      outcome: "failure",
+      errorCode: getSafeErrorCode(error, "RECONCILIATION_FAILED"),
+    });
+    throw error;
   } finally {
     runInProgress = false;
+    logSecurityEvent({
+      event: "distribution_reconciliation_run_completed",
+      severity: failures ? "error" : "info",
+      outcome: failures ? "failure" : "success",
+      count: failures,
+    });
   }
 };
 
 const startRewardDistributionReconcileJob = () => {
   if (process.env.DISTRIBUTION_SYNC_ENABLED === "false") {
-    console.log("Reward distribution reconciliation is disabled");
+    logSecurityEvent({
+      event: "distribution_reconciliation_disabled",
+      severity: "warn",
+      outcome: "blocked",
+    });
     return;
   }
 
   cron.schedule("*/2 * * * *", () => {
     runReconciliation().catch((error) => {
-      console.error("Reward distribution reconciliation failed:", error);
+      recordSecurityAudit({
+        event: "reconciliation_failed",
+        severity: "error",
+        outcome: "failure",
+        errorCode: getSafeErrorCode(error, "RECONCILIATION_FAILED"),
+      });
     });
   });
   runReconciliation().catch((error) => {
-    console.error("Initial reward distribution reconciliation failed:", error);
+    recordSecurityAudit({
+      event: "reconciliation_failed",
+      severity: "error",
+      outcome: "failure",
+      errorCode: getSafeErrorCode(error, "RECONCILIATION_FAILED"),
+    });
   });
-  console.log("Reward distribution reconciliation scheduled every 2 minutes");
+  logSecurityEvent({
+    event: "distribution_reconciliation_scheduled",
+    severity: "info",
+    outcome: "success",
+  });
 };
 
 module.exports = {

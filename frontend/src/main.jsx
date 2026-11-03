@@ -13,6 +13,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "react-hot-toast";
 import { supportedChains } from "./rainbowChains.jsx";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { AuthProvider } from "./context/AuthContext";
 
 const queryClient = new QueryClient();
 
@@ -45,20 +46,22 @@ createRoot(document.getElementById("root")).render(
   <WagmiProvider config={config}>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <ThemedRainbowKitProvider>
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              style: {
-                background: "#1a1a1a",
-                color: "#fff",
-                borderRadius: "8px",
-                padding: "12px",
-              },
-            }}
-          />
-          <App />
-        </ThemedRainbowKitProvider>
+        <AuthProvider>
+          <ThemedRainbowKitProvider>
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                style: {
+                  background: "#1a1a1a",
+                  color: "#fff",
+                  borderRadius: "8px",
+                  padding: "12px",
+                },
+              }}
+            />
+            <App />
+          </ThemedRainbowKitProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   </WagmiProvider>,

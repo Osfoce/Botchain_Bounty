@@ -1,7 +1,6 @@
 import HappyBounty from "../../assets/images/happy-bounty-logo.png";
 import Themes from "./Themes";
 import Connect from "../Connect";
-import SignUp from "../SignUp";
 import { useAccount } from "wagmi";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -612,7 +611,7 @@ function NavBar() {
               [&>button]:shrink-0
             "
           >
-            {!isConnected && pathname === "/" ? <SignUp /> : <Connect />}
+            <Connect />
           </div>
 
           {/* DARK / LIGHT MODE */}

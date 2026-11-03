@@ -5,7 +5,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { showToast } from "../components/UI/Toast";
 import NavBar from "../components/Layout/NavBar";
 import Footer from "../components/Layout/Footer";
-import axios from "axios";
+import apiClient from "../services/apiClient";
+import { retryUntilVerified } from "../services/transactionSync";
+import { useAuth } from "../hooks/useAuth";
 
 import {
   FiArrowLeft,
@@ -35,6 +37,7 @@ import { supportedChains } from "../rainbowChains";
 import { useBounty } from "../hooks/useBounty";
 import { listTokensForChain } from "../utils/enums";
 import { formatAmount } from "../utils/format";
+import { safeExternalUrl } from "../utils/safeExternalUrl";
 import {
   getBountyContract,
   getNativeToken,
@@ -47,12 +50,23 @@ const STEPS = [
   { id: 4, label: "Review", description: "Confirm everything", icon: FiCheckCircle },
 ];
 
+const getPendingCreateKey = (walletAddress) =>
+  `happy-bounty:pending-create:${walletAddress.toLowerCase()}`;
+
+const clearPendingCreate = (key) => {
+  try {
+    sessionStorage.removeItem(key);
+  } catch (error) {
+    console.warn("Could not clear pending bounty verification:", error);
+  }
+};
+
 function Create() {
-  const API_URL = import.meta.env.VITE_API_URL;
   const totalSteps = STEPS.length;
   const navigate = useNavigate();
 
   const { address, isConnected } = useAccount();
+  const { isAuthenticated } = useAuth();
   const currentChainId = useChainId();
   const { switchChainAsync } = useSwitchChain();
 
@@ -80,6 +94,7 @@ function Create() {
   const [showEqualModal, setShowEqualModal] = useState(false);
   const [showPercentModal, setShowPercentModal] = useState(false);
   const [showInfoMenu, setShowInfoMenu] = useState(false);
+  const [isSavingBounty, setIsSavingBounty] = useState(false);
 
   const [bountyData, setBountyData] = useState({
     title: "",
@@ -96,7 +111,6 @@ function Create() {
     payoutType: "SINGLE",
     percentages: [],
     rewardType: "self-fund",
-    creator: "",
   });
 
   useEffect(() => {
@@ -133,12 +147,6 @@ function Create() {
     });
   };
 
-  useEffect(() => {
-    if (isConnected && address) {
-      setBountyData((prev) => ({ ...prev, creator: address }));
-    }
-  }, [address, isConnected]);
-
   const availableTokens = useMemo(() => {
     if (!currentChainId) return [];
     return listTokensForChain(currentChainId);
@@ -174,12 +182,17 @@ function Create() {
 
   const isValidUrl = (value) => {
     if (!value) return "";
+    if (value.length > 2048) return "URL must be 2048 characters or fewer.";
 
     try {
       const url = new URL(value);
 
       if (!["http:", "https:"].includes(url.protocol)) {
         return "Only HTTP and HTTPS links are allowed.";
+      }
+
+      if (url.username || url.password) {
+        return "URLs containing embedded credentials are not allowed.";
       }
 
       if (
@@ -197,6 +210,7 @@ function Create() {
   };
 
   const originLinkError = isValidUrl(bountyData.originLink);
+  const previewOriginLink = safeExternalUrl(bountyData.originLink);
 
   const handleChainChange = async (event) => {
     const chainId = Number(event.target.value);
@@ -460,16 +474,77 @@ function Create() {
     : localToday;
 
   const handleFinalSubmit = async () => {
+    if (!isConnected || !address) {
+      showToast.error("Please connect your wallet.");
+      return;
+    }
+    const pendingKey = getPendingCreateKey(address);
+    let pendingCreate;
+    try {
+      pendingCreate = sessionStorage.getItem(pendingKey);
+    } catch (error) {
+      console.error("Could not read pending bounty verification:", error);
+      showToast.error("Could not access saved transaction recovery data.");
+      return;
+    }
+    if (pendingCreate) {
+      if (!isAuthenticated) {
+        showToast.error("Sign in with your wallet to resume bounty verification.");
+        return;
+      }
+      let payload;
+      try {
+        payload = JSON.parse(pendingCreate)?.payload;
+      } catch (error) {
+        console.error("Saved bounty verification data is invalid:", error);
+        clearPendingCreate(pendingKey);
+        showToast.error("Saved transaction recovery data is invalid.");
+        return;
+      }
+      if (!payload || typeof payload !== "object") {
+        clearPendingCreate(pendingKey);
+        showToast.error("Saved transaction recovery data is incomplete.");
+        return;
+      }
+
+      setIsSavingBounty(true);
+      try {
+        const response = await retryUntilVerified(() =>
+          apiClient.post("/bounty/create", payload),
+        );
+        if (response.status !== 201) {
+          throw new Error("Bounty verification did not complete.");
+        }
+        clearPendingCreate(pendingKey);
+        showToast.success("Bounty created and saved successfully!");
+        navigate("/dashboard");
+      } catch (error) {
+        console.error("Pending bounty verification failed:", error);
+        if (
+          error.response?.status >= 400 &&
+          error.response.status < 500 &&
+          ![401, 403].includes(error.response.status) &&
+          error.response?.data?.retryable !== true
+        ) {
+          clearPendingCreate(pendingKey);
+        }
+        showToast.error(
+          error.response?.data?.message ||
+            error.response?.data?.error ||
+            error.message ||
+            "Bounty verification is still pending.",
+        );
+      } finally {
+        setIsSavingBounty(false);
+      }
+      return;
+    }
+
     if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
       if (!validateStep(1)) setCurrentStep(1);
       else if (!validateStep(2)) setCurrentStep(2);
       else setCurrentStep(3);
 
-      return;
-    }
-
-    if (!isConnected || !address) {
-      showToast.error("Please connect your wallet.");
       return;
     }
 
@@ -495,11 +570,20 @@ function Create() {
 
       try {
         await switchChainAsync({ chainId: selectedChainId });
+        showToast.info?.(
+          "Network switched. Sign in again on this network, then submit the bounty.",
+        );
       } catch (error) {
         console.warn("Network switch failed:", error);
         showToast.error("Please switch networks in your wallet and try again.");
         return;
       }
+      return;
+    }
+
+    if (!isAuthenticated) {
+      showToast.error("Sign in with your wallet on the selected network before creating a bounty.");
+      return;
     }
 
     const finalWinnersAllowed = multipleWinner ? winnerCount : 1;
@@ -513,18 +597,24 @@ function Create() {
         : [];
 
     const backendData = {
-      ...bountyData,
-      creator: address,
+      title: bountyData.title,
+      description: bountyData.description,
+      category: bountyData.category,
+      tags: bountyData.tags,
+      startDate: bountyData.startDate,
+      deadline: bountyData.deadline,
+      originLink: bountyData.originLink,
+      reward: bountyData.reward,
+      token: bountyData.token,
       network: selectedChainId,
       winnersAllowed: finalWinnersAllowed,
       payoutType: finalPayoutType,
       percentages: finalPercentages,
-      status: "upcoming",
     };
 
     try {
       const { eventData, hash } = await createBounty({
-        reward: Number(bountyData.reward),
+        reward: bountyData.reward,
         token: bountyData.token,
         winnersAllowed: finalWinnersAllowed,
         payoutType: finalPayoutType,
@@ -556,15 +646,31 @@ function Create() {
         return;
       }
 
-      const response = await axios.post(`${API_URL}/bounty/create`, {
+      const payload = {
         ...backendData,
         blockchainId,
         txHash: hash,
         isOnChain: true,
         bountyContract: getBountyContract(selectedChainId),
-      });
+      };
+      try {
+        sessionStorage.setItem(
+          pendingKey,
+          JSON.stringify({ payload, txHash: hash }),
+        );
+      } catch (storageError) {
+        console.error("Could not persist pending bounty verification:", storageError);
+        showToast.error(
+          "Transaction succeeded, but recovery data could not be saved in this tab.",
+        );
+      }
 
+      setIsSavingBounty(true);
+      const response = await retryUntilVerified(() =>
+        apiClient.post("/bounty/create", payload),
+      );
       if (response.status === 201) {
+        clearPendingCreate(pendingKey);
         showToast.success("Bounty created and saved successfully!");
         navigate("/dashboard");
       } else {
@@ -572,15 +678,26 @@ function Create() {
       }
     } catch (error) {
       console.error("Bounty creation failed:", error);
+      if (
+        error.response?.status >= 400 &&
+        error.response.status < 500 &&
+        ![401, 403].includes(error.response.status) &&
+        error.response?.data?.retryable !== true
+      ) {
+        clearPendingCreate(pendingKey);
+      }
       showToast.error(
         error.response?.data?.message ||
+          error.response?.data?.error ||
           error.message ||
           "Bounty creation failed.",
       );
+    } finally {
+      setIsSavingBounty(false);
     }
   };
 
-  const isProcessing = isContractPending || isConfirming;
+  const isProcessing = isContractPending || isConfirming || isSavingBounty;
 
   const page = dark
     ? "bg-[#080B0D] text-white"
@@ -1378,15 +1495,15 @@ function Create() {
                       </div>
                     </div>
 
-                    {bountyData.originLink && (
+                    {previewOriginLink && (
                       <a
-                        href={bountyData.originLink}
+                        href={previewOriginLink}
                         target="_blank"
                         rel="noopener noreferrer"
                         className={`mt-4 inline-flex max-w-full items-center gap-2 break-all text-sm ${greenText} hover:underline`}
                       >
                         <FiExternalLink className="shrink-0" size={15} />
-                        {bountyData.originLink}
+                        {previewOriginLink}
                       </a>
                     )}
 
@@ -1430,7 +1547,9 @@ function Create() {
                       {isProcessing ? (
                         <>
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#07120D]/30 border-t-[#07120D]" />
-                          Processing transaction...
+                          {isSavingBounty
+                            ? "Verifying transaction..."
+                            : "Processing transaction..."}
                         </>
                       ) : (
                         <>

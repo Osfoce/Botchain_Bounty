@@ -1,5 +1,6 @@
 // utils/bountyUtils.js
 const { getDb } = require("../config/db");
+const { logRequestError, logSecurityEvent } = require("./requestLogger");
 
 function calculateBountyStatus(bounty) {
   if (bounty.lifecycleStatus === "cancelled") return "cancelled";
@@ -25,11 +26,14 @@ async function updateBountyStatuses() {
         updatedCount++;
       }
     }
-    console.log(
-      `[Status Update] Updated ${updatedCount} bounties at ${new Date().toISOString()}`,
-    );
+    logSecurityEvent({
+      event: "bounty_status_update_completed",
+      severity: "info",
+      outcome: "success",
+      count: updatedCount,
+    });
   } catch (err) {
-    console.error("Error updating bounty statuses:", err);
+    logRequestError(null, "bounty_status_update_failed", err);
   }
 }
 

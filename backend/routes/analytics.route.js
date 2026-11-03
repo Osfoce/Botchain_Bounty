@@ -3,10 +3,20 @@ const {
   getPlatformAnalytics,
   getWalletAnalytics,
 } = require("../controller/analytics.controller");
+const { requireAuth, requireSelf } = require("../middleware/auth");
+const { privateReadLimiter } = require("../middleware/privateReadLimiter");
+const { requestSchemas, validateRequest } = require("../middleware/requestSchemas");
 
 const router = express.Router();
 
 router.get("/analytics/platform", getPlatformAnalytics);
-router.get("/analytics/:role/:wallet", getWalletAnalytics);
+router.get(
+  "/analytics/:role/:wallet",
+  validateRequest({ params: requestSchemas.analyticsParams }),
+  requireAuth,
+  privateReadLimiter,
+  requireSelf,
+  getWalletAnalytics,
+);
 
 module.exports = router;

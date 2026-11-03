@@ -1,7 +1,7 @@
 const buildBountyFilter = (query) => {
   const { category, tags, status } = query;
 
-  const filter = {};
+  const filter = { archivedAt: null };
   if (category) filter.category = category;
 
   if (tags) {

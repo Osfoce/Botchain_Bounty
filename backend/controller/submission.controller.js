@@ -4,16 +4,36 @@
 // }
 const mongoose = require("mongoose");
 const Bounty = require("../modules/bounty.module");
+const Enrollment = require("../modules/enrollment.module");
 const Submission = require("../modules/submission.module");
+const { isAcceptingEntries } = require("../utils/bountyLifecycle");
+const paginate = require("../utils/paginate");
+const { isAdminWallet } = require("../middleware/authorization");
+const { serializeSubmission } = require("../utils/serializers");
+const { logRequestError } = require("../utils/requestLogger");
+const { recordSecurityAudit } = require("../services/securityAudit.service");
+const {
+  deleteSubmissionImage,
+  uploadSubmissionImage,
+} = require("../services/submissionImage.service");
+
+const findPersistedSubmission = async (filter) => {
+  let query = Submission.findOne(filter);
+  if (typeof query?.select === "function") {
+    query = query.select("_id image submittedAt +imagePublicId");
+  }
+  if (typeof query?.lean === "function") {
+    query = query.lean();
+  }
+  return query;
+};
 
 // POST /submission
 const submit = async (req, res) => {
-  const { bountyId, user, description, projectLink } = req.body;
+  const { bountyId, description, projectLink } = req.body;
+  const user = req.auth.walletAddress;
 
-  // The image URL from Cloudinary is in req.file.path
-  const imageUrl = req.file ? req.file.path : "";
-
-  if (!bountyId || !user || !description || !projectLink) {
+  if (!bountyId || !description || !projectLink) {
     return res.status(400).json({ error: "Missing required fields" });
   }
 
@@ -25,10 +45,20 @@ const submit = async (req, res) => {
   try {
     const wallet = user.toLowerCase();
 
-    // 检查 bounty 是否存在
+    // Check that the bounty exists and is currently accepting submissions.
     const bounty = await Bounty.findById(bountyId);
     if (!bounty) {
       return res.status(404).json({ error: "Bounty not found" });
+    }
+    const submissionCount = bounty.submissions?.count ?? 0;
+    const maxSubmissions = bounty.submissions?.maxSubmissions ?? 100;
+    if (
+      !isAcceptingEntries(bounty) ||
+      submissionCount >= maxSubmissions
+    ) {
+      return res
+        .status(409)
+        .json({ error: "Bounty is not accepting submissions" });
     }
 
     // 检查是否已提交
@@ -42,28 +72,133 @@ const submit = async (req, res) => {
         .json({ error: "Already submitted to this bounty" });
     }
 
-    // 创建提交
-    const submission = await Submission.create({
-      bountyId: bountyId,
-      bountyTitle: bounty.title,
-      user: user,
-      description: description,
-      projectLink: projectLink,
-      image: imageUrl, // Store the Cloudinary URL
-      status: "pending",
-      submittedAt: new Date(),
+    const enrollment = await Enrollment.findOne({
+      bountyId,
+      user: wallet,
     });
+    if (!enrollment) {
+      return res.status(403).json({
+        code: "ENROLLMENT_REQUIRED",
+        error: "Enroll in this bounty before submitting work.",
+      });
+    }
 
-    // bounty
-    await Bounty.findByIdAndUpdate(bountyId, {
-      $inc: { "submissions.count": 1 },
-      // $push: { "submissions.ids": submission._id },
-    });
+    const submittedAt = new Date();
+    const reservedBounty = await Bounty.findOneAndUpdate(
+      {
+        _id: bountyId,
+        archivedAt: null,
+        lifecycleStatus: null,
+        startDate: { $lte: submittedAt },
+        deadline: { $gte: submittedAt },
+        $expr: {
+          $lt: [
+            { $ifNull: ["$submissions.count", 0] },
+            { $ifNull: ["$submissions.maxSubmissions", 100] },
+          ],
+        },
+      },
+      { $inc: { "submissions.count": 1 } },
+      { new: true },
+    );
+    if (!reservedBounty) {
+      return res
+        .status(409)
+        .json({ error: "Bounty is not accepting submissions" });
+    }
+
+    let submission;
+    let uploadedImage;
+    let submissionCreateAttempted = false;
+    try {
+      if (req.validatedSubmissionImage) {
+        uploadedImage = await uploadSubmissionImage(
+          req.validatedSubmissionImage,
+          req,
+        );
+      }
+
+      submissionCreateAttempted = true;
+      submission = await Submission.create({
+        bountyId,
+        bountyTitle: bounty.title,
+        user,
+        description,
+        projectLink,
+        image: uploadedImage?.imageUrl || "",
+        imagePublicId: uploadedImage?.publicId || "",
+        status: "pending",
+        submittedAt,
+      });
+    } catch (error) {
+      let persistedSubmission;
+      let persistenceCheckCompleted =
+        !submissionCreateAttempted || error.code === 11000;
+      if (submissionCreateAttempted && error.code !== 11000) {
+        try {
+          persistedSubmission = await findPersistedSubmission({
+            bountyId,
+            user: wallet,
+            submittedAt,
+          });
+          persistenceCheckCompleted = true;
+        } catch (verificationError) {
+          logRequestError(
+            req,
+            "submission_persistence_verification_failed",
+            verificationError,
+            "warn",
+          );
+        }
+      }
+      if (persistedSubmission) {
+        submission = persistedSubmission;
+        if (
+          uploadedImage &&
+          persistedSubmission.imagePublicId !== uploadedImage.publicId
+        ) {
+          await deleteSubmissionImage(uploadedImage.publicId, req);
+        }
+      } else {
+        if (uploadedImage && persistenceCheckCompleted) {
+          await deleteSubmissionImage(uploadedImage.publicId, req);
+        }
+        if (persistenceCheckCompleted) {
+          try {
+            const rollback = await Bounty.updateOne(
+              { _id: bountyId, "submissions.count": { $gt: 0 } },
+              { $inc: { "submissions.count": -1 } },
+            );
+            if (rollback.modifiedCount !== 1) {
+              logRequestError(
+                req,
+                "submission_capacity_rollback_incomplete",
+                new Error("Capacity rollback did not modify a record"),
+              );
+            }
+          } catch (rollbackError) {
+            logRequestError(
+              req,
+              "submission_capacity_rollback_failed",
+              rollbackError,
+            );
+          }
+        } else {
+          logRequestError(
+            req,
+            "submission_capacity_rollback_deferred",
+            new Error("Submission persistence could not be confirmed"),
+            "warn",
+          );
+        }
+        throw error;
+      }
+    }
 
     res.status(201).json({
       message: "Submission created successfully",
       _id: submission._id,
-      imageUrl: imageUrl, // Optionally return the URL
+      imageUrl: submission.image || "",
     });
   } catch (err) {
     if (err.code === 11000) {
@@ -71,42 +206,79 @@ const submit = async (req, res) => {
         .status(400)
         .json({ error: "Already submitted to this bounty" });
     }
-    console.error("Failed to create submission", err);
+    if (err.code === "IMAGE_UPLOAD_FAILED") {
+      logRequestError(req, "submission_image_upload_failed", err);
+      return res.status(503).json({
+        code: "IMAGE_UPLOAD_UNAVAILABLE",
+        error: "Image storage is temporarily unavailable.",
+        ...(req.requestId ? { requestId: req.requestId } : {}),
+      });
+    }
+    logRequestError(req, "submission_create_failed", err);
     res.status(500).json({
+      code: "INTERNAL_ERROR",
       error: "Failed to create submission",
-      detail: process.env.NODE_ENV !== "production" ? err.message : undefined,
     });
   }
 };
 
 // GET /submissions/user/:wallet
 const getUserSubmission = async (req, res) => {
-  const wallet = req.params.wallet.toLowerCase();
-  if (!wallet) return res.status(400).json({ message: "User not found" });
+  const wallet = req.auth.walletAddress;
 
   try {
-    const submissions = await Submission.find({ user: wallet })
-      .sort({ submittedAt: -1 })
-      .lean();
+    const filter = { user: wallet };
+    if (req.query.bountyId !== undefined) {
+      if (!mongoose.Types.ObjectId.isValid(req.query.bountyId)) {
+        return res.status(400).json({ error: "Invalid bountyId" });
+      }
+      filter.bountyId = req.query.bountyId;
+    }
 
-    const formatted = submissions.map((sub) => ({
-      ...sub,
-      _id: sub._id.toString(),
-      bountyId: sub.bountyId.toString(),
-    }));
+    const { page, limit, skip } = paginate(req.query || {});
+    const [submissions, total, pending, accepted, rejected] = await Promise.all([
+      Submission.find(filter)
+        .sort({ submittedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select("_id bountyId bountyTitle user description projectLink image status submittedAt")
+        .lean(),
+      Submission.countDocuments(filter),
+      Submission.countDocuments({ user: wallet, status: "pending" }),
+      Submission.countDocuments({ user: wallet, status: "accepted" }),
+      Submission.countDocuments({ user: wallet, status: "rejected" }),
+    ]);
 
-    const stats = {
-      pending: formatted.filter((s) => s.status === "pending").length,
-      accepted: formatted.filter((s) => s.status === "accepted").length,
-      rejected: formatted.filter((s) => s.status === "rejected").length,
-    };
-
-    res.status(200).json({ submissions: formatted, stats });
+    res.status(200).json({
+      submissions: submissions.map((submission) =>
+        serializeSubmission(submission, { includeWork: true }),
+      ),
+      stats: {
+        pending,
+        accepted,
+        rejected,
+        total: pending + accepted + rejected,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    });
   } catch (err) {
-    console.error("Failed to fetch submissions", err);
+    logRequestError(req, "submission_list_failed", err);
+    if (err.status === 400) {
+      return res.status(400).json({
+        code: "INVALID_REQUEST",
+        error: "Invalid query parameters.",
+      });
+    }
     res.status(500).json({
+      code: "INTERNAL_ERROR",
       error: "Failed to fetch submissions",
-      detail: process.env.NODE_ENV !== "production" ? err.message : undefined,
     });
   }
 };
@@ -117,22 +289,69 @@ const getBountySubmissions = async (req, res) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return res.status(400).json({ error: "Invalid bounty id" });
   }
+  if (!req.auth?.walletAddress) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
 
   try {
-    const submissions = await Submission.find({ bountyId: id })
-      .sort({ submittedAt: -1 })
-      .lean();
+    const bounty = await Bounty.findById(id).select("_id creator").lean();
+    if (!bounty) {
+      return res.status(404).json({ error: "Bounty not found" });
+    }
 
-    const formatted = submissions.map((sub) => ({
-      ...sub,
-      _id: sub._id.toString(),
-      bountyId: sub.bountyId.toString(),
-    }));
+    const isCreator =
+      bounty.creator?.toLowerCase() === req.auth.walletAddress.toLowerCase();
+    const isAdmin = isAdminWallet(req.auth.walletAddress);
+    if (isAdmin && !isCreator) {
+      await recordSecurityAudit({
+        req,
+        event: "admin_submissions_read",
+        severity: "warn",
+        outcome: "success",
+        walletAddress: req.auth.walletAddress,
+        resourceId: String(bounty._id),
+      });
+    }
 
-    return res.status(200).json({ submissions: formatted });
+    const filter = { bountyId: id };
+    if (!isCreator && !isAdmin) {
+      filter.user = req.auth.walletAddress;
+    }
+    const { page, limit, skip } = paginate(req.query || {});
+    const [submissions, total] = await Promise.all([
+      Submission.find(filter)
+        .sort({ submittedAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select("_id bountyId bountyTitle user description projectLink image status submittedAt")
+        .lean(),
+      Submission.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      submissions: submissions.map((submission) =>
+        serializeSubmission(submission, { includeWork: true }),
+      ),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    });
   } catch (err) {
-    console.error("Failed to fetch submissions:", err);
-    return res.status(500).json({ error: "Failed to fetch submissions" });
+    logRequestError(req, "bounty_submission_list_failed", err);
+    if (err.status === 400) {
+      return res.status(400).json({
+        code: "INVALID_REQUEST",
+        error: "Invalid query parameters.",
+      });
+    }
+    return res
+      .status(500)
+      .json({ code: "INTERNAL_ERROR", error: "Failed to fetch submissions" });
   }
 };
 
