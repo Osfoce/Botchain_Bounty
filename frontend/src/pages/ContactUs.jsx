@@ -20,20 +20,23 @@ const CONTACT_EMAIL = "happybounty9@gmail.com";
 
 const SERVICE_ID = import.meta.env.VITE_EMAILJS_SERVICE_ID?.trim();
 const TEMPLATE_ID = import.meta.env.VITE_EMAILJS_TEMPLATE_ID?.trim();
+const NOTIFICATION_TEMPLATE_ID =
+  import.meta.env.VITE_EMAILJS_NOTIFICATION_TEMPLATE_ID?.trim();
 const PUBLIC_KEY = import.meta.env.VITE_EMAILJS_PUBLIC_KEY?.trim();
 
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+const INITIAL_FORM = {
+  name: "",
+  email: "",
+  message: "",
+};
 
 export default function ContactPage() {
   const formRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    email: "",
-    message: "",
-  });
-
+  const [form, setForm] = useState(INITIAL_FORM);
   const [image, setImage] = useState(null);
   const [imagePreview, setImagePreview] = useState("");
   const [messageSent, setMessageSent] = useState(false);
@@ -43,7 +46,7 @@ export default function ContactPage() {
   useEffect(() => {
     if (!image) {
       setImagePreview("");
-      return;
+      return undefined;
     }
 
     const previewUrl = URL.createObjectURL(image);
@@ -55,8 +58,8 @@ export default function ContactPage() {
   const handleChange = (e) => {
     const { name, value } = e.target;
 
-    setForm((prev) => ({
-      ...prev,
+    setForm((previous) => ({
+      ...previous,
       [name]: value,
     }));
 
@@ -79,7 +82,7 @@ export default function ContactPage() {
     if (selectedImage.size > MAX_IMAGE_SIZE) {
       e.target.value = "";
       setImage(null);
-      setSubmitError("Image size must not exceed 5MB.");
+      setSubmitError("Your image must not exceed 5MB.");
       return;
     }
 
@@ -106,15 +109,37 @@ export default function ContactPage() {
     setMessageSent(false);
     setSubmitError("");
 
-    if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
-      console.error("EmailJS configuration is incomplete:", {
+    const name = form.name.trim();
+    const email = form.email.trim();
+    const message = form.message.trim();
+
+    if (!name || !email || !message) {
+      setSubmitError("Please complete all required fields.");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setSubmitError("Please enter a valid email address.");
+      return;
+    }
+
+    if (
+      !SERVICE_ID ||
+      !TEMPLATE_ID ||
+      !NOTIFICATION_TEMPLATE_ID ||
+      !PUBLIC_KEY
+    ) {
+      console.error("EmailJS configuration is incomplete.", {
         serviceIdConfigured: Boolean(SERVICE_ID),
-        templateIdConfigured: Boolean(TEMPLATE_ID),
+        customerTemplateConfigured: Boolean(TEMPLATE_ID),
+        notificationTemplateConfigured: Boolean(
+          NOTIFICATION_TEMPLATE_ID
+        ),
         publicKeyConfigured: Boolean(PUBLIC_KEY),
       });
 
       setSubmitError(
-        "Email service is not configured correctly. Please contact us directly at happybounty9@gmail.com."
+        `Our email service is temporarily unavailable. Please contact us directly at ${CONTACT_EMAIL}.`
       );
       return;
     }
@@ -122,14 +147,32 @@ export default function ContactPage() {
     const formElement = formRef.current;
 
     if (!formElement) {
-      setSubmitError("The contact form could not be loaded. Please refresh and try again.");
+      setSubmitError(
+        "The contact form could not be loaded. Please refresh and try again."
+      );
       return;
     }
 
     setSending(true);
 
+    let customerEmailSent = false;
+    let teamEmailSent = false;
+
     try {
-      const response = await emailjs.sendForm(
+      /*
+       * IMPORTANT:
+       * The input name attributes below must match the variables
+       * configured in your EmailJS templates:
+       *
+       * {{name}}
+       * {{email}}
+       * {{message}}
+       *
+       * The optional image field is named contact_image.
+       */
+
+      // Send the customer's confirmation email.
+      await emailjs.sendForm(
         SERVICE_ID,
         TEMPLATE_ID,
         formElement,
@@ -138,48 +181,63 @@ export default function ContactPage() {
         }
       );
 
-      console.log("EmailJS submission successful:", response);
+      customerEmailSent = true;
 
-      setMessageSent(true);
+      // Send the message to the Happy Bounty team.
+      await emailjs.sendForm(
+        SERVICE_ID,
+        NOTIFICATION_TEMPLATE_ID,
+        formElement,
+        {
+          publicKey: PUBLIC_KEY,
+        }
+      );
 
-      setForm({
-        name: "",
-        email: "",
-        message: "",
-      });
+      teamEmailSent = true;
 
-      setImage(null);
-      formElement.reset();
+      if (customerEmailSent && teamEmailSent) {
+        setMessageSent(true);
+        setForm(INITIAL_FORM);
+        setImage(null);
 
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+        formElement.reset();
+
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
       }
     } catch (error) {
-      console.error("EmailJS submission error:", error);
+      console.error("EmailJS submission failed:", error);
       console.error("EmailJS status:", error?.status);
       console.error("EmailJS response:", error?.text);
 
-      const errorMessage =
+      const errorDetails =
         typeof error?.text === "string" && error.text.trim()
           ? error.text
-          : "Please check your EmailJS service and template settings.";
+          : "Please check your EmailJS template and service settings.";
 
-      setSubmitError(
-        `We couldn't send your message. ${errorMessage}`
-      );
+      if (customerEmailSent && !teamEmailSent) {
+        setSubmitError(
+          `Your confirmation email was sent, but we couldn't deliver your message to the Happy Bounty team. Please contact us directly at ${CONTACT_EMAIL}.`
+        );
+      } else {
+        setSubmitError(
+          `We couldn't send your message. ${errorDetails}`
+        );
+      }
     } finally {
       setSending(false);
     }
   };
 
   const inputClasses = `
-    w-full rounded-xl border border-black/10 bg-[#F3F5F3]
-    py-3.5 pl-11 pr-4 text-sm text-black outline-none
-    placeholder:text-black/25 transition-all duration-200
-    focus:border-[#00D6A0]/60 focus:bg-white
-    focus:ring-2 focus:ring-[#00D6A0]/10
-    disabled:cursor-not-allowed disabled:opacity-60
-  `;
+  w-full rounded-xl border border-black/10 bg-[#F3F5F3]
+  py-3.5 pl-11 pr-4 text-sm text-black outline-none
+  placeholder:text-gray-300 transition-all duration-200
+  focus:border-[#00D6A0]/60 focus:bg-white
+  focus:ring-2 focus:ring-[#00D6A0]/10
+  disabled:cursor-not-allowed disabled:opacity-60
+`;
 
   return (
     <div className="theme-page min-h-screen overflow-x-hidden bg-[#F3F5F3] text-[#171714]">
@@ -207,15 +265,7 @@ export default function ContactPage() {
         <div className="mb-10 sm:mb-14">
           <Link
             to="/"
-            className="
-              group inline-flex items-center gap-2 rounded-xl
-              border border-black/10 bg-white/75 px-3.5 py-2
-              text-sm font-medium text-black/60
-              shadow-[0_4px_20px_rgba(0,0,0,0.04)]
-              backdrop-blur-xl transition-all duration-200
-              hover:-translate-y-0.5 hover:border-[#00D6A0]/50
-              hover:bg-white hover:text-black active:scale-[0.98]
-            "
+            className="group inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white/75 px-3.5 py-2 text-sm font-medium text-black/60 shadow-[0_4px_20px_rgba(0,0,0,0.04)] backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 hover:border-[#00D6A0]/50 hover:bg-white hover:text-black active:scale-[0.98]"
           >
             <FiArrowLeft className="text-base text-[#007E62] transition-transform duration-200 group-hover:-translate-x-0.5" />
             <span>Back</span>
@@ -258,7 +308,6 @@ export default function ContactPage() {
                   <h2 className="text-xl font-bold text-[#171714] sm:text-2xl">
                     Send us a message
                   </h2>
-
                   <p className="mt-1 text-sm leading-5 text-black/40">
                     Fill out the form and we'll get back to you.
                   </p>
@@ -278,7 +327,6 @@ export default function ContactPage() {
                     <p className="text-sm font-bold text-[#006B50]">
                       Message sent successfully!
                     </p>
-
                     <p className="mt-1 text-xs leading-5 text-[#006B50]/70">
                       Thank you for reaching out. We appreciate your message.
                     </p>
@@ -294,7 +342,6 @@ export default function ContactPage() {
                   className="mb-6 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4"
                 >
                   <FiAlertCircle className="mt-0.5 shrink-0 text-lg text-red-500" />
-
                   <p className="break-words text-sm leading-5 text-red-700">
                     {submitError}
                   </p>
@@ -306,11 +353,12 @@ export default function ContactPage() {
                 ref={formRef}
                 onSubmit={handleSubmit}
                 className="space-y-5"
+                encType="multipart/form-data"
               >
                 {/* NAME */}
                 <div>
                   <label
-                    htmlFor="name"
+                    htmlFor="contact-name"
                     className="mb-2 block text-xs font-bold uppercase tracking-wider text-black/50"
                   >
                     Name
@@ -320,7 +368,7 @@ export default function ContactPage() {
                     <FiUsers className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-black/25" />
 
                     <input
-                      id="name"
+                      id="contact-name"
                       type="text"
                       name="name"
                       value={form.name}
@@ -328,6 +376,7 @@ export default function ContactPage() {
                       placeholder="Your name"
                       className={inputClasses}
                       autoComplete="name"
+                      maxLength={100}
                       required
                       disabled={sending}
                     />
@@ -337,7 +386,7 @@ export default function ContactPage() {
                 {/* EMAIL */}
                 <div>
                   <label
-                    htmlFor="email"
+                    htmlFor="contact-email"
                     className="mb-2 block text-xs font-bold uppercase tracking-wider text-black/50"
                   >
                     Email
@@ -347,14 +396,15 @@ export default function ContactPage() {
                     <FiMail className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-black/25" />
 
                     <input
-                      id="email"
+                      id="contact-email"
                       type="email"
                       name="email"
                       value={form.email}
                       onChange={handleChange}
                       placeholder="Your email address"
-                      className={inputClasses}
+                      className={inputClasses} 
                       autoComplete="email"
+                      maxLength={254}
                       required
                       disabled={sending}
                     />
@@ -364,7 +414,7 @@ export default function ContactPage() {
                 {/* MESSAGE */}
                 <div>
                   <label
-                    htmlFor="message"
+                    htmlFor="contact-message"
                     className="mb-2 block text-xs font-bold uppercase tracking-wider text-black/50"
                   >
                     Message
@@ -374,31 +424,27 @@ export default function ContactPage() {
                     <FiMessageCircle className="pointer-events-none absolute left-4 top-4 text-black/25" />
 
                     <textarea
-                      id="message"
+                      id="contact-message"
                       name="message"
                       value={form.message}
                       onChange={handleChange}
                       placeholder="Write your message..."
-                      rows="5"
-                      className="
-                        min-h-[130px] w-full resize-y rounded-xl
-                        border border-black/10 bg-[#F3F5F3]
-                        py-3.5 pl-11 pr-4 text-sm leading-6
-                        text-black outline-none placeholder:text-black/25
-                        transition-all duration-200
-                        focus:border-[#00D6A0]/60 focus:bg-white
-                        focus:ring-2 focus:ring-[#00D6A0]/10
-                        disabled:cursor-not-allowed disabled:opacity-60
-                      "
+                      rows={5}
+                      maxLength={5000}
+                      className="min-h-[130px] w-full resize-y rounded-xl border border-black/10 bg-[#F3F5F3] py-3.5 pl-11 pr-4 text-sm leading-6 text-black outline-none placeholder:text-gray-25 transition-all duration-200 focus:border-[#00D6A0]/60 focus:bg-white focus:ring-2 focus:ring-[#00D6A0]/10 disabled:cursor-not-allowed disabled:opacity-60"
                       required
                       disabled={sending}
                     />
                   </div>
+
+                  <p className="mt-1.5 text-right text-[11px] text-black/30">
+                    {form.message.length}/5000
+                  </p>
                 </div>
 
                 {/* ADD IMAGE */}
                 <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-black/50">
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-gray-50">
                     Add Image{" "}
                     <span className="font-medium normal-case tracking-normal text-black/30">
                       (Optional)
@@ -419,14 +465,7 @@ export default function ContactPage() {
                   {!image ? (
                     <label
                       htmlFor="contact-image"
-                      className="
-                        group flex min-h-[115px] cursor-pointer
-                        flex-col items-center justify-center gap-2
-                        rounded-xl border-2 border-dashed
-                        border-black/10 px-4 py-5
-                        text-center transition-all duration-200
-                        hover:border-[#00D6A0]/60 hover:bg-[#00D6A0]/[0.04]
-                      "
+                      className="group flex min-h-[115px] cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-black/10 px-4 py-5 text-center transition-all duration-200 hover:border-[#00D6A0]/60 hover:bg-[#00D6A0]/[0.04]"
                     >
                       <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#00D6A0]/20 bg-white text-[#007E62] transition-transform group-hover:scale-105">
                         <FiUploadCloud className="text-xl" />
@@ -436,8 +475,8 @@ export default function ContactPage() {
                         Click to upload an image
                       </span>
 
-                      <span className="text-xs text-black/35">
-                        PNG, JPG, WEBP · Maximum 5MB
+                      <span className="text-xs text-gray-35">
+                        PNG, JPG, WEBP, GIF · Maximum 5MB
                       </span>
                     </label>
                   ) : (
@@ -479,18 +518,7 @@ export default function ContactPage() {
                 <button
                   type="submit"
                   disabled={sending}
-                  className="
-                    group flex w-full items-center justify-center gap-2
-                    rounded-xl bg-[#171714] px-5 py-3.5
-                    text-sm font-bold text-white
-                    shadow-[0_8px_25px_rgba(0,0,0,0.12)]
-                    transition-all duration-200
-                    hover:-translate-y-0.5 hover:bg-[#292924]
-                    hover:shadow-[0_12px_35px_rgba(0,0,0,0.16)]
-                    active:scale-[0.98]
-                    disabled:cursor-not-allowed disabled:opacity-60
-                    disabled:hover:translate-y-0
-                  "
+                  className="group flex w-full items-center justify-center gap-2 rounded-xl bg-[#171714] px-5 py-3.5 text-sm font-bold text-white shadow-[0_8px_25px_rgba(0,0,0,0.12)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-[#292924] hover:shadow-[0_12px_35px_rgba(0,0,0,0.16)] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0"
                 >
                   {sending ? (
                     <>
@@ -517,28 +545,10 @@ export default function ContactPage() {
             {/* OFFICIAL CONTACT EMAIL */}
             <a
               href={`mailto:${CONTACT_EMAIL}`}
-              className="
-                group relative overflow-hidden rounded-2xl
-                border border-[#00D6A0]/25
-                bg-[#00D6A0]/[0.045] p-5
-                shadow-[0_8px_30px_rgba(0,0,0,0.04)]
-                transition-all duration-300
-                hover:-translate-y-1
-                hover:border-[#00D6A0]/50
-                hover:bg-[#00D6A0]/[0.08]
-                sm:p-6
-              "
+              className="group relative overflow-hidden rounded-2xl border border-[#00D6A0]/25 bg-[#00D6A0]/[0.045] p-5 shadow-[0_8px_30px_rgba(0,0,0,0.04)] transition-all duration-300 hover:-translate-y-1 hover:border-[#00D6A0]/50 hover:bg-[#00D6A0]/[0.08] sm:p-6"
             >
               <div className="flex items-center gap-4">
-                <div
-                  className="
-                    flex h-11 w-11 shrink-0 items-center justify-center
-                    rounded-xl border border-[#00D6A0]/25
-                    bg-[#00D6A0]/[0.10] text-[#007E62]
-                    transition-transform duration-300
-                    group-hover:scale-110
-                  "
-                >
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/[0.10] text-[#007E62] transition-transform duration-300 group-hover:scale-110">
                   <FiMail className="text-lg" />
                 </div>
 
