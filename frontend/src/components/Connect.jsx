@@ -5,7 +5,6 @@ import { useState } from "react";
 import { FiChevronDown, FiLogOut, FiRadio } from "react-icons/fi";
 import { useDisconnect } from "wagmi";
 import { useTheme } from "../context/ThemeContext";
-import WalletAuthControl from "./WalletAuthControl";
 import WalletSignupButton from "./WalletSignupButton";
 
 function Connect() {
@@ -175,7 +174,6 @@ function Connect() {
       }}
     </ConnectButton.Custom>
     <WalletSignupButton compact showMessage={false} className="px-4 py-2" />
-    <WalletAuthControl />
     </>
   );
 }

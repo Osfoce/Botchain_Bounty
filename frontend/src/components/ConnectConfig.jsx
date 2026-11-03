@@ -1,7 +1,6 @@
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 import { useTheme } from "../context/ThemeContext";
-import WalletAuthControl from "./WalletAuthControl";
 
 function ConnectConfig() {
   const { dark } = useTheme();
@@ -250,7 +249,6 @@ function ConnectConfig() {
         );
       }}
     </ConnectButton.Custom>
-    <WalletAuthControl />
     </>
   );
 }
