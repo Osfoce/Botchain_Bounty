@@ -43,6 +43,9 @@ const analyticsRoutes = require("./routes/analytics.route");
 const authRoutes = require("./routes/auth.route");
 
 const app = express();
+// This backend is an API consumed by Axios clients that do not keep a local
+// response cache. Avoid bodyless conditional 304 responses to JSON requests.
+app.set("etag", false);
 const port = process.env.PORT || 5000;
 const isDatabaseReady = (connection = mongoose.connection) =>
   connection.readyState === 1;
