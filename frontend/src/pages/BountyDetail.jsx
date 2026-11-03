@@ -57,6 +57,22 @@ const parseDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const formatCountdownParts = (milliseconds) => {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return {
+    days,
+    hours,
+    minutes,
+    seconds,
+  };
+};
+
 const getBrowserStorage = () => {
   try {
     return window.localStorage;
@@ -295,8 +311,7 @@ const BountyDetail = () => {
 
           canvas.toBlob(
             (blob) => {
-              if (!blob)
-                return reject(new Error("Image compression failed"));
+              if (!blob) return reject(new Error("Image compression failed"));
 
               resolve(
                 new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), {
@@ -320,10 +335,9 @@ const BountyDetail = () => {
 
   const checkUserEnrollment = async (wallet, bountyId) => {
     try {
-      const { data } = await apiClient.get(
-        `/user/get-enrollment/${wallet}`,
-        { params: { bountyId } },
-      );
+      const { data } = await apiClient.get(`/user/get-enrollment/${wallet}`, {
+        params: { bountyId },
+      });
 
       return (data.enrollments || []).some(
         (entry) => String(entry.bountyId) === String(bountyId),
@@ -353,9 +367,7 @@ const BountyDetail = () => {
 
   const loadWinnersData = async (bountyId) => {
     try {
-      const { data } = await axios.get(
-        `${API_URL}/bounty/${bountyId}/winners`,
-      );
+      const { data } = await axios.get(`${API_URL}/bounty/${bountyId}/winners`);
 
       setWinnersData(data);
 
@@ -425,9 +437,7 @@ const BountyDetail = () => {
 
   const loadComments = async (bountyId) => {
     try {
-      const { data } = await axios.get(
-        `${API_URL}/comments/${bountyId}`,
-      );
+      const { data } = await axios.get(`${API_URL}/comments/${bountyId}`);
 
       setComments(data.comments || []);
     } catch (error) {
@@ -479,9 +489,7 @@ const BountyDetail = () => {
                 chainId: Number(bountyData.network),
               });
             } catch {
-              showToast.error(
-                "Please switch network manually in your wallet",
-              );
+              showToast.error("Please switch network manually in your wallet");
             }
           }
 
@@ -569,10 +577,9 @@ const BountyDetail = () => {
           id: toastId,
         });
       } else {
-        showToast.error(
-          error.response?.data?.error || "Enrollment failed",
-          { id: toastId },
-        );
+        showToast.error(error.response?.data?.error || "Enrollment failed", {
+          id: toastId,
+        });
       }
     } finally {
       setIsEnrolling(false);
@@ -654,10 +661,9 @@ const BountyDetail = () => {
         headers: { "Content-Type": "multipart/form-data" },
       });
 
-      showToast.success(
-        "Submission received. Pending review.",
-        { id: toastId },
-      );
+      showToast.success("Submission received. Pending review.", {
+        id: toastId,
+      });
 
       setHasUserSubmitted(true);
 
@@ -686,8 +692,11 @@ const BountyDetail = () => {
   const handleClaimReward = async () => {
     if (!address) return showToast.error("Please connect your wallet");
     if (!isAuthenticated)
-      return showToast.error("Sign in with your wallet before claiming rewards.");
-    if (blockchainId === null) return showToast.error("This bounty is not on-chain");
+      return showToast.error(
+        "Sign in with your wallet before claiming rewards.",
+      );
+    if (blockchainId === null)
+      return showToast.error("This bounty is not on-chain");
 
     if (Number(currentChainId) !== Number(bounty.network)) {
       try {
@@ -696,9 +705,7 @@ const BountyDetail = () => {
           "Network switched. Sign in again on this network, then continue.",
         );
       } catch {
-        return showToast.error(
-          "Please switch network manually in your wallet",
-        );
+        return showToast.error("Please switch network manually in your wallet");
       }
       return;
     }
@@ -717,7 +724,9 @@ const BountyDetail = () => {
         await loadWinnersData(id);
         await refetchClaimable();
       } catch (error) {
-        showToast.error(error.message || "Claim synchronization is still pending.");
+        showToast.error(
+          error.message || "Claim synchronization is still pending.",
+        );
       }
       return;
     }
@@ -743,7 +752,10 @@ const BountyDetail = () => {
             }),
           );
         } catch (error) {
-          console.error("Could not persist pending claim synchronization:", error);
+          console.error(
+            "Could not persist pending claim synchronization:",
+            error,
+          );
           showToast.error(
             "Claim transaction succeeded, but browser recovery storage is unavailable.",
           );
@@ -838,7 +850,9 @@ const BountyDetail = () => {
 
   const handleDistributeReward = async () => {
     if (!isAuthenticated)
-      return showToast.error("Sign in with your wallet before distributing rewards.");
+      return showToast.error(
+        "Sign in with your wallet before distributing rewards.",
+      );
 
     const valid = winnerAddresses.map((value) => value.trim());
 
@@ -865,9 +879,7 @@ const BountyDetail = () => {
     const chainId = Number(bounty.network);
     const bountyContract = getBountyContract(chainId);
     if (!bountyContract) {
-      return showToast.error(
-        `Contract not configured for chain ${chainId}`,
-      );
+      return showToast.error(`Contract not configured for chain ${chainId}`);
     }
 
     const storageKey = getDistributionSyncStorageKey(chainId, id);
@@ -889,9 +901,7 @@ const BountyDetail = () => {
           "Network switched. Sign in again on this network, then distribute rewards.",
         );
       } catch {
-        return showToast.error(
-          "Please switch network manually in your wallet",
-        );
+        return showToast.error("Please switch network manually in your wallet");
       }
       return;
     }
@@ -905,9 +915,12 @@ const BountyDetail = () => {
     } catch (error) {
       const txHash = error.transactionHash;
       if (txHash && error.transactionStatus === "reverted") {
-        showToast.error("The winner-assignment transaction reverted on-chain.", {
-          id: toastId,
-        });
+        showToast.error(
+          "The winner-assignment transaction reverted on-chain.",
+          {
+            id: toastId,
+          },
+        );
       } else if (txHash) {
         const pendingRecord = {
           bountyId: String(id),
@@ -929,7 +942,9 @@ const BountyDetail = () => {
         );
       } else {
         showToast.error(
-          error.shortMessage || error.message || "Transaction submission failed",
+          error.shortMessage ||
+            error.message ||
+            "Transaction submission failed",
           { id: toastId },
         );
       }
@@ -964,7 +979,9 @@ const BountyDetail = () => {
   const retryDistributionSync = async () => {
     if (!pendingDistributionSync || distributing) return;
     if (!isAuthenticated)
-      return showToast.error("Sign in with your wallet before syncing rewards.");
+      return showToast.error(
+        "Sign in with your wallet before syncing rewards.",
+      );
     setDistributing(true);
     try {
       let record = pendingDistributionSync;
@@ -977,7 +994,9 @@ const BountyDetail = () => {
           (supportedChain) => supportedChain.id === record.chainId,
         );
         if (!chain) {
-          throw new Error(`No wallet chain configuration for ${record.chainId}`);
+          throw new Error(
+            `No wallet chain configuration for ${record.chainId}`,
+          );
         }
         const client = createPublicClient({
           chain,
@@ -989,7 +1008,9 @@ const BountyDetail = () => {
         if (receipt.status !== "success") {
           clearDistributionSyncRecord(getBrowserStorage(), record);
           setPendingDistributionSync(null);
-          throw new Error("The winner-assignment transaction reverted on-chain.");
+          throw new Error(
+            "The winner-assignment transaction reverted on-chain.",
+          );
         }
         record = { ...record, status: "pending_sync" };
         persistPendingDistribution(record);
@@ -1044,9 +1065,7 @@ const BountyDetail = () => {
   };
 
   const isSelected = (addr) =>
-    selectedWinners.some(
-      (item) => item.address === addr?.toLowerCase(),
-    );
+    selectedWinners.some((item) => item.address === addr?.toLowerCase());
 
   const hasEnoughSelections = () =>
     selectedWinners.length === 0 ||
@@ -1055,14 +1074,10 @@ const BountyDetail = () => {
 
   const openDistributeModal = () => {
     if (selectedWinners.length) {
-      setWinnerAddresses(
-        selectedWinners.map((item) => item.address),
-      );
+      setWinnerAddresses(selectedWinners.map((item) => item.address));
     } else {
       const count =
-        bounty?.payoutType === "SINGLE"
-          ? 1
-          : bounty?.winnersAllowed || 1;
+        bounty?.payoutType === "SINGLE" ? 1 : bounty?.winnersAllowed || 1;
 
       setWinnerAddresses(Array(count).fill(""));
     }
@@ -1087,9 +1102,7 @@ const BountyDetail = () => {
 
       showToast.success("Comment added");
     } catch (error) {
-      showToast.error(
-        error.response?.data?.error || "Failed to add comment",
-      );
+      showToast.error(error.response?.data?.error || "Failed to add comment");
     } finally {
       setCommentSubmitting(false);
     }
@@ -1106,9 +1119,7 @@ const BountyDetail = () => {
 
     if (blockchainId !== null) {
       return Boolean(
-        onChainClaimable &&
-        onChainClaimable > 0n &&
-        !onChainClaimed,
+        onChainClaimable && onChainClaimable > 0n && !onChainClaimed,
       );
     }
 
@@ -1116,26 +1127,17 @@ const BountyDetail = () => {
   };
 
   const canDistribute = () => {
-    if (
-      !isCreator ||
-      !bounty?.deadline ||
-      winnersData?.isDistributed
-    ) {
+    if (!isCreator || !bounty?.deadline || winnersData?.isDistributed) {
       return false;
     }
 
     const deadline = parseDate(bounty.deadline);
 
-    return Boolean(
-      deadline && deadline.getTime() < currentTime,
-    );
+    return Boolean(deadline && deadline.getTime() < currentTime);
   };
 
   const displayClaimable = () => {
-    if (
-      blockchainId !== null &&
-      onChainClaimable !== undefined
-    ) {
+    if (blockchainId !== null && onChainClaimable !== undefined) {
       return formatAmount(formatEther(onChainClaimable));
     }
 
@@ -1192,9 +1194,7 @@ const BountyDetail = () => {
               <FiSearch size={28} />
             </div>
 
-            <h1 className="text-2xl font-bold">
-              Bounty not found
-            </h1>
+            <h1 className="text-2xl font-bold">Bounty not found</h1>
 
             <p className="mt-2 text-sm leading-6 text-[#737c74] dark:text-white/50">
               This bounty may have been removed or the link may be incorrect.
@@ -1216,14 +1216,11 @@ const BountyDetail = () => {
   }
 
   const networkName =
-    supportedChains.find(
-      (chain) => chain.id === Number(bounty.network),
-    )?.name || `Chain ${bounty.network}`;
+    supportedChains.find((chain) => chain.id === Number(bounty.network))
+      ?.name || `Chain ${bounty.network}`;
 
   const token =
-    bounty.token ||
-    getNativeToken(bounty.network)?.symbol ||
-    "Token";
+    bounty.token || getNativeToken(bounty.network)?.symbol || "Token";
 
   // Date values are instants; format them in the viewer's local time zone.
   const startDate = parseDate(bounty.startDate);
@@ -1232,9 +1229,7 @@ const BountyDetail = () => {
   const startTimestamp = startDate?.getTime() ?? null;
   const deadlineTimestamp = deadlineDate?.getTime() ?? null;
 
-  const originalStatus = String(
-    bounty.status || "",
-  ).toLowerCase();
+  const originalStatus = String(bounty.status || "").toLowerCase();
 
   // Completed and cancelled are final statuses.
   // Otherwise, the dates determine whether the bounty is upcoming, active, or ended.
@@ -1261,8 +1256,7 @@ const BountyDetail = () => {
       : null;
 
   const deadlinePassed =
-    deadlineTimestamp !== null &&
-    deadlineTimestamp <= currentTime;
+    deadlineTimestamp !== null && deadlineTimestamp <= currentTime;
 
   const countdownDateLabel =
     displayStatus === "upcoming" ? "Starts" : "Deadline";
@@ -1275,9 +1269,7 @@ const BountyDetail = () => {
         : "Bounty schedule";
 
   const displayDate =
-    displayStatus === "upcoming"
-      ? bounty.startDate
-      : bounty.deadline;
+    displayStatus === "upcoming" ? bounty.startDate : bounty.deadline;
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f5f7f4] dark:bg-[#080b09] text-[#171b18] dark:text-white transition-colors duration-300">
@@ -1379,7 +1371,8 @@ const BountyDetail = () => {
                     <p className="whitespace-pre-wrap break-words text-sm leading-7 text-[#515b52] dark:text-white/70 sm:text-base">
                       {showFullDescription
                         ? bounty.description || "No description provided."
-                        : (bounty.description || "No description provided.").length > 280
+                        : (bounty.description || "No description provided.")
+                              .length > 280
                           ? `${bounty.description.slice(0, 280).trimEnd()}…`
                           : bounty.description || "No description provided."}
                     </p>
@@ -1554,7 +1547,10 @@ const BountyDetail = () => {
                         </p>
 
                         <p className="flex items-center gap-2 break-words text-sm font-semibold">
-                          <FiTag className="shrink-0 text-[#008a66] dark:text-[#00D6A0]" size={15} />
+                          <FiTag
+                            className="shrink-0 text-[#008a66] dark:text-[#00D6A0]"
+                            size={15}
+                          />
                           {bounty.category || "Uncategorized"}
                         </p>
                       </div>
@@ -1591,7 +1587,13 @@ const BountyDetail = () => {
                           <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-[#899189] dark:text-white/40">
                             Project resources
                           </p>
-                          <a href={safeExternalUrl(bounty.originLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project resources in a new tab" className="inline-flex max-w-full items-center gap-2 text-sm font-semibold text-[#008a66] hover:underline dark:text-[#00D6A0]">
+                          <a
+                            href={safeExternalUrl(bounty.originLink)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label="Open project resources in a new tab"
+                            className="inline-flex max-w-full items-center gap-2 text-sm font-semibold text-[#008a66] hover:underline dark:text-[#00D6A0]"
+                          >
                             <FiGlobe size={15} className="shrink-0" />
                             <span className="break-all">
                               {getHostname(bounty.originLink)}
@@ -1658,54 +1660,50 @@ const BountyDetail = () => {
                       </p>
                     )}
 
-                    {!isCreator &&
-                      address &&
-                      displayStatus === "active" && (
-                        <>
-                          {enrollmentStatus === "checking" && (
-                            <div className="rounded-xl border border-[#dfe5dd] dark:border-white/10 px-4 py-3 text-sm text-[#7a837a] dark:text-white/50">
-                              Checking enrollment...
-                            </div>
-                          )}
+                    {!isCreator && address && displayStatus === "active" && (
+                      <>
+                        {enrollmentStatus === "checking" && (
+                          <div className="rounded-xl border border-[#dfe5dd] dark:border-white/10 px-4 py-3 text-sm text-[#7a837a] dark:text-white/50">
+                            Checking enrollment...
+                          </div>
+                        )}
 
-                          {enrollmentStatus === "not-enrolled" && (
+                        {enrollmentStatus === "not-enrolled" && (
+                          <button
+                            onClick={handleEnroll}
+                            disabled={isEnrolling}
+                            className={`${primaryButton} w-full sm:w-auto`}
+                          >
+                            <FiZap size={16} />
+                            {isEnrolling ? "Enrolling..." : "Start task"}
+                          </button>
+                        )}
+
+                        {enrollmentStatus === "enrolled" &&
+                          !hasUserSubmitted && (
                             <button
-                              onClick={handleEnroll}
-                              disabled={isEnrolling}
+                              onClick={() => setShowSubmitModal(true)}
                               className={`${primaryButton} w-full sm:w-auto`}
                             >
-                              <FiZap size={16} />
-                              {isEnrolling ? "Enrolling..." : "Start task"}
+                              <FiSend size={16} />
+                              Submit your work
                             </button>
                           )}
 
-                          {enrollmentStatus === "enrolled" &&
-                            !hasUserSubmitted && (
-                              <button
-                                onClick={() => setShowSubmitModal(true)}
-                                className={`${primaryButton} w-full sm:w-auto`}
-                              >
-                                <FiSend size={16} />
-                                Submit your work
-                              </button>
-                            )}
-
-                          {enrollmentStatus === "enrolled" &&
-                            hasUserSubmitted && (
-                              <span className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/10 px-4 py-3 text-sm font-semibold text-[#008a66] dark:text-[#00D6A0]">
-                                <FiCheckCircle />
-                                Submission received
-                              </span>
-                            )}
-                        </>
-                      )}
+                        {enrollmentStatus === "enrolled" &&
+                          hasUserSubmitted && (
+                            <span className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/10 px-4 py-3 text-sm font-semibold text-[#008a66] dark:text-[#00D6A0]">
+                              <FiCheckCircle />
+                              Submission received
+                            </span>
+                          )}
+                      </>
+                    )}
 
                     {canClaim() && (
                       <button
                         onClick={handleClaimReward}
-                        disabled={
-                          isContractPending || isContractConfirming
-                        }
+                        disabled={isContractPending || isContractConfirming}
                         className={`${primaryButton} w-full sm:w-auto`}
                       >
                         <FiAward size={16} />
@@ -1768,9 +1766,7 @@ const BountyDetail = () => {
                       </div>
 
                       <div className="min-w-0 flex-1">
-                        <h2 className="text-lg font-bold">
-                          Your submission
-                        </h2>
+                        <h2 className="text-lg font-bold">Your submission</h2>
 
                         <p className="mt-1 text-xs text-[#778077] dark:text-white/45">
                           Your work and proof of completion
@@ -1799,7 +1795,13 @@ const BountyDetail = () => {
 
                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                       {safeExternalUrl(userSubmission.projectLink) && (
-                        <a href={safeExternalUrl(userSubmission.projectLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project link in a new tab" className={`${secondaryButton} min-w-0 justify-start`}>
+                        <a
+                          href={safeExternalUrl(userSubmission.projectLink)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open project link in a new tab"
+                          className={`${secondaryButton} min-w-0 justify-start`}
+                        >
                           <FiLink className="shrink-0 text-[#008a66] dark:text-[#00D6A0]" />
                           <span className="truncate">
                             {getHostname(userSubmission.projectLink)}
@@ -1807,8 +1809,18 @@ const BountyDetail = () => {
                           <FiExternalLink className="shrink-0" />
                         </a>
                       )}
-                      {safeExternalUrl(userSubmission.image, { httpsOnly: true }) && (
-                        <a href={safeExternalUrl(userSubmission.image, { httpsOnly: true })} target="_blank" rel="noopener noreferrer" aria-label="Open submission image in a new tab" className={`${secondaryButton} justify-start`}>
+                      {safeExternalUrl(userSubmission.image, {
+                        httpsOnly: true,
+                      }) && (
+                        <a
+                          href={safeExternalUrl(userSubmission.image, {
+                            httpsOnly: true,
+                          })}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label="Open submission image in a new tab"
+                          className={`${secondaryButton} justify-start`}
+                        >
                           <FiExternalLink className="text-[#008a66] dark:text-[#00D6A0]" />
                           View submission image
                         </a>
@@ -1912,7 +1924,6 @@ const BountyDetail = () => {
                         <h2 className="flex items-center gap-2 text-xl font-bold">
                           <FiUsers className="text-[#008a66] dark:text-[#00D6A0]" />
                           Submissions
-
                           <span className="rounded-lg bg-[#f0f4ef] dark:bg-white/[0.05] px-2 py-1 text-xs font-semibold text-[#69736a] dark:text-white/60">
                             {allSubmissions.length}
                           </span>
@@ -1952,8 +1963,7 @@ const BountyDetail = () => {
                                 className="flex items-center justify-between gap-3 text-sm"
                               >
                                 <span className="font-mono text-[#606b61] dark:text-white/65">
-                                  {index + 1}.{" "}
-                                  {shortenAddress(winner.address)}
+                                  {index + 1}. {shortenAddress(winner.address)}
                                 </span>
 
                                 <span className="font-bold text-[#008a66] dark:text-[#00D6A0]">
@@ -1976,8 +1986,7 @@ const BountyDetail = () => {
 
                         const selectionIndex = selectedWinners.findIndex(
                           (item) =>
-                            item.address ===
-                            submission.user?.toLowerCase(),
+                            item.address === submission.user?.toLowerCase(),
                         );
 
                         const current =
@@ -2037,21 +2046,40 @@ const BountyDetail = () => {
                                 {(submission.projectLink ||
                                   submission.image) && (
                                   <div className="mt-3 flex flex-wrap gap-2">
-                                    {safeExternalUrl(submission.projectLink) && (
-                                      <a href={safeExternalUrl(submission.projectLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project link in a new tab" className={`${secondaryButton} min-w-0 flex-1 !px-3 !py-2.5`}>
+                                    {safeExternalUrl(
+                                      submission.projectLink,
+                                    ) && (
+                                      <a
+                                        href={safeExternalUrl(
+                                          submission.projectLink,
+                                        )}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label="Open project link in a new tab"
+                                        className={`${secondaryButton} min-w-0 flex-1 !px-3 !py-2.5`}
+                                      >
                                         <FiLink className="shrink-0" />
 
                                         <span className="truncate">
-                                          {getHostname(
-                                            submission.projectLink,
-                                          )}
+                                          {getHostname(submission.projectLink)}
                                         </span>
 
                                         <FiExternalLink className="shrink-0" />
                                       </a>
                                     )}
-                                    {safeExternalUrl(submission.image, { httpsOnly: true }) && (
-                                      <a href={safeExternalUrl(submission.image, { httpsOnly: true })} target="_blank" rel="noopener noreferrer" aria-label="Open submission image in a new tab" className={`${secondaryButton} !px-3 !py-2.5`}>
+                                    {safeExternalUrl(submission.image, {
+                                      httpsOnly: true,
+                                    }) && (
+                                      <a
+                                        href={safeExternalUrl(
+                                          submission.image,
+                                          { httpsOnly: true },
+                                        )}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        aria-label="Open submission image in a new tab"
+                                        className={`${secondaryButton} !px-3 !py-2.5`}
+                                      >
                                         <FiExternalLink /> View image
                                       </a>
                                     )}
@@ -2124,9 +2152,7 @@ const BountyDetail = () => {
                     </div>
 
                     <div>
-                      <h2 className="text-lg font-bold">
-                        Discussion
-                      </h2>
+                      <h2 className="text-lg font-bold">Discussion</h2>
 
                       <p className="mt-1 text-xs text-[#778077] dark:text-white/45">
                         Ask questions and share useful information
@@ -2185,9 +2211,7 @@ const BountyDetail = () => {
                   >
                     <input
                       value={newComment}
-                      onChange={(event) =>
-                        setNewComment(event.target.value)
-                      }
+                      onChange={(event) => setNewComment(event.target.value)}
                       placeholder={
                         address
                           ? "Write a comment..."
@@ -2200,9 +2224,7 @@ const BountyDetail = () => {
                     <button
                       type="submit"
                       disabled={
-                        !address ||
-                        !newComment.trim() ||
-                        commentSubmitting
+                        !address || !newComment.trim() || commentSubmitting
                       }
                       className={`${primaryButton} sm:shrink-0`}
                     >
@@ -2221,9 +2243,7 @@ const BountyDetail = () => {
                     Bounty overview
                   </p>
 
-                  <h2 className="mt-2 text-lg font-bold">
-                    At a glance
-                  </h2>
+                  <h2 className="mt-2 text-lg font-bold">At a glance</h2>
                 </div>
 
                 <div className="space-y-4 p-5">
@@ -2289,8 +2309,15 @@ const BountyDetail = () => {
                   </div>
 
                   {safeExternalUrl(bounty.originLink) && (
-                    <a href={safeExternalUrl(bounty.originLink)} target="_blank" rel="noopener noreferrer" aria-label="Open project website in a new tab" className={`${secondaryButton} w-full`}>
-                      <FiGlobe size={16} /> Visit project <FiExternalLink size={13} />
+                    <a
+                      href={safeExternalUrl(bounty.originLink)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label="Open project website in a new tab"
+                      className={`${secondaryButton} w-full`}
+                    >
+                      <FiGlobe size={16} /> Visit project{" "}
+                      <FiExternalLink size={13} />
                     </a>
                   )}
                 </div>
@@ -2302,12 +2329,11 @@ const BountyDetail = () => {
                     <FiShield size={19} />
                   </div>
 
-                  <h3 className="font-bold">
-                    Work. Earn. Grow.
-                  </h3>
+                  <h3 className="font-bold">Work. Earn. Grow.</h3>
 
                   <p className="mt-2 text-sm leading-6 text-[#778077] dark:text-white/50">
-                    Complete the task, submit your proof, and get rewarded when your work is approved.
+                    Complete the task, submit your proof, and get rewarded when
+                    your work is approved.
                   </p>
                 </div>
               </section>
@@ -2330,9 +2356,7 @@ const BountyDetail = () => {
           >
             <div className="flex items-start justify-between border-b border-[#e5e9e3] dark:border-white/[0.08] p-5 sm:p-6">
               <div>
-                <h2 className="text-xl font-extrabold">
-                  Submit your work
-                </h2>
+                <h2 className="text-xl font-extrabold">Submit your work</h2>
 
                 <p className="mt-1 text-sm text-[#778077] dark:text-white/50">
                   Share your completed task and proof.
@@ -2352,10 +2376,7 @@ const BountyDetail = () => {
               </button>
             </div>
 
-            <form
-              onSubmit={handleSubmit}
-              className="space-y-5 p-5 sm:p-6"
-            >
+            <form onSubmit={handleSubmit} className="space-y-5 p-5 sm:p-6">
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   Screenshot or image proof{" "}
@@ -2373,12 +2394,25 @@ const BountyDetail = () => {
                     />
                   ) : (
                     <>
-                      <FiUploadCloud size={27} className="mb-3 text-[#008a66] dark:text-[#00D6A0]" />
-                      <span className="text-sm font-semibold">Choose an image</span>
-                      <span className="mt-1 text-xs text-[#899189] dark:text-white/40">JPEG, PNG, or WebP</span>
+                      <FiUploadCloud
+                        size={27}
+                        className="mb-3 text-[#008a66] dark:text-[#00D6A0]"
+                      />
+                      <span className="text-sm font-semibold">
+                        Choose an image
+                      </span>
+                      <span className="mt-1 text-xs text-[#899189] dark:text-white/40">
+                        JPEG, PNG, or WebP
+                      </span>
                     </>
                   )}
-                  <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} className="sr-only" />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handleImageUpload}
+                    className="sr-only"
+                  />
                 </label>
 
                 {imagePreview && (
@@ -2436,9 +2470,7 @@ const BountyDetail = () => {
                 <input
                   type="url"
                   value={submissionLink}
-                  onChange={(event) =>
-                    setSubmissionLink(event.target.value)
-                  }
+                  onChange={(event) => setSubmissionLink(event.target.value)}
                   placeholder="https://github.com/..."
                   required
                   className={`${inputClass} ${
@@ -2448,12 +2480,11 @@ const BountyDetail = () => {
                   }`}
                 />
 
-                {submissionLinkError &&
-                  submissionLink.length > 0 && (
-                    <p className="mt-2 text-xs text-red-500">
-                      {submissionLinkError}
-                    </p>
-                  )}
+                {submissionLinkError && submissionLink.length > 0 && (
+                  <p className="mt-2 text-xs text-red-500">
+                    {submissionLinkError}
+                  </p>
+                )}
               </div>
 
               <button
@@ -2486,9 +2517,7 @@ const BountyDetail = () => {
           >
             <div className="flex items-start justify-between border-b border-[#e5e9e3] dark:border-white/[0.08] p-5 sm:p-6">
               <div>
-                <h2 className="text-xl font-extrabold">
-                  Distribute rewards
-                </h2>
+                <h2 className="text-xl font-extrabold">Distribute rewards</h2>
 
                 <p className="mt-1 text-sm text-[#778077] dark:text-white/50">
                   Confirm the selected winner addresses.
@@ -2511,9 +2540,7 @@ const BountyDetail = () => {
                   Bounty
                 </p>
 
-                <p className="mt-1 break-words font-bold">
-                  {bounty.title}
-                </p>
+                <p className="mt-1 break-words font-bold">{bounty.title}</p>
 
                 <p className="mt-3 text-xs text-[#778077] dark:text-white/50">
                   Total reward
@@ -2530,12 +2557,9 @@ const BountyDetail = () => {
 
                   if (bounty.payoutType === "MULTI_EQUAL") {
                     amount /= Number(bounty.winnersAllowed) || 1;
-                  } else if (
-                    bounty.payoutType === "MULTI_PERCENTAGE"
-                  ) {
+                  } else if (bounty.payoutType === "MULTI_PERCENTAGE") {
                     amount =
-                      (amount *
-                        (Number(bounty.percentages?.[index]) || 0)) /
+                      (amount * (Number(bounty.percentages?.[index]) || 0)) /
                       100;
                   }
 
@@ -2551,9 +2575,7 @@ const BountyDetail = () => {
                         onChange={(event) =>
                           setWinnerAddresses((previous) =>
                             previous.map((value, itemIndex) =>
-                              itemIndex === index
-                                ? event.target.value
-                                : value,
+                              itemIndex === index ? event.target.value : value,
                             ),
                           )
                         }
@@ -2578,18 +2600,14 @@ const BountyDetail = () => {
                   Cancel
                 </button>
 
-                                <button
+                <button
                   disabled={
-                    distributing ||
-                    isContractPending ||
-                    isContractConfirming
+                    distributing || isContractPending || isContractConfirming
                   }
                   onClick={handleDistributeReward}
                   className={`${primaryButton} flex-1`}
                 >
-                  {distributing ||
-                  isContractPending ||
-                  isContractConfirming ? (
+                  {distributing || isContractPending || isContractConfirming ? (
                     "Processing..."
                   ) : (
                     <>
@@ -2601,7 +2619,8 @@ const BountyDetail = () => {
               </div>
 
               <p className="mt-4 text-xs leading-5 text-[#899189] dark:text-white/40">
-                Confirming this action may require a wallet transaction. Check every address before approving it.
+                Confirming this action may require a wallet transaction. Check
+                every address before approving it.
               </p>
             </div>
           </div>
