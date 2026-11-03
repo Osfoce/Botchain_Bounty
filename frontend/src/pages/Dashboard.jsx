@@ -400,7 +400,7 @@ function Dashboard({ dark, setDark }) {
                   <span
                     className={`text-[10px] font-bold uppercase tracking-[0.22em] ${heroBadgeText}`}
                   >
-                    BOT CHAIN / CONTRIBUTOR HUB
+                    MULTI CHAIN / CONTRIBUTOR HUB
                   </span>
                 </div>
 
