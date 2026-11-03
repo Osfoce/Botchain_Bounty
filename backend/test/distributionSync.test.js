@@ -9,7 +9,9 @@ const { CHAINS } = require("../config/chains");
 const {
   assertSameDistribution,
   incrementWinnerCompletionOnce,
+  persistWinnerReward,
 } = require("../services/distributionSync.service");
+const Reward = require("../modules/reward.module");
 
 test("distribution sync has unique event and logical-distribution indexes", () => {
   const uniqueIndexes = DistributionSync.schema
@@ -112,4 +114,47 @@ test("same bounty distribution is accepted as a retry and different tx is reject
       }),
     { code: "CONFLICTING_DISTRIBUTION" },
   );
+});
+
+test("distribution retry preserves existing claimed reward metadata", async (t) => {
+  const originalFindOne = Reward.findOne;
+  const originalUpdateOne = Reward.updateOne;
+  const transactionHash = `0x${"a".repeat(64)}`;
+  const existing = {
+    bountyId: "bounty-id",
+    blockchainId: "123",
+    chainId: 677,
+    bountyContract: "0x498482e334269a10d0621D3AC5e726734B01DDCe",
+    winnerAddress: "0x0000000000000000000000000000000000000001",
+    amount: "1000000000000000000",
+    amountFormatted: "1",
+    status: "claimed",
+    distributionTxHash: transactionHash,
+    claimTxHash: `0x${"b".repeat(64)}`,
+    claimLogIndex: 4,
+  };
+  Reward.findOne = async () => existing;
+  Reward.updateOne = async () => {
+    assert.fail("A matching existing reward must not be overwritten");
+  };
+  t.after(() => {
+    Reward.findOne = originalFindOne;
+    Reward.updateOne = originalUpdateOne;
+  });
+
+  const result = await persistWinnerReward({
+    bounty: { _id: "bounty-id" },
+    identity: {
+      blockchainId: "123",
+      chainId: 677,
+      bountyContract: existing.bountyContract,
+      transactionHash,
+    },
+    winner: existing.winnerAddress,
+    amountWei: 1n,
+  });
+
+  assert.equal(result.status, "claimed");
+  assert.equal(result.claimTxHash, existing.claimTxHash);
+  assert.equal(result.claimLogIndex, existing.claimLogIndex);
 });

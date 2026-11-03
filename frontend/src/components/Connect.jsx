@@ -5,6 +5,8 @@ import { useState } from "react";
 import { FiChevronDown, FiLogOut, FiRadio } from "react-icons/fi";
 import { useDisconnect } from "wagmi";
 import { useTheme } from "../context/ThemeContext";
+import WalletAuthControl from "./WalletAuthControl";
+import WalletSignupButton from "./WalletSignupButton";
 
 function Connect() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -12,6 +14,7 @@ function Connect() {
   const { dark } = useTheme();
 
   return (
+    <>
     <ConnectButton.Custom>
       {({
         account,
@@ -20,7 +23,6 @@ function Connect() {
         authenticationStatus,
         openAccountModal,
         openChainModal,
-        openConnectModal,
       }) => {
         // Wait until RainbowKit restores the wallet session.
         const ready = mounted && authenticationStatus !== "loading";
@@ -36,7 +38,7 @@ function Connect() {
           <>
             {/* Desktop wallet button */}
             <div className="hidden md:block">
-              <ConnectButton accountStatus="full" showBalance />
+              {connected && <ConnectButton accountStatus="full" showBalance />}
             </div>
 
             {/* Mobile wallet button */}
@@ -48,13 +50,7 @@ function Connect() {
               })}
             >
               {!connected ? (
-                <button
-                  type="button"
-                  onClick={openConnectModal}
-                  className="rounded-full bg-[#00D6A0] px-3 py-2 text-xs font-bold text-[#07130F] transition-colors hover:bg-[#00B889] active:bg-[#009F76]"
-                >
-                  Connect
-                </button>
+                null
               ) : (
                 <>
                   <button
@@ -178,6 +174,9 @@ function Connect() {
         );
       }}
     </ConnectButton.Custom>
+    <WalletSignupButton compact showMessage={false} className="px-4 py-2" />
+    <WalletAuthControl />
+    </>
   );
 }
 

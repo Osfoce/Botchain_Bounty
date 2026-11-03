@@ -36,6 +36,11 @@ const submissionSchema = new mongoose.Schema(
       default: "",
       trim: true,
     },
+    imagePublicId: {
+      type: String,
+      default: "",
+      select: false,
+    },
     status: {
       type: String,
       enum: ["pending", "accepted", "rejected"],

@@ -1,67 +1,34 @@
-const { parseEventLogs } = require("viem");
-const { BOUNTY_ABI } = require("../config/abi");
+const {
+  fail,
+  parseContractEvents,
+  verifyConfirmedTransaction,
+} = require("./verifiedTransaction.service");
 
 const isAddress = (address) =>
   typeof address === "string" && /^0x[a-fA-F0-9]{40}$/.test(address);
-
-const fail = (code, message) => {
-  const error = new Error(message);
-  error.code = code;
-  throw error;
-};
 
 const verifyRewardsAssignedEvent = async ({
   publicClient,
   transactionHash,
   contractAddress,
+  chainId,
+  confirmationDepth,
   blockchainId,
   expectedLogIndex,
   expectedBlockHash,
 }) => {
-  let receipt;
-  try {
-    receipt = await publicClient.getTransactionReceipt({ hash: transactionHash });
-  } catch {
-    fail("TRANSACTION_NOT_CONFIRMED", "Transaction receipt is not available yet");
-  }
-
-  if (receipt.status !== "success") {
-    fail("TRANSACTION_REVERTED", "Transaction failed on-chain");
-  }
-  if (
-    !receipt.transactionHash ||
-    receipt.transactionHash.toLowerCase() !== transactionHash.toLowerCase()
-  ) {
-    fail("EVENT_MISMATCH", "RPC returned a receipt for a different transaction");
-  }
-  if (
-    expectedBlockHash &&
-    (!receipt.blockHash ||
-      receipt.blockHash.toLowerCase() !== expectedBlockHash.toLowerCase())
-  ) {
-    fail("EVENT_MISMATCH", "The event block is no longer canonical");
-  }
-
-  const normalizedContract = contractAddress.toLowerCase();
-  const contractLogs = receipt.logs.filter(
-    (log) =>
-      typeof log.address === "string" &&
-      log.address.toLowerCase() === normalizedContract,
-  );
-  let events = [];
-  try {
-    events = parseEventLogs({
-      abi: BOUNTY_ABI,
-      logs: contractLogs,
-      eventName: "RewardsAssigned",
-    });
-  } catch {
-    fail("EVENT_NOT_FOUND", "RewardsAssigned event could not be decoded");
-  }
-
-  if (!events.length) {
-    fail("EVENT_NOT_FOUND", "RewardsAssigned event not found");
-  }
+  const { receipt } = await verifyConfirmedTransaction({
+    publicClient,
+    transactionHash,
+    contractAddress,
+    expectedChainId: chainId,
+    confirmationDepth,
+  });
+  const events = parseContractEvents({
+    receipt,
+    eventName: "RewardsAssigned",
+    contractAddress,
+  });
 
   const matchingEvents = events.filter((event) => {
     try {
@@ -70,6 +37,9 @@ const verifyRewardsAssignedEvent = async ({
       return false;
     }
   });
+  if (!matchingEvents.length) {
+    fail("EVENT_BOUNTY_MISMATCH", "RewardsAssigned event belongs to another bounty");
+  }
   if (matchingEvents.length !== 1) {
     fail("EVENT_MISMATCH", "Expected one RewardsAssigned event for this bounty");
   }
@@ -78,14 +48,16 @@ const verifyRewardsAssignedEvent = async ({
   const logIndex = Number(matchedEvent.logIndex);
   const winners = matchedEvent.args.winners;
   if (
-    matchedEvent.address?.toLowerCase() !== normalizedContract ||
+    !isAddress(matchedEvent.address) ||
+    matchedEvent.address.toLowerCase() !== contractAddress.toLowerCase() ||
     !Number.isSafeInteger(logIndex) ||
     logIndex < 0 ||
-    !receipt.blockNumber ||
-    (expectedLogIndex != null && logIndex !== expectedLogIndex) ||
     !Array.isArray(winners) ||
     winners.length === 0 ||
-    winners.some((winner) => !isAddress(winner))
+    winners.some((winner) => !isAddress(winner)) ||
+    (expectedLogIndex != null && logIndex !== expectedLogIndex) ||
+    (expectedBlockHash &&
+      matchedEvent.blockHash?.toLowerCase() !== expectedBlockHash.toLowerCase())
   ) {
     fail("EVENT_MISMATCH", "RewardsAssigned event has invalid identity or winners");
   }

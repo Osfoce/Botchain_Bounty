@@ -12,8 +12,11 @@ const claimedRewardSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+    chainId: { type: Number, default: null },
     amountWei: { type: String, required: true },
     amountFormatted: { type: String, default: "0" },
+    claimEventKey: { type: String, default: null },
+    accountingVersion: { type: String, default: null },
     claimedAt: {
       type: Date,
       default: Date.now,

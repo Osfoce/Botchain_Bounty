@@ -1,7 +1,12 @@
 const Bounty = require("../modules/bounty.module");
 const Reward = require("../modules/reward.module");
 const Submission = require("../modules/submission.module");
-const { formatEther } = require("viem");
+const {
+  formatRewardAmount,
+  sumBountyBudgets,
+  sumRewardAmounts,
+} = require("../services/financialAmounts.service");
+const { logRequestError } = require("../utils/requestLogger");
 
 const WALLET_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const MONTHS_TO_SHOW = 6;
@@ -27,7 +32,7 @@ const getBountyStatus = (bounty, now) => {
 
 const getRewardAmount = (reward) => {
   try {
-    return Number(formatEther(BigInt(reward.amount)));
+    return formatRewardAmount(reward.amount, reward.chainId);
   } catch (error) {
     throw new Error(`Invalid stored reward amount for reward ${reward._id}`, {
       cause: error,
@@ -139,19 +144,13 @@ const makePersonalResponse = ({
   const assignedRewards = rewards.filter((reward) =>
     ["assigned", "claimed"].includes(reward.status),
   );
-  const claimedAmount = claimedRewards.reduce(
-    (total, reward) => total + getRewardAmount(reward),
-    0,
-  );
+  const claimedAmount = sumRewardAmounts(claimedRewards);
   const bountyStatuses = bounties.reduce((counts, bounty) => {
     const status = getBountyStatus(bounty, now);
     counts[status] = (counts[status] || 0) + 1;
     return counts;
   }, {});
-  const totalRewardBudget = bounties.reduce(
-    (total, bounty) => total + (Number(bounty.reward) || 0),
-    0,
-  );
+  const totalRewardBudget = sumBountyBudgets(bounties);
   const isCreator = role === "creator";
 
   return {
@@ -203,6 +202,7 @@ const makePlatformResponse = async (now) => {
 
   const [
     bountySummary,
+    bountyBudgetRows,
     bountyStatuses,
     categories,
     bountyMonths,
@@ -225,10 +225,10 @@ const makePlatformResponse = async (now) => {
             },
           },
           uniqueCreators: { $addToSet: "$creator" },
-          totalRewardBudget: { $sum: "$reward" },
         },
       },
     ]),
+    Bounty.find({}).select("reward rewardWei network").lean(),
     Bounty.aggregate([
       { $project: { status: bountyStatusExpression } },
       { $group: { _id: "$status", count: { $sum: 1 } } },
@@ -295,8 +295,8 @@ const makePlatformResponse = async (now) => {
     totalBounties: 0,
     activeBounties: 0,
     uniqueCreators: [],
-    totalRewardBudget: 0,
   };
+  const totalRewardBudget = sumBountyBudgets(bountyBudgetRows);
   const submissions = { accepted: 0, pending: 0, rejected: 0 };
   for (const entry of submissionStatuses) {
     if (Object.hasOwn(submissions, entry._id)) submissions[entry._id] = entry.count;
@@ -340,7 +340,7 @@ const makePlatformResponse = async (now) => {
       uniqueContributors: uniqueContributors[0]?.count || 0,
       uniqueCreators: bountyTotals.uniqueCreators.length,
       totalSubmissions,
-      totalRewardBudget: bountyTotals.totalRewardBudget,
+      totalRewardBudget,
       successRate:
         submissions.accepted + submissions.rejected > 0
           ? (submissions.accepted /
@@ -427,8 +427,11 @@ const getPlatformAnalytics = async (req, res) => {
     const result = await makePlatformResponse(new Date());
     return res.status(200).json(result);
   } catch (error) {
-    console.error("Failed to fetch platform analytics:", error);
-    return res.status(500).json({ message: "Failed to fetch platform analytics" });
+    logRequestError(req, "platform_analytics_failed", error);
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Failed to fetch platform analytics",
+    });
   }
 };
 
@@ -450,8 +453,11 @@ const getWalletAnalytics = async (req, res) => {
         : await getContributorAnalytics(normalizedWallet, now);
     return res.status(200).json(result);
   } catch (error) {
-    console.error(`Failed to fetch ${role} analytics:`, error);
-    return res.status(500).json({ message: "Failed to fetch wallet analytics" });
+    logRequestError(req, "wallet_analytics_failed", error);
+    return res.status(500).json({
+      code: "INTERNAL_ERROR",
+      message: "Failed to fetch wallet analytics",
+    });
   }
 };
 

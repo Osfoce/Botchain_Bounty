@@ -1,5 +1,4 @@
 const { randomUUID } = require("crypto");
-const { formatEther } = require("viem");
 
 const Bounty = require("../modules/bounty.module");
 const Reward = require("../modules/reward.module");
@@ -7,9 +6,10 @@ const User = require("../modules/user.module");
 const Submission = require("../modules/submission.module");
 const DistributionSync = require("../modules/distributionSync.module");
 const { BOUNTY_ABI } = require("../config/abi");
+const { formatRewardAmount } = require("./financialAmounts.service");
+const { getSafeErrorCode, logRequestError } = require("../utils/requestLogger");
 
 const LEASE_MS = 2 * 60 * 1000;
-const MAX_AUTOMATIC_SYNC_ATTEMPTS = 12;
 
 const sameValue = (left, right) =>
   String(left ?? "").toLowerCase() === String(right ?? "").toLowerCase();
@@ -137,12 +137,11 @@ const claimSyncLease = async (syncRecord, { force }) => {
   const eligibleStatuses = force
     ? [{ status: { $in: ["pending", "failed"] } }]
     : [
-        {
-          status: { $in: ["pending", "failed"] },
-          attempts: { $lt: MAX_AUTOMATIC_SYNC_ATTEMPTS },
-          $or: [{ nextRetryAt: null }, { nextRetryAt: { $lte: now } }],
-        },
-      ];
+      {
+        status: { $in: ["pending", "failed"] },
+        $or: [{ nextRetryAt: null }, { nextRetryAt: { $lte: now } }],
+      },
+    ];
   const claimed = await DistributionSync.findOneAndUpdate(
     {
       _id: syncRecord._id,
@@ -150,12 +149,10 @@ const claimSyncLease = async (syncRecord, { force }) => {
         ...eligibleStatuses,
         {
           status: "processing",
-          ...(force ? {} : { attempts: { $lt: MAX_AUTOMATIC_SYNC_ATTEMPTS } }),
           leaseExpiresAt: { $lte: now },
         },
         {
           status: "processing",
-          ...(force ? {} : { attempts: { $lt: MAX_AUTOMATIC_SYNC_ATTEMPTS } }),
           leaseExpiresAt: null,
         },
       ],
@@ -202,25 +199,29 @@ const persistWinnerReward = async ({
     return existing;
   }
 
-  await Reward.updateOne(
-    { bountyId: bounty._id, winnerAddress: winner },
-    {
-      $setOnInsert: {
-        bountyId: bounty._id,
-        blockchainId: Number(identity.blockchainId),
-        chainId: identity.chainId,
-        bountyContract: identity.bountyContract,
-        bountyTitle: bounty.title,
-        winnerAddress: winner,
-        amount: amountWei.toString(),
-        amountFormatted: formatEther(amountWei),
-        status: "assigned",
-        distributionTxHash: identity.transactionHash,
-        assignedAt: new Date(),
+  try {
+    await Reward.updateOne(
+      { bountyId: bounty._id, winnerAddress: winner },
+      {
+        $setOnInsert: {
+          bountyId: bounty._id,
+          blockchainId: Number(identity.blockchainId),
+          chainId: identity.chainId,
+          bountyContract: identity.bountyContract,
+          bountyTitle: bounty.title,
+          winnerAddress: winner,
+          amount: amountWei.toString(),
+          amountFormatted: formatRewardAmount(amountWei.toString(), identity.chainId),
+          status: "assigned",
+          distributionTxHash: identity.transactionHash,
+          assignedAt: new Date(),
+        },
       },
-    },
-    { upsert: true },
-  );
+      { upsert: true },
+    );
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+  }
 
   const persisted = await Reward.findOne({
     bountyId: bounty._id,
@@ -245,11 +246,17 @@ const persistWinnerReward = async ({
 };
 
 const incrementWinnerCompletionOnce = async (winner, distributionKey) => {
-  await User.updateOne(
-    { walletAddress: winner },
-    { $setOnInsert: { walletAddress: winner } },
-    { upsert: true },
-  );
+  try {
+    await User.updateOne(
+      { walletAddress: winner },
+      { $setOnInsert: { walletAddress: winner } },
+      { upsert: true },
+    );
+  } catch (error) {
+    if (error.code !== 11000) throw error;
+    const user = await User.findOne({ walletAddress: winner }).select("_id").lean();
+    if (!user) throw error;
+  }
 
   await User.updateOne(
     {
@@ -411,7 +418,7 @@ const synchronizeDistribution = async ({
         {
           $set: {
             status: "failed",
-            lastError: error.message,
+            lastError: getSafeErrorCode(error, "DISTRIBUTION_SYNC_FAILED"),
             leaseOwner: null,
             leaseExpiresAt: null,
             nextRetryAt: new Date(
@@ -425,7 +432,17 @@ const synchronizeDistribution = async ({
         },
       );
     } catch (statusError) {
-      console.error("Could not persist distribution sync failure:", statusError);
+      logRequestError(
+        null,
+        "distribution_sync_failure_persist_failed",
+        statusError,
+        "error",
+        {
+          resourceId: String(identity.bountyId),
+          transactionId: identity.transactionHash,
+          chainId: identity.chainId,
+        },
+      );
     }
     throw error;
   }
@@ -434,5 +451,6 @@ const synchronizeDistribution = async ({
 module.exports = {
   assertSameDistribution,
   incrementWinnerCompletionOnce,
+  persistWinnerReward,
   synchronizeDistribution,
 };

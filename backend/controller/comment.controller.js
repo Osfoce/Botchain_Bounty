@@ -2,6 +2,7 @@
 const Comment = require("../modules/comment.module");
 const Bounty = require("../modules/bounty.module");
 const mongoose = require("mongoose");
+const { logRequestError } = require("../utils/requestLogger");
 
 // GET /comments/:bountyId
 const getComments = async (req, res) => {
@@ -12,15 +13,25 @@ const getComments = async (req, res) => {
   }
 
   try {
+    const bounty = await Bounty.findById(bountyId)
+      .select("_id archivedAt")
+      .lean();
+    if (!bounty || bounty.archivedAt) {
+      return res.status(404).json({ error: "Bounty not found" });
+    }
+
     const comments = await Comment.find({ bountyId })
       .sort({ createdAt: -1 })
       .limit(200)
+      .select("_id bountyId user text createdAt")
       .lean();
 
     return res.status(200).json({ comments });
   } catch (err) {
-    console.error("Failed to fetch comments:", err);
-    return res.status(500).json({ error: "Failed to fetch comments" });
+    logRequestError(req, "comments_list_failed", err);
+    return res
+      .status(500)
+      .json({ code: "INTERNAL_ERROR", error: "Failed to fetch comments" });
   }
 };
 
@@ -28,22 +39,25 @@ const getComments = async (req, res) => {
 
 const addComment = async (req, res) => {
   const { bountyId } = req.params;
-  const { user, text } = req.body;
+  const { text } = req.body;
+  const user = req.auth.walletAddress;
 
   if (!mongoose.Types.ObjectId.isValid(bountyId)) {
     return res.status(400).json({ error: "Invalid bountyId" });
   }
-  if (!user || !text?.trim()) {
-    return res.status(400).json({ error: "user and text are required" });
-  }
-  if (!/^0x[a-fA-F0-9]{40}$/.test(user)) {
-    return res.status(400).json({ error: "Invalid wallet address" });
+  if (!text?.trim()) {
+    return res.status(400).json({ error: "text is required" });
   }
 
   try {
-    const bounty = await Bounty.findById(bountyId).select("_id").lean();
+    const bounty = await Bounty.findById(bountyId)
+      .select("_id archivedAt lifecycleStatus")
+      .lean();
     if (!bounty) {
       return res.status(404).json({ error: "Bounty not found" });
+    }
+    if (bounty.archivedAt || bounty.lifecycleStatus === "cancelled") {
+      return res.status(409).json({ error: "Comments are closed for this bounty" });
     }
 
     const comment = await Comment.create({
@@ -59,8 +73,10 @@ const addComment = async (req, res) => {
         .status(400)
         .json({ error: "You already commented on this bounty" });
     }
-    console.error("Comment error:", err);
-    return res.status(500).json({ error: "Failed to add comment" });
+    logRequestError(req, "comment_create_failed", err);
+    return res
+      .status(500)
+      .json({ code: "INTERNAL_ERROR", error: "Failed to add comment" });
   }
 };
 

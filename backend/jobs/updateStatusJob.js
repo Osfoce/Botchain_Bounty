@@ -2,14 +2,22 @@
 // jobs/updateStatusJob.js
 const cron = require("node-cron");
 const { updateBountyStatuses } = require("../utils/bountyUtils");
+const { logSecurityEvent } = require("../utils/requestLogger");
 
 function startStatusUpdateJob() {
-  // Run every hour (at minute 0)
   cron.schedule("0 * * * *", async () => {
-    console.log("Running scheduled bounty status update...");
+    logSecurityEvent({
+      event: "bounty_status_update_started",
+      severity: "info",
+      outcome: "attempt",
+    });
     await updateBountyStatuses();
   });
-  console.log("Status update cron job scheduled (every hour)");
+  logSecurityEvent({
+    event: "bounty_status_update_scheduled",
+    severity: "info",
+    outcome: "success",
+  });
 }
 
 module.exports = startStatusUpdateJob;

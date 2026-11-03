@@ -1,7 +1,7 @@
 
 import { useEffect } from "react";
 import { FiX } from "react-icons/fi";
-import ConnectConfig from "./ConnectConfig";
+import WalletSignupButton from "./WalletSignupButton";
 import HappyBounty from "../assets/images/happy-bounty-logo.png";
 
 function AuthModal({ isOpen, onClose }) {
@@ -107,68 +107,16 @@ function AuthModal({ isOpen, onClose }) {
           </h2>
 
           <p className="auth-modal-subtitle mt-1.5 text-xs font-medium sm:text-sm">
-            Connect your wallet to continue
+            Sign up or sign in with your wallet
           </p>
         </div>
 
-        {/* WALLET CONNECT */}
-        <div className="space-y-2.5">
-          <ConnectConfig />
-        </div>
-
-        {/* DIVIDER */}
-        <div className="my-4 flex items-center gap-3">
-          <div className="auth-modal-divider h-px flex-1" />
-
-          <span className="auth-modal-muted text-[10px] font-bold uppercase tracking-[0.15em]">
-            Or
-          </span>
-
-          <div className="auth-modal-divider h-px flex-1" />
-        </div>
-
-        {/* EMAIL LOGIN */}
-        <form className="space-y-2.5">
-          <div>
-            <label className="auth-modal-label mb-1.5 block text-[11px] font-bold">
-              Email
-            </label>
-
-            <input
-              type="email"
-              placeholder="Email login coming soon"
-              disabled
-              className="
-                auth-modal-input
-                w-full
-                rounded-xl
-                px-3.5 py-2.5
-                text-sm font-medium
-                outline-none
-                cursor-not-allowed
-              "
-            />
-          </div>
-
-          <button
-            type="button"
-            disabled
-            className="
-              auth-modal-coming-soon
-              w-full
-              rounded-xl
-              py-2.5
-              text-sm font-bold
-              cursor-not-allowed
-            "
-          >
-            Coming Soon
-          </button>
-        </form>
+        <WalletSignupButton onSuccess={onClose} />
 
         {/* FOOTER */}
         <p className="auth-modal-footer mt-4 text-center text-[10px] font-medium leading-relaxed sm:text-xs">
-          By connecting, you agree to Happy Bounty's terms and conditions.
+          Wallet sign-in verifies ownership with a message signature. No
+          transaction is sent.
         </p>
 
         {/* GREEN ACCENT */}

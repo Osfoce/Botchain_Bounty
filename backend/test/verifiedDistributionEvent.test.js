@@ -10,6 +10,7 @@ const contractAddress = "0x498482e334269a10d0621D3AC5e726734B01DDCe";
 const transactionHash = `0x${"a".repeat(64)}`;
 const blockHash = `0x${"b".repeat(64)}`;
 const winners = ["0x0000000000000000000000000000000000000001"];
+const chainId = 5042;
 
 const createReceipt = () => ({
   status: "success",
@@ -33,13 +34,26 @@ const createReceipt = () => ({
   ],
 });
 
+const createPublicClient = (receipt = createReceipt()) => ({
+  getChainId: async () => chainId,
+  getTransaction: async () => ({
+    hash: transactionHash,
+    to: contractAddress,
+    from: "0x0000000000000000000000000000000000000002",
+    chainId,
+  }),
+  getTransactionReceipt: async () => receipt,
+  getBlockNumber: async () => 120n,
+  getBlock: async () => ({ hash: blockHash }),
+});
+
 test("verifies and normalizes a confirmed RewardsAssigned event", async () => {
   const result = await verifyRewardsAssignedEvent({
-    publicClient: {
-      getTransactionReceipt: async () => createReceipt(),
-    },
+    publicClient: createPublicClient(),
     transactionHash,
     contractAddress,
+    chainId,
+    confirmationDepth: 2,
     blockchainId: "123",
     expectedLogIndex: 2,
     expectedBlockHash: blockHash,
@@ -55,9 +69,7 @@ test("verifies and normalizes a confirmed RewardsAssigned event", async () => {
 
 test("rejects an event whose log index or canonical block hash differs", async (t) => {
   const receipt = createReceipt();
-  const publicClient = {
-    getTransactionReceipt: async () => receipt,
-  };
+  const publicClient = createPublicClient(receipt);
 
   await t.test("log index mismatch", async () => {
     await assert.rejects(
@@ -65,6 +77,8 @@ test("rejects an event whose log index or canonical block hash differs", async (
         publicClient,
         transactionHash,
         contractAddress,
+        chainId,
+        confirmationDepth: 2,
         blockchainId: "123",
         expectedLogIndex: 3,
       }),
@@ -78,6 +92,8 @@ test("rejects an event whose log index or canonical block hash differs", async (
         publicClient,
         transactionHash,
         contractAddress,
+        chainId,
+        confirmationDepth: 2,
         blockchainId: "123",
         expectedBlockHash: `0x${"c".repeat(64)}`,
       }),

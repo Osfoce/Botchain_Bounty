@@ -93,9 +93,9 @@ const buildSortQuery = (query) => {
   ];
 
   if (!allowedSortFields.includes(sortField)) {
-    return {
-      createdAt: -1,
-    };
+    const error = new Error("Invalid sort parameter");
+    error.status = 400;
+    throw error;
   }
 
   return {

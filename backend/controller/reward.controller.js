@@ -1,18 +1,36 @@
 const mongoose = require("mongoose");
-const { formatEther } = require("viem");
+const { formatRewardAmount } = require("../services/financialAmounts.service");
 
 const Bounty = require("../modules/bounty.module");
 const Reward = require("../modules/reward.module");
-const User = require("../modules/user.module");
-const { CHAINS, getPublicClient } = require("../config/chains");
+const chainSettings = require("../config/chains");
+const { CHAINS } = chainSettings;
 const DistributionSync = require("../modules/distributionSync.module");
-const { synchronizeDistribution } = require("../services/distributionSync.service");
+const distributionSyncService = require("../services/distributionSync.service");
+const claimSyncService = require("../services/claimSync.service");
 const {
   verifyRewardsAssignedEvent,
 } = require("../services/verifiedDistributionEvent.service");
+const { verifyRewardClaimEvent } = require("../services/verifiedRewardClaim.service");
+const { logRequestError } = require("../utils/requestLogger");
+const { recordSecurityAudit } = require("../services/securityAudit.service");
 
 const isValidId = (id) => mongoose.Types.ObjectId.isValid(id);
 const isAddress = (a) => typeof a === "string" && /^0x[a-fA-F0-9]{40}$/.test(a);
+const auditRewardEvent = (
+  req,
+  event,
+  { outcome = "failure", errorCode, ...context } = {},
+) =>
+  recordSecurityAudit({
+    req,
+    event,
+    severity: outcome === "success" ? "info" : "warn",
+    outcome,
+    walletAddress: req.auth?.walletAddress,
+    errorCode,
+    ...context,
+  });
 
 // ─────────────────────────────────────────────────────────────
 // POST /task/:id/distribute
@@ -38,7 +56,8 @@ const distributeRewards = async (req, res) => {
   if (
     blockchainId == null ||
     !/^[0-9]+$/.test(String(blockchainId)) ||
-    BigInt(blockchainId) <= 0n
+    BigInt(blockchainId) <= 0n ||
+    BigInt(blockchainId) > BigInt(Number.MAX_SAFE_INTEGER)
   ) {
     return res.status(400).json({
       code: "INVALID_BLOCKCHAIN_ID",
@@ -54,20 +73,32 @@ const distributeRewards = async (req, res) => {
 
     if (Number(bounty.network) !== chainIdNum) {
       return res.status(409).json({
-        code: "EVENT_MISMATCH",
+        code: "CHAIN_CONFIGURATION_MISMATCH",
         error: "The requested chain does not match the bounty network",
+      });
+    }
+
+    if (
+      !bounty.isOnChain ||
+      bounty.blockchainId == null ||
+      !/^[0-9]+$/.test(String(bounty.blockchainId)) ||
+      BigInt(bounty.blockchainId) <= 0n
+    ) {
+      return res.status(409).json({
+        code: "CHAIN_CONFIGURATION_MISMATCH",
+        error: "Bounty does not have a verified on-chain identity",
       });
     }
 
     if (String(bounty.blockchainId) !== String(blockchainId)) {
       return res.status(409).json({
-        code: "EVENT_MISMATCH",
+        code: "EVENT_BOUNTY_MISMATCH",
         error: "The on-chain bounty ID does not match the stored bounty",
       });
     }
 
-    const chainConfig = CHAINS[chainIdNum];
-    const expectedContract = chainConfig?.bountyContract;
+    const chainConfigForBounty = CHAINS[chainIdNum];
+    const expectedContract = chainConfigForBounty?.bountyContract;
     if (!expectedContract || !isAddress(expectedContract)) {
       return res.status(400).json({
         code: "UNSUPPORTED_CHAIN",
@@ -76,21 +107,15 @@ const distributeRewards = async (req, res) => {
     }
 
     const contractAddress = expectedContract.toLowerCase();
-    if (
-      bounty.bountyContract &&
-      !isAddress(bounty.bountyContract)
-    ) {
+    if (!isAddress(bounty.bountyContract)) {
       return res.status(409).json({
-        code: "EVENT_MISMATCH",
-        error: "The bounty has an invalid configured contract address",
+        code: "CHAIN_CONFIGURATION_MISMATCH",
+        error: "Bounty contract does not match trusted chain configuration",
       });
     }
-    if (
-      bounty.bountyContract &&
-      bounty.bountyContract.toLowerCase() !== contractAddress
-    ) {
+    if (bounty.bountyContract.toLowerCase() !== contractAddress) {
       return res.status(409).json({
-        code: "EVENT_MISMATCH",
+        code: "CHAIN_CONFIGURATION_MISMATCH",
         error: "The bounty contract does not match the trusted chain configuration",
       });
     }
@@ -140,12 +165,18 @@ const distributeRewards = async (req, res) => {
       }
     }
 
-    const publicClient = getPublicClient(chainIdNum);
+    const publicClient = chainSettings.getPublicClient(chainIdNum);
     let rpcChainId;
     try {
       rpcChainId = await publicClient.getChainId();
     } catch (error) {
-      console.warn("Could not verify configured RPC chain:", error.message);
+      logRequestError(req, "reward_rpc_chain_check_failed", error, "warn");
+      await auditRewardEvent(req, "rpc_unavailable", {
+        errorCode: "RPC_UNAVAILABLE",
+        resourceId: id,
+        transactionId: normalizedTxHash,
+        chainId: chainIdNum,
+      });
       return res.status(503).json({
         code: "RPC_UNAVAILABLE",
         error: "Could not verify the configured blockchain RPC",
@@ -155,11 +186,18 @@ const distributeRewards = async (req, res) => {
       });
     }
     if (rpcChainId !== chainIdNum) {
-      console.error(
-        `RPC chain mismatch: configured ${chainIdNum}, endpoint reports ${rpcChainId}`,
-      );
-      return res.status(503).json({
+      logRequestError(req, "reward_rpc_chain_mismatch", {
+        name: "Error",
         code: "RPC_CHAIN_MISMATCH",
+      });
+      await auditRewardEvent(req, "transaction_verification_failed", {
+        errorCode: "RPC_CHAIN_MISMATCH",
+        resourceId: id,
+        transactionId: normalizedTxHash,
+        chainId: chainIdNum,
+      });
+      return res.status(503).json({
+        code: "CHAIN_CONFIGURATION_MISMATCH",
         error: "The configured RPC endpoint reports a different chain",
         retryable: false,
         txHash: normalizedTxHash,
@@ -173,34 +211,48 @@ const distributeRewards = async (req, res) => {
         publicClient,
         transactionHash: normalizedTxHash,
         contractAddress,
+        chainId: chainIdNum,
+        confirmationDepth: chainConfigForBounty.confirmationDepth,
         blockchainId,
       });
     } catch (error) {
-      if (error.code === "TRANSACTION_NOT_CONFIRMED") {
-        return res.status(503).json({
-          status: "pending_confirmation",
-          code: error.code,
-          error: error.message,
-          retryable: true,
-          txHash: normalizedTxHash,
-          chainId: chainIdNum,
-        });
-      }
       if (
-        error.code === "TRANSACTION_REVERTED" ||
-        error.code === "EVENT_NOT_FOUND"
+        !["TRANSACTION_NOT_FOUND", "TRANSACTION_NOT_CONFIRMED"].includes(
+          error.code,
+        )
       ) {
-        return res.status(400).json({
-          code: error.code,
-          error: error.message,
-          txHash: normalizedTxHash,
+        await auditRewardEvent(
+          req,
+          error.code === "RPC_UNAVAILABLE"
+            ? "rpc_unavailable"
+            : "transaction_verification_failed",
+          {
+          errorCode: error.code,
+          resourceId: id,
+          transactionId: normalizedTxHash,
           chainId: chainIdNum,
-        });
+          },
+        );
       }
-      if (error.code === "EVENT_MISMATCH") {
-        return res.status(409).json({
+      const statusByCode = {
+        TRANSACTION_NOT_FOUND: 202,
+        TRANSACTION_NOT_CONFIRMED: 202,
+        TRANSACTION_REVERTED: 400,
+        WRONG_TRANSACTION_DESTINATION: 409,
+        EXPECTED_EVENT_NOT_FOUND: 400,
+        EVENT_EMITTER_MISMATCH: 409,
+        EVENT_BOUNTY_MISMATCH: 409,
+        EVENT_MISMATCH: 409,
+        CHAIN_CONFIGURATION_MISMATCH: 409,
+        RPC_UNAVAILABLE: 503,
+      };
+      const status = statusByCode[error.code];
+      if (status) {
+        return res.status(status).json({
+          ...(status === 202 ? { status: "pending_confirmation" } : {}),
           code: error.code,
           error: error.message,
+          retryable: status === 202 || status === 503,
           txHash: normalizedTxHash,
           chainId: chainIdNum,
         });
@@ -208,7 +260,7 @@ const distributeRewards = async (req, res) => {
       throw error;
     }
 
-    const result = await synchronizeDistribution({
+    const result = await distributionSyncService.synchronizeDistribution({
       bounty,
       publicClient,
       identity: {
@@ -231,6 +283,12 @@ const distributeRewards = async (req, res) => {
       });
     }
 
+    await auditRewardEvent(req, "distribution_sync_succeeded", {
+      outcome: "success",
+      resourceId: id,
+      transactionId: normalizedTxHash,
+      chainId: chainIdNum,
+    });
     const winnerDetails = result.winners || (await Promise.all(
       verified.event.winners.map(async (winner) => {
         const reward = await Reward.findOne({
@@ -254,12 +312,24 @@ const distributeRewards = async (req, res) => {
     });
   } catch (err) {
     if (err.code === "CONFLICTING_DISTRIBUTION") {
+      await auditRewardEvent(req, "distribution_sync_failed", {
+        errorCode: "CONFLICTING_DISTRIBUTION",
+        resourceId: id,
+        transactionId: typeof txHash === "string" ? txHash : undefined,
+        chainId: chainIdNum,
+      });
       return res.status(409).json({
         code: err.code,
         error: err.message,
       });
     }
-    console.error("Distribution synchronization failed:", err);
+    logRequestError(req, "reward_distribution_sync_failed", err);
+    await auditRewardEvent(req, "distribution_sync_failed", {
+      errorCode: err.code || "SYNC_FAILED",
+      resourceId: id,
+      transactionId: typeof txHash === "string" ? txHash : undefined,
+      chainId: chainIdNum,
+    });
     return res.status(503).json({
       status: "failed",
       code: "SYNC_FAILED",
@@ -311,8 +381,10 @@ const getWinners = async (req, res) => {
       payoutType: bounty.payoutType || null,
     });
   } catch (err) {
-    console.error("Failed to fetch winners:", err);
-    return res.status(500).json({ error: "Failed to fetch winners" });
+    logRequestError(req, "reward_winners_read_failed", err);
+    return res
+      .status(500)
+      .json({ code: "INTERNAL_ERROR", error: "Failed to fetch winners" });
   }
 };
 
@@ -335,6 +407,21 @@ const getClaimable = async (req, res) => {
     if (!bounty) {
       return res.status(404).json({ error: "Bounty not found" });
     }
+    const chainId = Number(bounty.network);
+    const configuredChain = CHAINS[chainId];
+    if (
+      !bounty.isOnChain ||
+      !configuredChain ||
+      !Number.isSafeInteger(Number(bounty.blockchainId)) ||
+      Number(bounty.blockchainId) <= 0 ||
+      !isAddress(bounty.bountyContract) ||
+      bounty.bountyContract.toLowerCase() !== configuredChain.bountyContract.toLowerCase()
+    ) {
+      return res.status(409).json({
+        code: "CHAIN_CONFIGURATION_MISMATCH",
+        error: "Bounty does not match trusted chain configuration",
+      });
+    }
     if (!bounty.rewardsAssignedOnChain) {
       return res.status(200).json({
         claimable: 0,
@@ -350,27 +437,40 @@ const getClaimable = async (req, res) => {
     if (!reward) {
       return res.status(200).json({ claimable: 0, message: "Not a winner" });
     }
+    if (
+      Number(reward.chainId) !== chainId ||
+      !isAddress(reward.bountyContract) ||
+      reward.bountyContract?.toLowerCase() !== configuredChain.bountyContract.toLowerCase() ||
+      String(reward.blockchainId) !== String(bounty.blockchainId)
+    ) {
+      return res.status(409).json({
+        code: "CHAIN_CONFIGURATION_MISMATCH",
+        error: "Reward does not match trusted chain configuration",
+      });
+    }
     if (reward.status === "claimed") {
       return res.status(200).json({ claimable: 0, message: "Already claimed" });
     }
 
     // 🔥 Live contract read = authoritative claimable amount
-    const publicClient = getPublicClient(Number(reward.chainId));
+    const publicClient = chainSettings.getPublicClient(chainId);
     const onChainAmount = await publicClient.readContract({
-      address: reward.bountyContract,
+      address: configuredChain.bountyContract,
       abi: BOUNTY_ABI,
       functionName: "claimableRewards",
-      args: [BigInt(reward.blockchainId), userAddress],
+      args: [BigInt(bounty.blockchainId), userAddress],
     });
 
     return res.status(200).json({
       claimable: onChainAmount.toString(),
-      claimableFormatted: formatEther(onChainAmount),
+      claimableFormatted: formatRewardAmount(onChainAmount.toString(), chainId),
       message: "Reward available to claim",
     });
   } catch (err) {
-    console.error("Failed to get claimable amount:", err);
-    return res.status(500).json({ error: "Failed to get claimable amount" });
+    logRequestError(req, "reward_claimable_read_failed", err);
+    return res
+      .status(500)
+      .json({ code: "INTERNAL_ERROR", error: "Failed to get claimable amount" });
   }
 };
 
@@ -380,7 +480,8 @@ const getClaimable = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 const claimReward = async (req, res) => {
   const { id } = req.params;
-  const { winnerAddress, txHash } = req.body;
+  const { txHash } = req.body;
+  const winnerAddress = req.auth.walletAddress;
 
   if (!isValidId(id)) {
     return res.status(400).json({ error: "Invalid bounty ID" });
@@ -388,12 +489,15 @@ const claimReward = async (req, res) => {
   if (!isAddress(winnerAddress)) {
     return res.status(400).json({ error: "Invalid winner address" });
   }
-  if (!txHash) {
-    return res.status(400).json({ error: "txHash is required" });
+  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash || "")) {
+    return res.status(400).json({ code: "INVALID_TX_HASH", error: "Invalid transaction hash" });
   }
 
+  let chainId;
   try {
-    const bounty = await Bounty.findById(id).select("rewardsAssignedOnChain");
+    const bounty = await Bounty.findById(id).select(
+      "rewardsAssignedOnChain isOnChain network blockchainId bountyContract",
+    );
     if (!bounty) {
       return res.status(404).json({ error: "Bounty not found" });
     }
@@ -412,107 +516,171 @@ const claimReward = async (req, res) => {
     if (!reward) {
       return res.status(404).json({ error: "You are not a winner" });
     }
-    if (reward.status === "claimed") {
-      return res.status(400).json({ error: "Reward already claimed" });
+    chainId = Number(bounty.network);
+    const configuredChain = CHAINS[chainId];
+    if (
+      !bounty.isOnChain ||
+      !configuredChain ||
+      !Number.isSafeInteger(Number(bounty.blockchainId)) ||
+      Number(bounty.blockchainId) <= 0 ||
+      !isAddress(bounty.bountyContract) ||
+      bounty.bountyContract.toLowerCase() !== configuredChain.bountyContract.toLowerCase() ||
+      Number(reward.chainId) !== chainId ||
+      !isAddress(reward.bountyContract) ||
+      reward.bountyContract.toLowerCase() !== configuredChain.bountyContract.toLowerCase() ||
+      String(reward.blockchainId) !== String(bounty.blockchainId)
+    ) {
+      return res.status(409).json({
+        code: "CHAIN_CONFIGURATION_MISMATCH",
+        error: "Reward does not match the bounty's trusted chain configuration",
+      });
+    }
+    if (!/^[0-9]+$/.test(String(reward.amount))) {
+      return res.status(409).json({
+        code: "EVENT_AMOUNT_MISMATCH",
+        error: "Stored reward amount is not a valid token base-unit value",
+      });
     }
 
-    // 🔥 Verify the claim tx on-chain before mutating state
-    const publicClient = getPublicClient(Number(reward.chainId));
-    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
-
-    if (receipt.status !== "success") {
-      return res.status(400).json({ error: "Claim transaction failed" });
+    const normalizedTxHash = txHash.toLowerCase();
+    if (
+      reward.status === "claimed" &&
+      (!reward.claimTxHash || reward.claimTxHash.toLowerCase() !== normalizedTxHash)
+    ) {
+      return res.status(409).json({
+        code: "CONFLICTING_CLAIM",
+        error: "Reward is already linked to a different claim event",
+      });
     }
 
-    // Optional but recommended: parse RewardsClaimed / similar event
-    // and confirm it matches this bounty + winner + amount.
-
-    // Atomic flip assigned → claimed
-    const updated = await Reward.findOneAndUpdate(
-      { _id: reward._id, status: "assigned" },
-      {
-        $set: {
-          status: "claimed",
-          claimedAt: new Date(),
-          claimTxHash: txHash,
-        },
-      },
-      { new: true },
-    );
-
-    if (!updated) {
-      // Someone else flipped it in between
-      return res.status(400).json({ error: "Reward already claimed" });
-    }
-    // 🔥 NEW: check whether every reward for this bounty has been claimed
-    const remaining = await Reward.countDocuments({
-      bountyId: id,
-      status: "assigned",
-    });
-
-    if (remaining === 0) {
-      await Bounty.updateOne(
-        { _id: id, lifecycleStatus: { $ne: "completed" } },
-        { $set: { lifecycleStatus: "completed" } },
-      );
-    }
-
-    // Mirror into user's claimed history
-    // await User.updateOne(
-    //   { walletAddress: winnerAddress.toLowerCase() },
-    //   {
-    //     $push: {
-    //       claimedRewards: {
-    //         bountyId: id,
-    //         bountyTitle: updated.bountyTitle,
-    //         amountWei: updated.amount,
-    //         amountFormatted: updated.amountFormatted,
-    //         claimedAt: updated.claimedAt,
-    //         txHash,
-    //       },
-    //     },
-    //     $inc: { "stats.tasksCompleted": 1 },
-    //   },
-    //   { upsert: true },
-    // );
-
-    // Mirror into user's claimed history and increment total earnings
-    // NOTE: amountFormatted is a decimal string from formatEther.
-    // Number() is lossy for amounts below 1e-15 native-token units. Rewards
-    // are at least 0.01 native-token units, so this is safe. If sub-cent rewards are
-    // ever supported, store amounts as strings and sum on read.
-    const numericAmount = Number(updated.amountFormatted || "0");
-
-    await User.updateOne(
-      { walletAddress: winnerAddress.toLowerCase() },
-      {
-        $push: {
-          claimedRewards: {
-            bountyId: id,
-            bountyTitle: updated.bountyTitle || "Untitled bounty",
-            amountWei: updated.amount, // ← was: amount
-            amountFormatted: updated.amountFormatted, // ← added
-            claimedAt: updated.claimedAt,
-            txHash,
+    const publicClient = chainSettings.getPublicClient(chainId);
+    let verified;
+    try {
+      verified = await verifyRewardClaimEvent({
+        publicClient,
+        transactionHash: normalizedTxHash,
+        contractAddress: configuredChain.bountyContract,
+        chainId,
+        confirmationDepth: configuredChain.confirmationDepth,
+        blockchainId: bounty.blockchainId,
+        winnerAddress,
+        amount: reward.amount,
+      });
+    } catch (error) {
+      if (
+        !["TRANSACTION_NOT_FOUND", "TRANSACTION_NOT_CONFIRMED"].includes(
+          error.code,
+        )
+      ) {
+        await auditRewardEvent(
+          req,
+          error.code === "RPC_UNAVAILABLE"
+            ? "rpc_unavailable"
+            : "transaction_verification_failed",
+          {
+            errorCode: error.code,
+            resourceId: id,
+            transactionId: normalizedTxHash,
+            chainId,
           },
-        },
-        $inc: {
-          totalEarnings: numericAmount, // ← dashboard reads this
-          // "stats.tasksCompleted": 1,
-        },
-        $set: { lastLogin: new Date() },
-      },
-      { upsert: true },
-    );
+        );
+      }
+      const statusByCode = {
+        TRANSACTION_NOT_FOUND: 202,
+        TRANSACTION_NOT_CONFIRMED: 202,
+        TRANSACTION_REVERTED: 400,
+        WRONG_TRANSACTION_DESTINATION: 409,
+        EVENT_WALLET_MISMATCH: 409,
+        EVENT_BOUNTY_MISMATCH: 409,
+        EVENT_AMOUNT_MISMATCH: 409,
+        EXPECTED_EVENT_NOT_FOUND: 400,
+        EVENT_EMITTER_MISMATCH: 409,
+        EVENT_MISMATCH: 409,
+        CHAIN_CONFIGURATION_MISMATCH: 409,
+        RPC_UNAVAILABLE: 503,
+      };
+      const status = statusByCode[error.code] || 503;
+      if (status === 503) {
+        logRequestError(
+          req,
+          "reward_claim_verification_unavailable",
+          error,
+          "warn",
+        );
+      }
+      return res.status(status).json({
+        code: error.code || "RPC_UNAVAILABLE",
+        error: error.message || "Could not verify reward claim",
+        retryable: status === 202 || status === 503,
+      });
+    }
 
+    if (
+      reward.status === "claimed" &&
+      (reward.claimLogIndex !== verified.event.logIndex ||
+        reward.claimBlockHash?.toLowerCase() !== verified.event.blockHash.toLowerCase())
+    ) {
+      return res.status(409).json({
+        code: "CONFLICTING_CLAIM",
+        error: "Reward is already linked to a different claim event",
+      });
+    }
+
+    const result = await claimSyncService.synchronizeClaim({
+      reward,
+      bounty,
+      identity: {
+        bountyId: bounty._id,
+        chainId,
+        bountyContract: configuredChain.bountyContract.toLowerCase(),
+        transactionHash: normalizedTxHash,
+        winnerAddress: winnerAddress.toLowerCase(),
+      },
+      event: verified.event,
+    });
+    if (result.status !== "synced") {
+      return res.status(202).json({
+        status: "pending",
+        code: "CLAIM_SYNC_PENDING",
+        retryable: true,
+        txHash: normalizedTxHash,
+      });
+    }
+
+    await auditRewardEvent(req, "claim_sync_succeeded", {
+      outcome: "success",
+      resourceId: id,
+      transactionId: normalizedTxHash,
+      chainId,
+    });
     return res.status(200).json({
       message: "Reward claimed successfully",
-      amount: updated.amountFormatted,
-      claimedAt: updated.claimedAt,
+      amount: reward.amountFormatted,
+      alreadySynced: result.alreadySynced,
     });
   } catch (err) {
-    console.error("Failed to claim reward:", err);
-    return res.status(500).json({ error: "Failed to claim reward" });
+    if (["CONFLICTING_CLAIM", "EVENT_ALREADY_APPLIED"].includes(err.code)) {
+      await auditRewardEvent(req, "claim_sync_failed", {
+        errorCode: err.code,
+        resourceId: id,
+        transactionId: typeof txHash === "string" ? txHash : undefined,
+        chainId,
+      });
+      return res.status(409).json({ code: err.code, error: err.message });
+    }
+    logRequestError(req, "reward_claim_sync_failed", err);
+    await auditRewardEvent(req, "claim_sync_failed", {
+      errorCode: err.code || "CLAIM_SYNC_FAILED",
+      resourceId: id,
+      transactionId: typeof txHash === "string" ? txHash : undefined,
+      chainId,
+    });
+    return res.status(503).json({
+      code: "CLAIM_SYNC_FAILED",
+      error: "Claim was verified but application synchronization is pending",
+      retryable: true,
+      txHash: typeof txHash === "string" ? txHash.toLowerCase() : undefined,
+    });
   }
 };
 
@@ -539,8 +707,10 @@ const hasClaimed = async (req, res) => {
 
     return res.status(200).json({ hasClaimed: reward?.status === "claimed" });
   } catch (err) {
-    console.error("Failed to check claim status:", err);
-    return res.status(500).json({ error: "Failed to check claim status" });
+    logRequestError(req, "reward_claim_status_read_failed", err);
+    return res
+      .status(500)
+      .json({ code: "INTERNAL_ERROR", error: "Failed to check claim status" });
   }
 };
 
