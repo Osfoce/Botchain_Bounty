@@ -6,7 +6,10 @@ const {
 } = require("../controller/auth.controller");
 const { requireAuth } = require("../middleware/auth");
 const { createPolicyLimiters } = require("../middleware/rateLimit");
-const { requestSchemas, validateRequest } = require("../middleware/requestSchemas");
+const {
+  requestSchemas,
+  validateRequest,
+} = require("../middleware/requestSchemas");
 
 const router = express.Router();
 const nonceLimiters = createPolicyLimiters({
