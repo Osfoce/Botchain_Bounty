@@ -5,7 +5,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { useAccount, useSignMessage } from "wagmi";
+import { useAccount, useDisconnect, useSignMessage } from "wagmi";
 import { getAccount } from "@wagmi/core";
 import { useConfig } from "wagmi";
 import apiClient, {
@@ -21,6 +21,7 @@ import {
 
 export function AuthProvider({ children }) {
   const { address, chainId, isConnected } = useAccount();
+  const { disconnect } = useDisconnect();
   const config = useConfig();
   const { signMessageAsync } = useSignMessage();
   const [session, setSession] = useState(null);
@@ -90,8 +91,7 @@ export function AuthProvider({ children }) {
     }
   }, [address, chainId, config, isConnected, signMessageAsync]);
 
-  const signOut = useCallback(async () => {
-    const activeSession = session;
+  const clearSession = useCallback(async (activeSession = session) => {
     setAccessToken(null);
     setSession(null);
     setError("");
@@ -108,6 +108,14 @@ export function AuthProvider({ children }) {
     }
   }, [session]);
 
+  const signOut = useCallback(async () => {
+    // clearSession removes local auth immediately and revokes the server token.
+    // Disconnecting here makes app sign-out and RainbowKit disconnect match.
+    const revocation = clearSession(session);
+    disconnect();
+    await revocation;
+  }, [clearSession, disconnect, session]);
+
   useEffect(() => {
     if (
       session &&
@@ -116,9 +124,9 @@ export function AuthProvider({ children }) {
         session.walletAddress !== address.toLowerCase() ||
         session.chainId !== chainId)
     ) {
-      void signOut();
+      void clearSession(session);
     }
-  }, [address, chainId, isConnected, session, signOut]);
+  }, [address, chainId, clearSession, isConnected, session]);
 
   useEffect(() => {
     const handleExpiredSession = () => {
