@@ -51,6 +51,12 @@ import {
 } from "../utils/distributionSync";
 import { retryUntilVerified } from "../services/transactionSync";
 
+const parseDate = (value) => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
 const getBrowserStorage = () => {
   try {
     return window.localStorage;
@@ -207,12 +213,11 @@ const BountyDetail = () => {
     value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "Unknown";
 
   const formatDate = (value) => {
-    const date = parseNigeriaDate(value);
+    const date = parseDate(value);
 
     if (!date) return "Not set";
 
-    return new Intl.DateTimeFormat("en-NG", {
-      timeZone: NIGERIA_TIME_ZONE,
+    return new Intl.DateTimeFormat(undefined, {
       year: "numeric",
       month: "short",
       day: "numeric",
@@ -220,12 +225,11 @@ const BountyDetail = () => {
   };
 
   const formatDateTime = (value) => {
-    const date = parseNigeriaDate(value);
+    const date = parseDate(value);
 
     if (!date) return "";
 
-    return new Intl.DateTimeFormat("en-NG", {
-      timeZone: NIGERIA_TIME_ZONE,
+    return new Intl.DateTimeFormat(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -1120,7 +1124,7 @@ const BountyDetail = () => {
       return false;
     }
 
-    const deadline = parseNigeriaDate(bounty.deadline);
+    const deadline = parseDate(bounty.deadline);
 
     return Boolean(
       deadline && deadline.getTime() < currentTime,
@@ -1221,9 +1225,9 @@ const BountyDetail = () => {
     getNativeToken(bounty.network)?.symbol ||
     "Token";
 
-  // Calculate bounty status from Nigeria-local start and deadline dates.
-  const startDate = parseNigeriaDate(bounty.startDate);
-  const deadlineDate = parseNigeriaDate(bounty.deadline);
+  // Date values are instants; format them in the viewer's local time zone.
+  const startDate = parseDate(bounty.startDate);
+  const deadlineDate = parseDate(bounty.deadline);
 
   const startTimestamp = startDate?.getTime() ?? null;
   const deadlineTimestamp = deadlineDate?.getTime() ?? null;
@@ -1438,7 +1442,7 @@ const BountyDetail = () => {
                       </p>
                     </div>
 
-                    {/* Nigeria-time countdown */}
+                    {/* Viewer-local countdown */}
                     <div className="rounded-2xl border border-[#e0e5df] dark:border-white/10 bg-[#fafbf9] dark:bg-[#141814] p-5 sm:p-6">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#66736a] dark:text-white/50">
@@ -1471,7 +1475,7 @@ const BountyDetail = () => {
                       </p>
 
                       <p className="mt-1 text-xs text-[#778077] dark:text-white/45">
-                        {countdownHeading} · Nigeria time (WAT)
+                        {countdownHeading} · Your local time
                       </p>
 
                       {timeRemaining ? (
