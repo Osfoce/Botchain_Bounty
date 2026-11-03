@@ -1,21 +1,25 @@
 const multer = require("multer");
-const { CloudinaryStorage } = require("multer-storage-cloudinary");
-const cloudinary = require("../config/cloudinary"); // Your config file
 
-const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: "bounty_submissions", // The folder in Cloudinary where images will be stored
-    allowed_formats: ["jpg", "png", "jpeg", "webp"],
-    resource_type: "image",
-    // Optional: You can set a custom public_id for each file
-    public_id: (req, file) => {
-      // Example: submission_<timestamp>_<original_name>
-      return `submission_${Date.now()}_${file.originalname.split(".")[0]}`;
-    },
+const allowedMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1,
+    fields: 5,
+    fieldSize: 20 * 1024,
+    fieldNameSize: 100,
+    parts: 6,
+  },
+  fileFilter(_req, file, callback) {
+    if (!allowedMimeTypes.has(file.mimetype)) {
+      const error = new Error("Only JPEG, PNG, and WebP images are allowed");
+      error.code = "INVALID_UPLOAD";
+      return callback(error);
+    }
+    callback(null, true);
   },
 });
-
-const upload = multer({ storage: storage });
 
 module.exports = { upload };

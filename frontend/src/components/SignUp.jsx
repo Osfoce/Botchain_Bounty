@@ -23,7 +23,7 @@ function SignUp() {
           active:scale-[0.98]
         "
       >
-        Sign Up
+        Continue with wallet
       </button>
 
       <AuthModal

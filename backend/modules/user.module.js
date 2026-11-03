@@ -1,5 +1,9 @@
 const mongoose = require("mongoose");
 const claimedRewardSchema = require("./claimReward.module");
+const {
+  formatRewardAmount,
+  sumClaimedRewardHistory,
+} = require("../services/financialAmounts.service");
 
 const userSchema = new mongoose.Schema(
   {
@@ -84,8 +88,7 @@ const userSchema = new mongoose.Schema(
 
 // Virtual property: total claimed rewards amount
 userSchema.virtual("totalClaimedRewards").get(function () {
-  if (!this.claimedRewards || this.claimedRewards.length === 0) return 0;
-  return this.claimedRewards.reduce((sum, reward) => sum + reward.amount, 0);
+  return sumClaimedRewardHistory(this.claimedRewards);
 });
 
 // Virtual property: submission success rate
@@ -109,12 +112,21 @@ userSchema.pre("findOneAndUpdate", function () {
 });
 
 // Instance method: Add a claimed reward "user.add..."
-userSchema.methods.addClaimedReward = function (bountyId, bountyTitle, amount) {
+userSchema.methods.addClaimedReward = function (
+  bountyId,
+  bountyTitle,
+  amountWei,
+  chainId,
+  txHash,
+) {
   this.claimedRewards.push({
-    bountyId,
+    bountyId: String(bountyId),
     bountyTitle,
-    amount,
+    chainId,
+    amountWei: String(amountWei),
+    amountFormatted: formatRewardAmount(amountWei, chainId),
     claimedAt: new Date(),
+    txHash,
   });
   return this.save();
 };

@@ -23,16 +23,12 @@ import {
   getBountyContract,
   getNativeToken,
 } from "../utils/chains.address";
+import { isConfiguredAdminWallet } from "../utils/admin";
 import Skeleton from "../components/UI/Skeleton";
 
 const ACCENT = "#00D6A0";
 const ACCENT_DARK = "#008A66";
 const CONFIRM_TIMEOUT_MS = 6000;
-
-const ADMIN_ADDRESSES = [
-  "0x75DDb0a7161c717a0443967803c6516cf1e39cA6",
-  "0x579F49Af31375Da97b6Ba3cf0Aa4a887A0E6c98b",
-];
 
 const shortAddress = (address) =>
   address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "—";
@@ -194,10 +190,7 @@ export default function AdminPage() {
   const isAdmin =
     isConnected &&
     Boolean(connectedWallet) &&
-    ADMIN_ADDRESSES.some(
-      (adminAddress) =>
-        adminAddress.toLowerCase() === connectedWallet.toLowerCase(),
-    );
+    isConfiguredAdminWallet(connectedWallet);
 
   const {
     data: ownerAddress,

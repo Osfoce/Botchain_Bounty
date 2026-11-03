@@ -1,6 +1,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import apiClient from "../services/apiClient";
+import { useAuth } from "../hooks/useAuth";
 import { useAccount } from "wagmi";
 import { useNavigate } from "react-router-dom";
 
@@ -423,6 +424,7 @@ function ActivityChart({ items, dark }) {
 
 export default function Analytics({ dark = true, setDark }) {
   const { address, isConnected } = useAccount();
+  const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
   const [role, setRole] = useState("contributor");
@@ -479,6 +481,14 @@ export default function Analytics({ dark = true, setDark }) {
         return;
       }
 
+      if (!platform && !isAuthenticated) {
+        setData(null);
+        setError("Sign in with your wallet to view personal analytics.");
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+
       if (isRefresh) {
         setRefreshing(true);
       }
@@ -487,7 +497,7 @@ export default function Analytics({ dark = true, setDark }) {
       setError("");
 
       try {
-        const response = await axios.get(endpoint, { signal });
+        const response = await apiClient.get(endpoint, { signal });
         if (
           !response.data ||
           typeof response.data !== "object" ||
@@ -515,7 +525,7 @@ export default function Analytics({ dark = true, setDark }) {
         }
       }
     },
-    [endpoint]
+    [endpoint, isAuthenticated, platform]
   );
 
   useEffect(() => {

@@ -1,9 +1,12 @@
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccount } from "wagmi";
 import axios from "axios";
+import apiClient from "../services/apiClient";
+import { useAuth } from "../hooks/useAuth";
 import { showToast } from "../components/UI/Toast";
+import { isConfiguredAdminWallet } from "../utils/admin";
 
 import {
   FiActivity,
@@ -12,11 +15,13 @@ import {
   FiCheckCircle,
   FiChevronLeft,
   FiChevronRight,
+  FiDownload,
   FiDollarSign,
   FiMessageCircle,
   FiPlus,
   FiRefreshCw,
   FiSearch,
+  FiShield,
   FiTrendingUp,
   FiX,
   FiZap,
@@ -26,23 +31,15 @@ import NavBar from "../components/Layout/NavBar";
 import Footer from "../components/Layout/Footer";
 import BountyCard from "../components/Bounty/BountyCard";
 
-// Admin wallet addresses
-const ADMIN_ADDRESSES = [
-  "0x75DDb0a7161c717a0443967803c6516cf1e39cA6",
-  "0x579F49Af31375Da97b6Ba3cf0Aa4a887A0E6c98b2",
-];
-
 function Dashboard({ dark, setDark }) {
   const { address, isConnected } = useAccount();
+  const { isAuthenticated } = useAuth();
 
   // Show Admin only when the connected wallet is an admin wallet.
   const isAdmin =
     isConnected &&
     Boolean(address) &&
-    ADMIN_ADDRESSES.some(
-      (adminAddress) =>
-        adminAddress.toLowerCase() === address.toLowerCase()
-    );
+    isConfiguredAdminWallet(address);
 
   const [loading, setLoading] = useState(true);
   const [bounties, setBounties] = useState([]);
@@ -59,6 +56,10 @@ function Dashboard({ dark, setDark }) {
   const [enrolledBountyIds, setEnrolledBountyIds] = useState([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [dataExporting, setDataExporting] = useState(false);
+  const [dataRequestLoading, setDataRequestLoading] = useState(false);
+  const [dataRequestSubmitting, setDataRequestSubmitting] = useState(false);
+  const [dataDeletionRequest, setDataDeletionRequest] = useState(null);
 
   const API_URL = import.meta.env.VITE_API_URL;
   const bountyApi = `${API_URL}/bounty/bounties`;
@@ -112,7 +113,7 @@ function Dashboard({ dark, setDark }) {
     return () => window.removeEventListener("scroll", updateScrollState);
   }, []);
 
-  const loadBounties = async () => {
+  const loadBounties = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -132,13 +133,13 @@ function Dashboard({ dark, setDark }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [bountyApi, currentPage, filter]);
 
-  const loadDashboardStats = async () => {
-    if (!isConnected || !address) return;
+  const loadDashboardStats = useCallback(async () => {
+    if (!isConnected || !address || !isAuthenticated) return;
 
     try {
-      const { data } = await axios.get(userInfoApi);
+      const { data } = await apiClient.get(userInfoApi);
 
       setStats({
         completed: data.user?.tasksCompleted || 0,
@@ -151,15 +152,45 @@ function Dashboard({ dark, setDark }) {
       console.error("Error loading userInfo:", err);
       showToast.error("Couldn't fetch user info");
     }
-  };
+  }, [address, isAuthenticated, isConnected, userInfoApi]);
+
+  const loadDataDeletionRequest = useCallback(async () => {
+    if (!isConnected || !address || !isAuthenticated) {
+      setDataDeletionRequest(null);
+      return;
+    }
+
+    setDataRequestLoading(true);
+    try {
+      const { data } = await apiClient.get("/user/data-deletion-requests", {
+        params: { page: 1, limit: 1 },
+      });
+      setDataDeletionRequest(data.requests?.[0] || null);
+    } catch (error) {
+      console.error("Error loading data deletion request:", error);
+      showToast.error("Couldn't fetch data request status");
+    } finally {
+      setDataRequestLoading(false);
+    }
+  }, [address, isAuthenticated, isConnected]);
 
   useEffect(() => {
     loadBounties();
 
-    if (isConnected && address) {
+    if (isConnected && address && isAuthenticated) {
       loadDashboardStats();
     }
-  }, [address, isConnected, currentPage, filter]);
+  }, [
+    address,
+    isAuthenticated,
+    isConnected,
+    loadBounties,
+    loadDashboardStats,
+  ]);
+
+  useEffect(() => {
+    loadDataDeletionRequest();
+  }, [loadDataDeletionRequest]);
 
   const formatEarnings = (value) => {
     const num = Number(value) || 0;
@@ -182,6 +213,103 @@ function Dashboard({ dark, setDark }) {
 
     if (isConnected && address) {
       await loadDashboardStats();
+    }
+  };
+
+  const handleDataExport = async () => {
+    if (!isAuthenticated || !address) {
+      showToast.error("Sign in with your wallet to export your data.");
+      return;
+    }
+
+    setDataExporting(true);
+    try {
+      const limit = 100;
+      const firstPage = await apiClient.get("/user/data-export", {
+        params: { page: 1, limit },
+      });
+      const response = firstPage.data;
+      const collections = Object.keys(response.data || {}).filter((key) =>
+        Array.isArray(response.data[key]),
+      );
+      const totalPages = Math.max(
+        1,
+        ...Object.values(response.pagination || {}).map(
+          (page) => Number(page.pages) || 0,
+        ),
+      );
+
+      if (totalPages > 50) {
+        showToast.error(
+          "This export is too large to download at once. Please contact support for assistance.",
+        );
+        return;
+      }
+
+      const exportData = { ...response.data };
+      for (let page = 2; page <= totalPages; page += 1) {
+        const { data } = await apiClient.get("/user/data-export", {
+          params: { page, limit },
+        });
+        for (const collection of collections) {
+          exportData[collection].push(...(data.data[collection] || []));
+        }
+      }
+
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        walletAddress: address,
+        data: exportData,
+        pagination: Object.fromEntries(
+          Object.entries(response.pagination || {}).map(([key, value]) => [
+            key,
+            { total: value.total, pages: value.pages },
+          ]),
+        ),
+        excluded: response.excluded || [],
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = downloadUrl;
+      link.download = `botchain-data-${address.toLowerCase()}.json`;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+      showToast.success("Your data export has been downloaded.");
+    } catch (error) {
+      console.error("Error exporting user data:", error);
+      showToast.error(
+        error.response?.data?.error || "Couldn't download your data export.",
+      );
+    } finally {
+      setDataExporting(false);
+    }
+  };
+
+  const handleDataDeletionRequest = async () => {
+    if (!isAuthenticated || !address) {
+      showToast.error("Sign in with your wallet to submit a data request.");
+      return;
+    }
+
+    setDataRequestSubmitting(true);
+    try {
+      const { data } = await apiClient.post("/user/data-deletion-request", {});
+      setDataDeletionRequest(data.request);
+      showToast.success(
+        data.alreadyOpen
+          ? "You already have an open data request."
+          : "Your data request was submitted for review.",
+      );
+    } catch (error) {
+      console.error("Error submitting data deletion request:", error);
+      showToast.error(
+        error.response?.data?.error || "Couldn't submit your data request.",
+      );
+    } finally {
+      setDataRequestSubmitting(false);
     }
   };
 
@@ -470,6 +598,125 @@ function Dashboard({ dark, setDark }) {
                   </article>
                 );
               })}
+            </div>
+          </section>
+
+          {/* Privacy and data controls */}
+          <section className="mb-14">
+            <div className="mb-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#00A87D]">
+                PRIVACY & DATA
+              </p>
+              <h2 className="mt-2 text-xl font-black tracking-tight sm:text-2xl">
+                Your data controls
+              </h2>
+              <p className={`mt-2 max-w-2xl text-sm leading-6 ${muted}`}>
+                Export your account records or request a manual review of data
+                retention. Financial and blockchain records are preserved;
+                requests do not erase on-chain activity.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <article className={`rounded-2xl border p-5 sm:p-6 ${surface}`}>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
+                    <FiDownload />
+                  </div>
+                  <div>
+                    <h3 className="font-bold">Download your data</h3>
+                    <p className={`mt-2 text-sm leading-6 ${muted}`}>
+                      Get a JSON export of your profile, bounties, submissions,
+                      enrollments, comments, rewards, and claim records.
+                      Collections are paginated automatically.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleDataExport}
+                  disabled={!isAuthenticated || dataExporting}
+                  className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#00A87D] px-4 text-xs font-bold text-white transition hover:bg-[#008F6A] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FiDownload className={dataExporting ? "animate-pulse" : ""} />
+                  {dataExporting ? "Preparing export..." : "Download JSON"}
+                </button>
+                {!isAuthenticated && (
+                  <p className={`mt-3 text-xs ${muted}`}>
+                    Connect and sign in with your wallet to use data controls.
+                  </p>
+                )}
+              </article>
+
+              <article className={`rounded-2xl border p-5 sm:p-6 ${surface}`}>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
+                    <FiShield />
+                  </div>
+                  <div>
+                    <h3 className="font-bold">Data retention request</h3>
+                    <p className={`mt-2 text-sm leading-6 ${muted}`}>
+                      Submit a request for administrator review. This does not
+                      automatically delete records, and necessary financial,
+                      bounty, and blockchain history is retained.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={`mt-4 rounded-xl border px-4 py-3 text-sm ${panelSurface}`}
+                  aria-live="polite"
+                >
+                  {dataRequestLoading ? (
+                    <span className={muted}>Checking request status...</span>
+                  ) : dataDeletionRequest ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        Status:{" "}
+                        <strong className="capitalize text-[#00A87D]">
+                          {dataDeletionRequest.status}
+                        </strong>
+                      </span>
+                      <span className={`text-xs ${muted}`}>
+                        Updated{" "}
+                        {new Date(dataDeletionRequest.updatedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className={muted}>
+                      {isAuthenticated
+                        ? "No previous request found."
+                        : "Sign in to view your request status."}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDataDeletionRequest}
+                  disabled={
+                    !isAuthenticated ||
+                    dataRequestSubmitting ||
+                    dataRequestLoading ||
+                    ["pending", "reviewing"].includes(
+                      dataDeletionRequest?.status,
+                    )
+                  }
+                  className={`mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    dark
+                      ? "border-white/10 bg-white/[0.03] hover:border-[#00A87D]/50 hover:text-[#00A87D]"
+                      : "border-black/[0.08] bg-white hover:border-[#00A87D]/50 hover:text-[#008F6A]"
+                  }`}
+                >
+                  {dataRequestSubmitting
+                    ? "Submitting..."
+                    : ["pending", "reviewing"].includes(
+                          dataDeletionRequest?.status,
+                        )
+                      ? "Request under review"
+                      : "Request data review"}
+                </button>
+              </article>
             </div>
           </section>
 
