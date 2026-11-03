@@ -1,5 +1,4 @@
-
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import axios from "axios";
 import { useNav } from "../../hooks/useNav";
@@ -26,6 +25,64 @@ import { formatAmount } from "../../utils/format";
 import { getNativeToken } from "../../utils/chains.address";
 import { supportedChains } from "../../rainbowChains";
 
+// Nigeria timezone
+const NIGERIA_TIME_ZONE = "Africa/Lagos";
+
+// Parse bounty dates using Nigeria time when no timezone is provided.
+const parseBountyDate = (value) => {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+
+  const hasZone = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(raw);
+
+  const normalized = hasZone
+    ? raw
+    : /^\d{4}-\d{2}-\d{2}$/.test(raw)
+      ? `${raw}T00:00:00+01:00`
+      : `${raw}+01:00`;
+
+  const date = new Date(normalized);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+// Format dates using Nigeria time.
+const formatNigeriaDateTime = (date, includeYear = false) =>
+  new Intl.DateTimeFormat("en-NG", {
+    timeZone: NIGERIA_TIME_ZONE,
+    day: "numeric",
+    month: "short",
+    ...(includeYear ? { year: "numeric" } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(date);
+
+// Calculate countdown.
+const formatCountdown = (target, now) => {
+  if (!target) return null;
+
+  const diff = target.getTime() - now;
+
+  if (diff <= 0) return { past: true };
+
+  const total = Math.floor(diff / 1000);
+
+  const days = Math.floor(total / 86400);
+  const hours = Math.floor((total % 86400) / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+
+  return {
+    label:
+      days > 0
+        ? `${days}d ${hours}h ${minutes}m ${seconds}s`
+        : `${hours}h ${minutes}m ${seconds}s`,
+    urgent: diff <= 86400000,
+  };
+};
+
 const BountyCard = ({
   bounty,
   enrolledBountyIds = [],
@@ -37,6 +94,16 @@ const BountyCard = ({
   const [isEnrolling, setIsEnrolling] = useState(false);
   const [isEnrolledLocal, setIsEnrolledLocal] = useState(false);
   const [imageFailed, setImageFailed] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+
+  // Update countdown every second.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
 
   const API_URL = import.meta.env.VITE_API_URL;
   const bountyId = bounty._id || bounty.id;
@@ -62,35 +129,33 @@ const BountyCard = ({
     ? "border-white/[0.10] bg-white/[0.04]"
     : "border-black/[0.08] bg-[#F6F8F6]";
 
+  // Bounty dates.
+  const startDate = parseBountyDate(bounty.startDate);
+  const deadlineDate = parseBountyDate(bounty.deadline);
+
+  // Determine bounty lifecycle.
   const deriveStatus = () => {
-    if (bounty.status) return bounty.status;
+    const lifecycle = String(
+      bounty.lifecycleStatus || bounty.status || ""
+    ).toLowerCase();
 
-    if (bounty.lifecycleStatus === "completed") return "completed";
-    if (bounty.lifecycleStatus === "cancelled") return "cancelled";
+    if (lifecycle === "completed") return "completed";
+    if (lifecycle === "cancelled") return "cancelled";
 
-    const now = new Date();
-    const start = bounty.startDate ? new Date(bounty.startDate) : null;
-    const deadline = bounty.deadline
-      ? new Date(bounty.deadline)
-      : null;
-
-    if (start && !Number.isNaN(start.getTime()) && now < start) {
+    // Calculate status from dates to avoid stale API status values.
+    if (startDate && now < startDate.getTime()) {
       return "upcoming";
     }
 
-    if (
-      deadline &&
-      !Number.isNaN(deadline.getTime()) &&
-      now <= deadline
-    ) {
-      return "active";
-    }
-
-    if (deadline && !Number.isNaN(deadline.getTime())) {
+    if (deadlineDate && now > deadlineDate.getTime()) {
       return "ended";
     }
 
-    return "active";
+    if (startDate || deadlineDate) {
+      return "active";
+    }
+
+    return bounty.status || "active";
   };
 
   const status = deriveStatus();
@@ -101,21 +166,25 @@ const BountyCard = ({
       icon: FiZap,
       dot: "bg-[#00A87D]",
     },
+
     upcoming: {
       label: "Upcoming",
       icon: FiClock,
       dot: "bg-amber-500",
     },
+
     ended: {
       label: "Ended",
       icon: FiLock,
       dot: "bg-slate-400",
     },
+
     completed: {
       label: "Winner Announced",
       icon: FiAward,
       dot: "bg-[#00A87D]",
     },
+
     cancelled: {
       label: "Cancelled",
       icon: FiLock,
@@ -129,67 +198,36 @@ const BountyCard = ({
 
   const StatusIcon = statusConfig.icon;
 
-  const getDeadline = () => {
-    if (!bounty.deadline) return "No deadline";
+  // Display start date for upcoming bounties
+  // and deadline for active bounties.
+  const displayedDate =
+    status === "upcoming" ? startDate : deadlineDate;
 
-    const date = new Date(bounty.deadline);
+  const deadline = displayedDate
+    ? formatNigeriaDateTime(
+        displayedDate,
+        displayedDate.getFullYear() !==
+          new Date(now).getFullYear()
+      )
+    : "No deadline";
 
-    if (Number.isNaN(date.getTime())) return "No deadline";
+  // Upcoming: countdown to start.
+  // Active: countdown to deadline.
+  const countdownTarget =
+    status === "upcoming"
+      ? startDate
+      : status === "active"
+        ? deadlineDate
+        : null;
 
-    const sameYear = date.getFullYear() === new Date().getFullYear();
+  const countdown = formatCountdown(countdownTarget, now);
 
-    return date.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      ...(sameYear ? {} : { year: "numeric" }),
-    });
-  };
+  const countdownTitle =
+    status === "upcoming" ? "Starts in" : "Ends in";
 
-  const getTimeRemaining = (deadlineValue) => {
-    if (!deadlineValue) return null;
-
-    const end = new Date(deadlineValue);
-
-    if (Number.isNaN(end.getTime())) return null;
-
-    const diffMs = end.getTime() - Date.now();
-
-    if (diffMs <= 0) return { past: true };
-
-    const minute = 60 * 1000;
-    const hour = 60 * minute;
-    const day = 24 * hour;
-
-    const days = Math.floor(diffMs / day);
-    const hours = Math.floor((diffMs % day) / hour);
-    const minutes = Math.floor((diffMs % hour) / minute);
-
-    if (days >= 2) {
-      return { label: `${days} days left`, urgent: false };
-    }
-
-    if (days === 1) {
-      return { label: "1 day left", urgent: true };
-    }
-
-    if (hours >= 1) {
-      return {
-        label: `${hours}h ${minutes}m left`,
-        urgent: true,
-      };
-    }
-
-    return {
-      label: `${Math.max(1, minutes)}m left`,
-      urgent: true,
-    };
-  };
-
-  const deadline = getDeadline();
-  const timeRemaining = getTimeRemaining(bounty.deadline);
   const tags = Array.isArray(bounty.tags) ? bounty.tags : [];
 
-  // Find the network using its chain ID.
+  // Find network using chain ID.
   const network = supportedChains.find(
     (chain) => Number(chain.id) === Number(bounty.network)
   );
@@ -198,12 +236,12 @@ const BountyCard = ({
     network?.name ||
     (bounty.network ? `Chain ${bounty.network}` : "");
 
-  // Normalize the network name to handle spaces and special characters.
+  // Normalize network name.
   const normalizedNetworkName = String(networkName)
     .toLowerCase()
     .replace(/[^a-z0-9]/g, "");
 
-  // Select the correct network logo.
+  // Select network logo.
   const networkLogo = normalizedNetworkName.includes("arc")
     ? ArcLogo
     : normalizedNetworkName.includes("botchain") ||
@@ -233,6 +271,7 @@ const BountyCard = ({
     .replace(/[_-]/g, " ")
     .trim();
 
+  // Bounty image.
   const rawImage =
     bounty.imageUrl ||
     bounty.imageURL ||
@@ -259,6 +298,7 @@ const BountyCard = ({
 
   const showImage = Boolean(bountyImage) && !imageFailed;
 
+  // Enroll in bounty.
   const handleEnroll = async (e) => {
     e.preventDefault();
 
@@ -271,15 +311,23 @@ const BountyCard = ({
 
     setIsEnrolling(true);
 
-    const loadingToast = showToast.loading("Enrolling in bounty...");
+    const loadingToast = showToast.loading(
+      "Enrolling in bounty..."
+    );
 
     try {
-      const response = await axios.post(`${API_URL}/user/enrollment`, {
-        bountyId: bounty._id,
-        user: address,
-      });
+      const response = await axios.post(
+        `${API_URL}/user/enrollment`,
+        {
+          bountyId: bounty._id,
+          user: address,
+        }
+      );
 
-      if (response.status === 200 || response.status === 201) {
+      if (
+        response.status === 200 ||
+        response.status === 201
+      ) {
         setIsEnrolledLocal(true);
 
         showToast.success("Enrolled! Redirecting...", {
@@ -377,7 +425,11 @@ const BountyCard = ({
         {showImage && (
           <img
             src={bountyImage}
-            alt={bounty.title ? `${bounty.title} cover` : "Bounty cover"}
+            alt={
+              bounty.title
+                ? `${bounty.title} cover`
+                : "Bounty cover"
+            }
             loading="lazy"
             onError={() => setImageFailed(true)}
             className="absolute inset-0 z-[1] h-full w-full border-0 object-cover outline-none ring-0 shadow-none transition-transform duration-500 group-hover:scale-[1.04]"
@@ -411,9 +463,14 @@ const BountyCard = ({
             `}
           >
             {status === "completed" ? (
-              <FiAward className="shrink-0 text-[#00D6A0]" size={12} />
+              <FiAward
+                className="shrink-0 text-[#00D6A0]"
+                size={12}
+              />
             ) : (
-              <span className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`} />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${statusConfig.dot}`}
+              />
             )}
 
             {statusConfig.label}
@@ -565,6 +622,7 @@ const BountyCard = ({
           <div className="flex min-w-0 flex-col justify-center p-3">
             <div className={`mb-2 flex items-center gap-2 ${muted}`}>
               <FiZap className="shrink-0 text-sm text-[#00A87D]" />
+
               <span className="text-[11px] font-extrabold uppercase tracking-[0.08em]">
                 Reward
               </span>
@@ -593,8 +651,9 @@ const BountyCard = ({
           >
             <div className={`mb-2 flex items-center gap-2 ${muted}`}>
               <FiCalendar className="shrink-0 text-sm text-[#00A87D]" />
+
               <span className="text-[11px] font-extrabold uppercase tracking-[0.08em]">
-                Deadline
+                {status === "upcoming" ? "Starts" : "Deadline"}
               </span>
             </div>
 
@@ -608,32 +667,32 @@ const BountyCard = ({
               {deadline}
             </p>
 
-            {timeRemaining?.label ? (
+            {countdown?.label ? (
               <p
-                className={`
-                  mt-1.5 break-words text-[10px] font-bold leading-4
-                  ${
-                    timeRemaining.urgent
-                      ? dark
-                        ? "text-amber-300"
-                        : "text-amber-700"
-                      : dark
-                        ? "text-[#55DDB1]"
-                        : "text-[#008F6A]"
-                  }
-                `}
+                aria-live="off"
+                className={`mt-1.5 break-words text-[10px] font-bold leading-4 ${
+                  countdown.urgent
+                    ? dark
+                      ? "text-amber-300"
+                      : "text-amber-700"
+                    : dark
+                      ? "text-[#55DDB1]"
+                      : "text-[#008F6A]"
+                }`}
               >
-                {timeRemaining.label}
+                <FiClock className="mr-1 inline-block" size={10} />
+
+                {countdownTitle}: {countdown.label}
               </p>
-            ) : timeRemaining?.past &&
-              status !== "completed" &&
-              status !== "cancelled" ? (
+            ) : countdown?.past ? (
               <p className={`mt-1.5 text-[10px] font-semibold ${muted}`}>
                 Deadline passed
               </p>
             ) : (
               <p className={`mt-1.5 text-[10px] font-medium ${muted}`}>
-                Closing date
+                {status === "upcoming"
+                  ? "Scheduled start"
+                  : "Closing date"}
               </p>
             )}
           </div>
@@ -649,7 +708,10 @@ const BountyCard = ({
           `}
         >
           <div className="flex min-w-0 items-center gap-2">
-            <FiLayers className="shrink-0 text-[#00A87D]" size={15} />
+            <FiLayers
+              className="shrink-0 text-[#00A87D]"
+              size={15}
+            />
 
             <div className="min-w-0">
               <p
@@ -682,7 +744,10 @@ const BountyCard = ({
                 }
               `}
             >
-              <FiCheckCircle className="shrink-0 text-[#00A87D]" size={12} />
+              <FiCheckCircle
+                className="shrink-0 text-[#00A87D]"
+                size={12}
+              />
 
               <span
                 className={`
@@ -715,6 +780,7 @@ const BountyCard = ({
             `}
           >
             <span className="truncate">View details</span>
+
             <FiArrowUpRight
               size={14}
               className="shrink-0 transition-transform group-hover/details:-translate-y-0.5 group-hover/details:translate-x-0.5"
