@@ -10,6 +10,7 @@ import { getAccount } from "@wagmi/core";
 import { useConfig } from "wagmi";
 import apiClient, {
   SESSION_EXPIRED_EVENT,
+  getAccessSession,
   setActiveWallet,
   setAccessToken,
 } from "../services/apiClient";
@@ -20,11 +21,11 @@ import {
 } from "../services/authErrors";
 
 export function AuthProvider({ children }) {
-  const { address, chainId, isConnected } = useAccount();
+  const { address, chainId, isConnected, status } = useAccount();
   const { disconnect } = useDisconnect();
   const config = useConfig();
   const { signMessageAsync } = useSignMessage();
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(getAccessSession);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [error, setError] = useState("");
 
@@ -119,14 +120,15 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     if (
       session &&
+      status !== "connecting" &&
+      status !== "reconnecting" &&
       (!isConnected ||
         !address ||
-        session.walletAddress !== address.toLowerCase() ||
-        session.chainId !== chainId)
+        session.walletAddress !== address.toLowerCase())
     ) {
       void clearSession(session);
     }
-  }, [address, chainId, clearSession, isConnected, session]);
+  }, [address, clearSession, isConnected, session, status]);
 
   useEffect(() => {
     const handleExpiredSession = () => {
@@ -145,8 +147,7 @@ export function AuthProvider({ children }) {
         session &&
           isConnected &&
           address &&
-          session.walletAddress === address.toLowerCase() &&
-          session.chainId === chainId,
+          session.walletAddress === address.toLowerCase(),
       ),
       isAuthenticating,
       error,
