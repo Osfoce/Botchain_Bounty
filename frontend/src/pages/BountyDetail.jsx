@@ -787,6 +787,8 @@ const BountyDetail = () => {
 
     if (blockchainId === null) {
       return showToast.error("This bounty is not on-chain");
+    }
+
     if (pendingDistributionSync) {
       return showToast.error(
         "A previous distribution is still synchronizing. Retry synchronization instead of submitting another transaction.",
@@ -815,9 +817,6 @@ const BountyDetail = () => {
 
     if (Number(currentChainId) !== chainId) {
       try {
-        await switchChainAsync({
-          chainId: Number(bounty.network),
-        });
         await switchChainAsync({ chainId });
       } catch {
         return showToast.error(
@@ -828,7 +827,6 @@ const BountyDetail = () => {
 
     setDistributing(true);
 
-    const toastId = showToast.loading("Distributing rewards...");
     const toastId = showToast.loading("Assigning winners on-chain...");
     let tx;
     try {
@@ -868,30 +866,6 @@ const BountyDetail = () => {
       return;
     }
 
-      const bountyContract = getBountyContract(bounty.network);
-
-      if (!bountyContract) {
-        throw new Error(
-          `Bounty contract not configured for chain ${bounty.network}`,
-        );
-      }
-
-      await axios.post(`${API_URL}/bounty/${id}/distribute`, {
-        txHash: tx.hash,
-        blockchainId,
-        chainId: Number(bounty.network),
-        bountyContract,
-      });
-
-      showToast.success(
-        "Rewards distributed successfully!",
-        { id: toastId },
-      );
-
-      setSelectedWinners([]);
-      setShowDistributeModal(false);
-
-      await loadWinnersData(id);
     const pendingRecord = {
       bountyId: String(id),
       blockchainId: String(blockchainId),
@@ -2593,7 +2567,7 @@ const BountyDetail = () => {
                   Cancel
                 </button>
 
-                <button
+                                <button
                   disabled={
                     distributing ||
                     isContractPending ||
@@ -2612,13 +2586,6 @@ const BountyDetail = () => {
                       Confirm distribution
                     </>
                   )}
-                <button disabled={distributing} onClick={() => setShowDistributeModal(false)} className={`${secondaryButton} flex-1`}>Cancel</button>
-                <button disabled={distributing || Boolean(pendingDistributionSync) || isContractPending || isContractConfirming} onClick={handleDistributeReward} className={`${primaryButton} flex-1`}>
-                  {distributing || isContractPending || isContractConfirming
-                    ? "Processing..."
-                    : pendingDistributionSync
-                      ? "Synchronization required"
-                      : <><FiShield size={16} /> Confirm distribution</>}
                 </button>
               </div>
 
