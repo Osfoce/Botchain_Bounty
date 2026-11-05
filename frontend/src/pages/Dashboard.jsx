@@ -313,7 +313,7 @@ function Dashboard({ dark, setDark }) {
     }
   };
 
-  const totalPages = pagination?.totalPages || 1;
+  const totalPages = pagination?.pages || 1;
 
   const filterOptions = [
     { label: "All opportunities", value: "all" },
