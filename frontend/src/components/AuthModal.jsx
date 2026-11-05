@@ -4,19 +4,29 @@ import { FiX } from "react-icons/fi";
 import WalletSignupButton from "./WalletSignupButton";
 import HappyBounty from "../assets/images/happy-bounty-logo.png";
 
-function AuthModal({ isOpen, onClose }) {
+function AuthModal({
+  isOpen,
+  onClose,
+  title = "Welcome to Happy Bounty",
+  subtitle = "Sign up or sign in with your wallet",
+}) {
   // Prevent background page from scrolling while modal is open
   useEffect(() => {
     if (!isOpen) return;
 
     const originalOverflow = document.body.style.overflow;
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
 
     document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
 
     return () => {
       document.body.style.overflow = originalOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [isOpen]);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
@@ -25,19 +35,24 @@ function AuthModal({ isOpen, onClose }) {
       className="
         auth-modal-overlay app-modal-overlay
         fixed inset-0 z-[100]
-        flex min-h-screen
+        flex min-h-[100dvh]
         items-center justify-center
         overflow-y-auto
         p-4
+        pb-[max(1rem,env(safe-area-inset-bottom))]
+        pt-[max(1rem,env(safe-area-inset-top))]
         backdrop-blur-md
         sm:p-6
       "
       onClick={onClose}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-modal-title"
         className="
           auth-modal-card app-modal-panel
-          relative w-full max-w-sm
+          relative max-h-[calc(100dvh-2rem)] w-full max-w-sm overflow-y-auto
           rounded-2xl
           px-5 py-5
           sm:px-6 sm:py-6
@@ -102,12 +117,15 @@ function AuthModal({ isOpen, onClose }) {
             </div>
           </div>
 
-          <h2 className="auth-modal-title text-xl font-black tracking-tight sm:text-2xl">
-            Welcome to Happy Bounty
+          <h2
+            id="auth-modal-title"
+            className="auth-modal-title text-xl font-black tracking-tight sm:text-2xl"
+          >
+            {title}
           </h2>
 
           <p className="auth-modal-subtitle mt-1.5 text-xs font-medium sm:text-sm">
-            Sign up or sign in with your wallet
+            {subtitle}
           </p>
         </div>
 
