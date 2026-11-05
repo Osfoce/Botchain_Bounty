@@ -42,11 +42,13 @@
 
     <meta property="og:type" content="website" />
 
-    <!-- Twitter metadata -->
     <meta
-      name="twitter:card"
-      content="summary_large_image"
+      property="og:site_name"
+      content="Happy Bounty"
     />
+
+    <!-- Twitter metadata -->
+    <meta name="twitter:card" content="summary_large_image" />
 
     <meta
       name="twitter:title"
@@ -60,7 +62,7 @@
 
     <title>Happy Bounty — Multichain Bounties &amp; Rewards</title>
 
-    <!-- DejaVu Sans font -->
+    <!-- Global font settings -->
     <style>
       :root {
         font-family: "DejaVu Sans", sans-serif;
@@ -73,11 +75,14 @@
       html,
       body,
       #root {
+        min-width: 320px;
+        min-height: 100%;
+        margin: 0;
         font-family: "DejaVu Sans", sans-serif;
       }
 
       body {
-        margin: 0;
+        min-height: 100vh;
       }
 
       button,
@@ -103,6 +108,7 @@
   <body class="overflow-auto">
     <div id="root"></div>
 
+    <!-- Vite React entry point -->
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
