@@ -64,7 +64,7 @@ function WalletSignupButton({
         ? "Sign a message to continue"
         : connectIntent
           ? "Choose a wallet…"
-          : "Continue with wallet";
+          : "Connect Wallet";
 
   return (
     <div className={`flex ${compact ? "w-auto" : "w-full"} flex-col items-center gap-2`}>

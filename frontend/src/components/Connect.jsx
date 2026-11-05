@@ -3,18 +3,25 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import "@rainbow-me/rainbowkit/styles.css";
 import { useState } from "react";
 import { FiChevronDown, FiLogOut, FiRadio } from "react-icons/fi";
-import { useDisconnect } from "wagmi";
+import { useAccount, useDisconnect } from "wagmi";
 import { useTheme } from "../context/ThemeContext";
 import { useAuth } from "../hooks/useAuth";
 import AuthModal from "./AuthModal";
-import WalletSignupButton from "./WalletSignupButton";
 
 function Connect() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [dismissedWallet, setDismissedWallet] = useState(null);
+  const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const { dark } = useTheme();
   const { isAuthenticated } = useAuth();
+  const walletAddress = address?.toLowerCase();
+  const authModalOpen = Boolean(
+    isConnected &&
+      walletAddress &&
+      !isAuthenticated &&
+      dismissedWallet !== walletAddress,
+  );
 
   return (
     <>
@@ -24,6 +31,7 @@ function Connect() {
         chain,
         mounted,
         authenticationStatus,
+        openConnectModal,
         openAccountModal,
         openChainModal,
       }) => {
@@ -174,26 +182,18 @@ function Connect() {
               )}
             </div>
 
-            {connected ? (
-              !isAuthenticated && (
-                <button
-                  type="button"
-                  onClick={() => setAuthModalOpen(true)}
-                  className={`h-10 shrink-0 rounded-full border px-3 text-xs font-bold transition-colors sm:px-4 sm:text-sm ${
-                    dark
-                      ? "border-[#00D6A0]/30 bg-[#00D6A0] text-[#06251c] hover:bg-[#00e6ac]"
-                      : "border-[#00A87D]/20 bg-[#00D6A0] text-[#06251c] hover:bg-[#00e6ac]"
-                  }`}
-                >
-                  Sign in
-                </button>
-              )
-            ) : (
-              <WalletSignupButton
-                compact
-                showMessage={false}
-                className="px-3 py-2 sm:px-4"
-              />
+            {!connected && ready && (
+              <button
+                type="button"
+                onClick={openConnectModal}
+                className={`h-10 shrink-0 rounded-full border px-3 text-xs font-bold transition-colors sm:px-4 sm:text-sm ${
+                  dark
+                    ? "border-[#00D6A0]/30 bg-[#00D6A0] text-[#06251c] hover:bg-[#00e6ac]"
+                    : "border-[#00A87D]/20 bg-[#00D6A0] text-[#06251c] hover:bg-[#00e6ac]"
+                }`}
+              >
+                Connect wallet
+              </button>
             )}
           </>
         );
@@ -201,7 +201,7 @@ function Connect() {
     </ConnectButton.Custom>
     <AuthModal
       isOpen={authModalOpen}
-      onClose={() => setAuthModalOpen(false)}
+      onClose={() => setDismissedWallet(walletAddress)}
       title="Verify your wallet"
       subtitle="Sign a message to securely continue"
     />
