@@ -6,7 +6,11 @@ const User = require("../modules/user.module");
 const Submission = require("../modules/submission.module");
 const DistributionSync = require("../modules/distributionSync.module");
 const { BOUNTY_ABI } = require("../config/abi");
-const { formatRewardAmount } = require("./financialAmounts.service");
+const { CHAINS } = require("../config/chains");
+const {
+  formatRewardAmount,
+  getTokenDecimals,
+} = require("./financialAmounts.service");
 const { getSafeErrorCode, logRequestError } = require("../utils/requestLogger");
 
 const LEASE_MS = 2 * 60 * 1000;
@@ -178,6 +182,15 @@ const persistWinnerReward = async ({
   winner,
   amountWei,
 }) => {
+  const token =
+    bounty.token || CHAINS[identity.chainId]?.chain?.nativeCurrency?.symbol;
+  if (!token) {
+    throw new Error(
+      `Reward token is not configured for chain ${identity.chainId}`,
+    );
+  }
+  const tokenDecimals = getTokenDecimals(identity.chainId);
+
   const existing = await Reward.findOne({
     bountyId: bounty._id,
     winnerAddress: winner,
@@ -207,6 +220,8 @@ const persistWinnerReward = async ({
           bountyId: bounty._id,
           blockchainId: Number(identity.blockchainId),
           chainId: identity.chainId,
+          token,
+          tokenDecimals,
           bountyContract: identity.bountyContract,
           bountyTitle: bounty.title,
           winnerAddress: winner,

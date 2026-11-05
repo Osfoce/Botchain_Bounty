@@ -210,6 +210,8 @@ test("failed claim projection resumes without duplicate earnings records", async
   assert.equal(harness.reward.claimedAt, originalClaimedAt);
   assert.equal(harness.user.claimedRewards[0].amountWei, event.amount);
   assert.equal(harness.user.claimedRewards[0].accountingVersion, "base-units-v1");
+  assert.equal(harness.user.claimedRewards[0].token, "USDC");
+  assert.equal(harness.user.claimedRewards[0].tokenDecimals, 18);
 });
 
 test("concurrent duplicate claim requests apply the user effect once", async (t) => {

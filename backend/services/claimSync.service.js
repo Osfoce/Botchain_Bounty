@@ -3,6 +3,8 @@ const Bounty = require("../modules/bounty.module");
 const ClaimSync = require("../modules/claimSync.module");
 const Reward = require("../modules/reward.module");
 const User = require("../modules/user.module");
+const { CHAINS } = require("../config/chains");
+const { getTokenDecimals } = require("./financialAmounts.service");
 const { getSafeErrorCode } = require("../utils/requestLogger");
 const { recordSecurityAudit } = require("./securityAudit.service");
 
@@ -204,6 +206,12 @@ const applyClaimRecord = async (record, { force = true } = {}) => {
             bountyId: String(record.bountyId),
             bountyTitle: rewardUpdate.bountyTitle || "Untitled bounty",
             chainId: record.chainId,
+            token:
+              rewardUpdate.token ||
+              CHAINS[Number(record.chainId)]?.chain?.nativeCurrency?.symbol ||
+              null,
+            tokenDecimals:
+              rewardUpdate.tokenDecimals ?? getTokenDecimals(record.chainId),
             amountWei: record.amount,
             amountFormatted: rewardUpdate.amountFormatted,
             claimedAt: rewardUpdate.claimedAt,
