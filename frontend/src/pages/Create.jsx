@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useMemo } from "react";
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
 import { Link, useNavigate } from "react-router-dom";
@@ -38,16 +37,28 @@ import { useBounty } from "../hooks/useBounty";
 import { listTokensForChain } from "../utils/enums";
 import { formatAmount } from "../utils/format";
 import { safeExternalUrl } from "../utils/safeExternalUrl";
-import {
-  getBountyContract,
-  getNativeToken,
-} from "../utils/chains.address";
+import { getBountyContract, getNativeToken } from "../utils/chains.address";
 
 const STEPS = [
-  { id: 1, label: "Network", description: "Choose your network", icon: FiGlobe },
-  { id: 2, label: "Details", description: "Describe the task", icon: FiFileText },
+  {
+    id: 1,
+    label: "Network",
+    description: "Choose your network",
+    icon: FiGlobe,
+  },
+  {
+    id: 2,
+    label: "Details",
+    description: "Describe the task",
+    icon: FiFileText,
+  },
   { id: 3, label: "Reward", description: "Set the payout", icon: FiDollarSign },
-  { id: 4, label: "Review", description: "Confirm everything", icon: FiCheckCircle },
+  {
+    id: 4,
+    label: "Review",
+    description: "Confirm everything",
+    icon: FiCheckCircle,
+  },
 ];
 
 const getPendingCreateKey = (walletAddress) =>
@@ -105,7 +116,7 @@ function Create() {
     startDate: "",
     deadline: "",
     originLink: "",
-    reward: 0,
+    reward: "",
     token: "",
     winnersAllowed: 1,
     payoutType: "SINGLE",
@@ -285,19 +296,32 @@ function Create() {
     }
 
     if (step === 3) {
+      // if (
+      //   !Number.isFinite(Number(bountyData.reward)) ||
+      //   bountyData.reward <= 0
+      // )
+      const rewardAmount = Number(bountyData.reward);
+
       if (
-        !Number.isFinite(Number(bountyData.reward)) ||
-        bountyData.reward <= 0
+        bountyData.reward.trim() === "" ||
+        !Number.isFinite(rewardAmount) ||
+        rewardAmount <= 0
       ) {
         showToast.error("Please enter a valid reward amount.");
         return false;
       }
 
       // Minimum reward per network (USDC on Arc, BOT on BOT Chain)
-      const minReward = Number(bountyData.network) === 5042 ? 1 : // $1 USD (USDC)
-                       Number(bountyData.network) === 968 ? 0.1 : 0;
+      const minReward =
+        Number(bountyData.network) === 5042
+          ? 1 // $1 USD (USDC)
+          : Number(bountyData.network) === 968
+            ? 0.1
+            : 0;
       if (Number(bountyData.reward) < minReward) {
-        showToast.error(`Reward must be at least ${minReward} ${selectedNativeSymbol}.`);
+        showToast.error(
+          `Reward must be at least ${minReward} ${selectedNativeSymbol}.`,
+        );
         return false;
       }
 
@@ -306,10 +330,7 @@ function Create() {
         return false;
       }
 
-      if (
-        multipleWinner &&
-        selectedPayoutType === "MULTI_PERCENTAGE"
-      ) {
+      if (multipleWinner && selectedPayoutType === "MULTI_PERCENTAGE") {
         if (
           percentageArray.length < 2 ||
           percentageArray.length > 5 ||
@@ -319,11 +340,10 @@ function Create() {
               percentage <= 0 ||
               percentage > 100,
           ) ||
-          percentageArray.reduce((sum, percentage) => sum + percentage, 0) !== 100
+          percentageArray.reduce((sum, percentage) => sum + percentage, 0) !==
+            100
         ) {
-          showToast.error(
-            "Use 2–5 positive percentages that add up to 100.",
-          );
+          showToast.error("Use 2–5 positive percentages that add up to 100.");
           return false;
         }
       }
@@ -369,7 +389,9 @@ function Create() {
 
     if (!tag) return;
 
-    if (bountyData.tags.some((item) => item.toLowerCase() === tag.toLowerCase())) {
+    if (
+      bountyData.tags.some((item) => item.toLowerCase() === tag.toLowerCase())
+    ) {
       showToast.error("That tag has already been added.");
       return;
     }
@@ -475,9 +497,10 @@ function Create() {
         const date = new Date(`${bountyData.startDate}T00:00:00`);
         date.setDate(date.getDate() + 1);
 
-        return `${date.getFullYear()}-${String(
-          date.getMonth() + 1,
-        ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+          2,
+          "0",
+        )}-${String(date.getDate()).padStart(2, "0")}`;
       })()
     : localToday;
 
@@ -497,7 +520,9 @@ function Create() {
     }
     if (pendingCreate) {
       if (!isAuthenticated) {
-        showToast.error("Sign in with your wallet to resume bounty verification.");
+        showToast.error(
+          "Sign in with your wallet to resume bounty verification.",
+        );
         return;
       }
       let payload;
@@ -557,16 +582,11 @@ function Create() {
     }
 
     const selectedChainId = Number(bountyData.network);
-    const chain = supportedChains.find(
-      (item) => item.id === selectedChainId,
-    );
+    const chain = supportedChains.find((item) => item.id === selectedChainId);
 
     const contractAddress = getBountyContract(selectedChainId);
 
-    if (
-      !contractAddress ||
-      contractAddress === "Loading..."
-    ) {
+    if (!contractAddress || contractAddress === "Loading...") {
       showToast.error(
         `Contract not deployed on ${chain?.name || "the selected network"}.`,
       );
@@ -590,14 +610,14 @@ function Create() {
     }
 
     if (!isAuthenticated) {
-      showToast.error("Sign in with your wallet on the selected network before creating a bounty.");
+      showToast.error(
+        "Sign in with your wallet on the selected network before creating a bounty.",
+      );
       return;
     }
 
     const finalWinnersAllowed = multipleWinner ? winnerCount : 1;
-    const finalPayoutType = multipleWinner
-      ? selectedPayoutType
-      : "SINGLE";
+    const finalPayoutType = multipleWinner ? selectedPayoutType : "SINGLE";
 
     const finalPercentages =
       multipleWinner && selectedPayoutType === "MULTI_PERCENTAGE"
@@ -612,7 +632,8 @@ function Create() {
       startDate: bountyData.startDate,
       deadline: bountyData.deadline,
       originLink: bountyData.originLink,
-      reward: bountyData.reward,
+      // reward: bountyData.reward,
+      reward: Number(bountyData.reward),
       token: bountyData.token,
       network: selectedChainId,
       winnersAllowed: finalWinnersAllowed,
@@ -622,7 +643,7 @@ function Create() {
 
     try {
       const { eventData, hash } = await createBounty({
-        reward: bountyData.reward,
+        reward: Number(bountyData.reward),
         token: bountyData.token,
         winnersAllowed: finalWinnersAllowed,
         payoutType: finalPayoutType,
@@ -630,9 +651,7 @@ function Create() {
       });
 
       let blockchainId =
-        eventData?.bountyId != null
-          ? Number(eventData.bountyId)
-          : null;
+        eventData?.bountyId != null ? Number(eventData.bountyId) : null;
 
       if (blockchainId === null || blockchainId === undefined) {
         blockchainId = await fetchBountyIdFromTx(hash);
@@ -650,7 +669,9 @@ function Create() {
       }
 
       if (!hash || !/^0x[a-fA-F0-9]{64}$/.test(hash)) {
-        showToast.error("Invalid transaction hash. The bounty cannot be linked.");
+        showToast.error(
+          "Invalid transaction hash. The bounty cannot be linked.",
+        );
         return;
       }
 
@@ -667,7 +688,10 @@ function Create() {
           JSON.stringify({ payload, txHash: hash }),
         );
       } catch (storageError) {
-        console.error("Could not persist pending bounty verification:", storageError);
+        console.error(
+          "Could not persist pending bounty verification:",
+          storageError,
+        );
         showToast.error(
           "Transaction succeeded, but recovery data could not be saved in this tab.",
         );
@@ -707,9 +731,7 @@ function Create() {
 
   const isProcessing = isContractPending || isConfirming || isSavingBounty;
 
-  const page = dark
-    ? "bg-[#080B0D] text-white"
-    : "bg-[#F5F7F5] text-[#171A18]";
+  const page = dark ? "bg-[#080B0D] text-white" : "bg-[#F5F7F5] text-[#171A18]";
 
   const card = dark
     ? "border border-white/[0.09] bg-[#101411]"
@@ -736,17 +758,17 @@ function Create() {
     ? "rounded-2xl border border-white/10 bg-[#0B0E0C] p-5"
     : "rounded-2xl border border-[#E2E7E1] bg-[#F9FBF8] p-5";
 
-  const inputClass =
-    `w-full rounded-xl px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#00D6A0]/10 ${field}`;
+  const inputClass = `w-full rounded-xl px-4 py-3 text-sm outline-none transition focus:ring-2 focus:ring-[#00D6A0]/10 ${field}`;
 
   const sectionHeading = "text-xl font-bold tracking-tight";
-  const smallLabel =
-    `mb-2 block text-xs font-bold uppercase tracking-[0.13em] ${label}`;
+  const smallLabel = `mb-2 block text-xs font-bold uppercase tracking-[0.13em] ${label}`;
 
   const dateInputClass = inputClass;
 
   return (
-    <div className={`flex min-h-screen flex-col transition-colors duration-300 ${page}`}>
+    <div
+      className={`flex min-h-screen flex-col transition-colors duration-300 ${page}`}
+    >
       <NavBar dark={dark} setDark={setDark} />
 
       <main className="relative flex-1 overflow-hidden pb-16 pt-28 sm:pt-32">
@@ -771,7 +793,9 @@ function Create() {
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#00D6A0]/10 text-[#00D6A0]">
                   <FiZap size={17} />
                 </span>
-                <span className={`text-xs font-bold uppercase tracking-[0.2em] ${greenText}`}>
+                <span
+                  className={`text-xs font-bold uppercase tracking-[0.2em] ${greenText}`}
+                >
                   Bounty Studio
                 </span>
               </div>
@@ -780,19 +804,25 @@ function Create() {
                 Create a bounty<span className={greenText}>.</span>
               </h1>
 
-              <p className={`mt-3 max-w-xl text-sm leading-6 sm:text-base ${muted}`}>
-                Turn your next idea into an opportunity. Define the task,
-                choose the reward, and invite contributors to get involved.
+              <p
+                className={`mt-3 max-w-xl text-sm leading-6 sm:text-base ${muted}`}
+              >
+                Turn your next idea into an opportunity. Define the task, choose
+                the reward, and invite contributors to get involved.
               </p>
             </div>
 
-            <div className={`hidden items-center gap-3 rounded-2xl border px-4 py-3 sm:flex ${divider}`}>
+            <div
+              className={`hidden items-center gap-3 rounded-2xl border px-4 py-3 sm:flex ${divider}`}
+            >
               <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00D6A0]/10 text-[#00D6A0]">
                 <FiShield size={19} />
               </span>
               <div>
                 <p className="text-sm font-semibold">On-chain creation</p>
-                <p className={`mt-0.5 text-xs ${muted}`}>Wallet approval required</p>
+                <p className={`mt-0.5 text-xs ${muted}`}>
+                  Wallet approval required
+                </p>
               </div>
             </div>
           </div>
@@ -801,7 +831,9 @@ function Create() {
           <div className={`mb-7 rounded-2xl border p-4 sm:p-6 ${card}`}>
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${muted}`}>
+                <p
+                  className={`text-xs font-semibold uppercase tracking-[0.14em] ${muted}`}
+                >
                   Creation progress
                 </p>
                 <p className="mt-1 text-sm font-bold">
@@ -816,7 +848,9 @@ function Create() {
               </span>
             </div>
 
-            <div className={`mb-5 h-1.5 overflow-hidden rounded-full ${dark ? "bg-white/10" : "bg-[#E8EDE7]"}`}>
+            <div
+              className={`mb-5 h-1.5 overflow-hidden rounded-full ${dark ? "bg-white/10" : "bg-[#E8EDE7]"}`}
+            >
               <div
                 className="h-full rounded-full bg-[#00D6A0] transition-all duration-500"
                 style={{ width: `${(currentStep / totalSteps) * 100}%` }}
@@ -874,12 +908,18 @@ function Create() {
                               : "bg-[#EDF1EB] text-[#737B73]"
                       }`}
                     >
-                      {complete ? <FiCheck size={17} /> : <StepIcon size={17} />}
+                      {complete ? (
+                        <FiCheck size={17} />
+                      ) : (
+                        <StepIcon size={17} />
+                      )}
                     </span>
 
                     {/* Desktop: original step labels */}
                     <span className="hidden min-w-0 sm:block">
-                      <span className={`block text-xs uppercase tracking-wider ${muted}`}>
+                      <span
+                        className={`block text-xs uppercase tracking-wider ${muted}`}
+                      >
                         Step {step.id}
                       </span>
                       <span className="mt-0.5 block truncate text-sm font-bold">
@@ -908,14 +948,17 @@ function Create() {
                       <div>
                         <h2 className={sectionHeading}>Network & category</h2>
                         <p className={`mt-1 text-sm leading-6 ${muted}`}>
-                          Choose where your bounty will live and the kind of work you need.
+                          Choose where your bounty will live and the kind of
+                          work you need.
                         </p>
                       </div>
                     </div>
 
                     <div className="space-y-6">
                       <div>
-                        <label className={smallLabel}>Blockchain network *</label>
+                        <label className={smallLabel}>
+                          Blockchain network *
+                        </label>
                         <select
                           value={bountyData.network}
                           onChange={handleChainChange}
@@ -923,12 +966,14 @@ function Create() {
                         >
                           {supportedChains.map((chain) => (
                             <option key={chain.id} value={chain.id}>
-                              {chain.name} ({chain.nativeCurrency?.symbol || "NATIVE"})
+                              {chain.name} (
+                              {chain.nativeCurrency?.symbol || "NATIVE"})
                             </option>
                           ))}
                         </select>
                         <p className={`mt-2 text-xs ${muted}`}>
-                          Selected network: {selectedChain?.name || "Not selected"}
+                          Selected network:{" "}
+                          {selectedChain?.name || "Not selected"}
                         </p>
                       </div>
 
@@ -958,13 +1003,18 @@ function Create() {
 
                       <div className={panel}>
                         <div className="flex items-start gap-3">
-                          <FiInfo className={`mt-0.5 shrink-0 ${greenText}`} size={18} />
+                          <FiInfo
+                            className={`mt-0.5 shrink-0 ${greenText}`}
+                            size={18}
+                          />
                           <div>
-                            <p className="text-sm font-semibold">Before you continue</p>
+                            <p className="text-sm font-semibold">
+                              Before you continue
+                            </p>
                             <p className={`mt-1 text-xs leading-5 ${muted}`}>
-                              Your wallet must support the selected network. Gas fees are paid
-                              separately from the bounty reward, according to your wallet and
-                              network.
+                              Your wallet must support the selected network. Gas
+                              fees are paid separately from the bounty reward,
+                              according to your wallet and network.
                             </p>
                           </div>
                         </div>
@@ -983,7 +1033,8 @@ function Create() {
                       <div>
                         <h2 className={sectionHeading}>Task details</h2>
                         <p className={`mt-1 text-sm leading-6 ${muted}`}>
-                          Explain the work clearly so contributors know exactly what to deliver.
+                          Explain the work clearly so contributors know exactly
+                          what to deliver.
                         </p>
                       </div>
                     </div>
@@ -994,7 +1045,9 @@ function Create() {
                         <input
                           value={bountyData.title}
                           maxLength={120}
-                          onChange={(event) => updateBountyData("title", event.target.value)}
+                          onChange={(event) =>
+                            updateBountyData("title", event.target.value)
+                          }
                           className={inputClass}
                           placeholder="e.g. Build a DeFi analytics dashboard"
                         />
@@ -1008,11 +1061,15 @@ function Create() {
                         <textarea
                           value={bountyData.description}
                           maxLength={5000}
-                          onChange={(event) => updateBountyData("description", event.target.value)}
+                          onChange={(event) =>
+                            updateBountyData("description", event.target.value)
+                          }
                           className={`${inputClass} min-h-44 resize-y leading-6`}
                           placeholder="Describe the task, requirements, expected deliverables, and how the submission will be evaluated."
                         />
-                        <div className={`mt-1.5 flex justify-between text-xs ${muted}`}>
+                        <div
+                          className={`mt-1.5 flex justify-between text-xs ${muted}`}
+                        >
                           <span>Minimum 20 characters</span>
                           <span>{bountyData.description.length}/5000</span>
                         </div>
@@ -1033,7 +1090,10 @@ function Create() {
                         ) : (
                           <>
                             <div className="flex flex-wrap gap-2">
-                              {(TAGS_BY_CATEGORY[bountyData.category] || DEFAULT_TAGS).map((tag) => {
+                              {(
+                                TAGS_BY_CATEGORY[bountyData.category] ||
+                                DEFAULT_TAGS
+                              ).map((tag) => {
                                 const selected = bountyData.tags.includes(tag);
 
                                 return (
@@ -1049,7 +1109,9 @@ function Create() {
                                           : "border-[#DDE3DC] bg-white text-[#5B645B] hover:border-[#00A87D]"
                                     }`}
                                   >
-                                    {selected && <span className="mr-1">✓</span>}
+                                    {selected && (
+                                      <span className="mr-1">✓</span>
+                                    )}
                                     {tag}
                                   </button>
                                 );
@@ -1061,7 +1123,9 @@ function Create() {
                                 <input
                                   value={customTag}
                                   maxLength={24}
-                                  onChange={(event) => setCustomTag(event.target.value)}
+                                  onChange={(event) =>
+                                    setCustomTag(event.target.value)
+                                  }
                                   onKeyDown={(event) => {
                                     if (event.key === "Enter") {
                                       event.preventDefault();
@@ -1074,7 +1138,10 @@ function Create() {
                                 <button
                                   type="button"
                                   onClick={addCustomTag}
-                                  disabled={!customTag.trim() || bountyData.tags.length >= 5}
+                                  disabled={
+                                    !customTag.trim() ||
+                                    bountyData.tags.length >= 5
+                                  }
                                   className={primaryButton}
                                 >
                                   Add
@@ -1084,7 +1151,9 @@ function Create() {
 
                             {bountyData.tags.length > 0 && (
                               <div className="mt-4">
-                                <p className={`mb-2 text-xs font-semibold ${muted}`}>
+                                <p
+                                  className={`mb-2 text-xs font-semibold ${muted}`}
+                                >
                                   Selected tags
                                 </p>
                                 <div className="flex flex-wrap gap-2">
@@ -1145,7 +1214,9 @@ function Create() {
                             type="date"
                             value={bountyData.deadline}
                             min={minDeadline}
-                            onChange={(event) => updateBountyData("deadline", event.target.value)}
+                            onChange={(event) =>
+                              updateBountyData("deadline", event.target.value)
+                            }
                             className={dateInputClass}
                           />
                           <p className={`mt-1.5 text-xs ${muted}`}>
@@ -1157,11 +1228,16 @@ function Create() {
                       <div>
                         <label className={smallLabel}>Reference link</label>
                         <div className="relative">
-                          <FiExternalLink className={`absolute left-4 top-3.5 ${muted}`} size={16} />
+                          <FiExternalLink
+                            className={`absolute left-4 top-3.5 ${muted}`}
+                            size={16}
+                          />
                           <input
                             type="url"
                             value={bountyData.originLink}
-                            onChange={(event) => updateBountyData("originLink", event.target.value)}
+                            onChange={(event) =>
+                              updateBountyData("originLink", event.target.value)
+                            }
                             className={`${inputClass} pl-10 ${
                               originLinkError
                                 ? "!border-red-500 focus:!border-red-500"
@@ -1171,10 +1247,13 @@ function Create() {
                           />
                         </div>
                         {originLinkError && (
-                          <p className="mt-2 text-xs text-red-500">{originLinkError}</p>
+                          <p className="mt-2 text-xs text-red-500">
+                            {originLinkError}
+                          </p>
                         )}
                         <p className={`mt-1.5 text-xs ${muted}`}>
-                          Optional. Link to project resources, a repository, or design files.
+                          Optional. Link to project resources, a repository, or
+                          design files.
                         </p>
                       </div>
                     </div>
@@ -1191,7 +1270,8 @@ function Create() {
                       <div>
                         <h2 className={sectionHeading}>Reward & payouts</h2>
                         <p className={`mt-1 text-sm leading-6 ${muted}`}>
-                          Set the reward amount and decide how winners will share it.
+                          Set the reward amount and decide how winners will
+                          share it.
                         </p>
                       </div>
                     </div>
@@ -1199,12 +1279,18 @@ function Create() {
                     <div className="space-y-6">
                       <div className={panel}>
                         <div className="flex items-start gap-3">
-                          <FiShield className={`mt-0.5 shrink-0 ${greenText}`} size={19} />
+                          <FiShield
+                            className={`mt-0.5 shrink-0 ${greenText}`}
+                            size={19}
+                          />
                           <div>
-                            <h3 className="text-sm font-bold">Self-funded bounty</h3>
+                            <h3 className="text-sm font-bold">
+                              Self-funded bounty
+                            </h3>
                             <p className={`mt-1 text-xs leading-5 ${muted}`}>
-                              You provide the reward for this task. Make sure you review the
-                              amount, token, and network before approving the transaction.
+                              You provide the reward for this task. Make sure
+                              you review the amount, token, and network before
+                              approving the transaction.
                             </p>
                           </div>
                         </div>
@@ -1214,37 +1300,48 @@ function Create() {
                         <label className={smallLabel}>Reward token *</label>
                         <select
                           value={bountyData.token}
-                          onChange={(event) => updateBountyData("token", event.target.value)}
+                          onChange={(event) =>
+                            updateBountyData("token", event.target.value)
+                          }
                           className={inputClass}
                         >
                           {availableTokens.length === 0 ? (
-                            <option value="">No tokens available for this wallet network</option>
+                            <option value="">
+                              No tokens available for this wallet network
+                            </option>
                           ) : (
                             availableTokens.map((token) => (
                               <option key={token.key} value={token.key}>
-                                {token.label}{token.kind === "native" ? " (Native)" : ""}
+                                {token.label}
+                                {token.kind === "native" ? " (Native)" : ""}
                               </option>
                             ))
                           )}
                         </select>
                         <p className={`mt-2 text-xs ${muted}`}>
-                          Available tokens are based on your connected wallet network.
+                          Available tokens are based on your connected wallet
+                          network.
                         </p>
                       </div>
 
                       <div>
                         <label className={smallLabel}>Reward amount *</label>
-                        <div className={`flex items-center gap-3 rounded-xl border px-4 py-1 focus-within:border-[#00D6A0] ${field}`}>
+                        <div
+                          className={`flex items-center gap-3 rounded-xl border px-4 py-1 focus-within:border-[#00D6A0] ${field}`}
+                        >
                           <input
                             type="text"
                             inputMode="decimal"
                             value={String(bountyData.reward || "")}
                             onChange={(event) => {
                               const raw = event.target.value.replace(/,/g, "");
-                              if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) return;
+                              // if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) return;
+                              // Allow digits and at most one decimal point.
+                              if (!/^\d*\.?\d*$/.test(raw)) return;
                               updateBountyData(
                                 "reward",
-                                raw === "" ? 0 : Number(raw),
+                                raw,
+                                // === "" ? 0 : Number(raw),
                               );
                             }}
                             placeholder="0.00"
@@ -1259,7 +1356,9 @@ function Create() {
                       <div className={`rounded-2xl border p-5 ${divider}`}>
                         <div className="mb-4 flex items-center justify-between gap-4">
                           <div>
-                            <h3 className="text-sm font-bold">Multiple winners</h3>
+                            <h3 className="text-sm font-bold">
+                              Multiple winners
+                            </h3>
                             <p className={`mt-1 text-xs ${muted}`}>
                               Let contributors share the reward.
                             </p>
@@ -1270,7 +1369,11 @@ function Create() {
                             aria-checked={multipleWinner}
                             onClick={() => setMultipleWinner((prev) => !prev)}
                             className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-                              multipleWinner ? "bg-[#00D6A0]" : dark ? "bg-white/20" : "bg-[#D5DDD4]"
+                              multipleWinner
+                                ? "bg-[#00D6A0]"
+                                : dark
+                                  ? "bg-white/20"
+                                  : "bg-[#D5DDD4]"
                             }`}
                           >
                             <span
@@ -1318,10 +1421,15 @@ function Create() {
 
                             {showInfoMenu && (
                               <div className={panel}>
-                                <p className="text-sm font-semibold">Payout options</p>
-                                <p className={`mt-2 text-xs leading-5 ${muted}`}>
-                                  Equal split distributes the reward evenly. Custom split
-                                  assigns each winner a percentage. Percentages must total 100%.
+                                <p className="text-sm font-semibold">
+                                  Payout options
+                                </p>
+                                <p
+                                  className={`mt-2 text-xs leading-5 ${muted}`}
+                                >
+                                  Equal split distributes the reward evenly.
+                                  Custom split assigns each winner a percentage.
+                                  Percentages must total 100%.
                                 </p>
                               </div>
                             )}
@@ -1333,45 +1441,63 @@ function Create() {
                                 </p>
                                 <p className={`mt-1 text-xs ${muted}`}>
                                   Each winner receives approximately{" "}
-                                  {formatAmount(Number(bountyData.reward || 0) / winnerCount)}{" "}
+                                  {formatAmount(
+                                    Number(bountyData.reward || 0) /
+                                      winnerCount,
+                                  )}{" "}
                                   {bountyData.token || "TOKEN"}.
                                 </p>
                               </div>
                             )}
 
-                            {selectedPayoutType === "MULTI_PERCENTAGE" && percentageArray.length > 0 && (
-                              <div className="rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/[0.06] p-4">
-                                <p className="text-sm font-semibold text-[#00D6A0]">
-                                  Custom percentage split
-                                </p>
-                                <div className="mt-3 space-y-2">
-                                  {percentageArray.map((percentage, index) => (
-                                    <div key={`${percentage}-${index}`}>
-                                      <div className="mb-1 flex justify-between text-xs">
-                                        <span className={muted}>Winner {index + 1}</span>
-                                        <span className="font-semibold">{percentage}%</span>
-                                      </div>
-                                      <div className={`h-1.5 overflow-hidden rounded-full ${dark ? "bg-white/10" : "bg-[#E5EBE3]"}`}>
-                                        <div
-                                          className="h-full rounded-full bg-[#00D6A0]"
-                                          style={{ width: `${percentage}%` }}
-                                        />
-                                      </div>
-                                    </div>
-                                  ))}
+                            {selectedPayoutType === "MULTI_PERCENTAGE" &&
+                              percentageArray.length > 0 && (
+                                <div className="rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/[0.06] p-4">
+                                  <p className="text-sm font-semibold text-[#00D6A0]">
+                                    Custom percentage split
+                                  </p>
+                                  <div className="mt-3 space-y-2">
+                                    {percentageArray.map(
+                                      (percentage, index) => (
+                                        <div key={`${percentage}-${index}`}>
+                                          <div className="mb-1 flex justify-between text-xs">
+                                            <span className={muted}>
+                                              Winner {index + 1}
+                                            </span>
+                                            <span className="font-semibold">
+                                              {percentage}%
+                                            </span>
+                                          </div>
+                                          <div
+                                            className={`h-1.5 overflow-hidden rounded-full ${dark ? "bg-white/10" : "bg-[#E5EBE3]"}`}
+                                          >
+                                            <div
+                                              className="h-full rounded-full bg-[#00D6A0]"
+                                              style={{
+                                                width: `${percentage}%`,
+                                              }}
+                                            />
+                                          </div>
+                                        </div>
+                                      ),
+                                    )}
+                                  </div>
                                 </div>
-                              </div>
-                            )}
+                              )}
                           </div>
                         )}
                       </div>
 
                       <div>
-                        <label className={smallLabel}>Reward funding type</label>
+                        <label className={smallLabel}>
+                          Reward funding type
+                        </label>
                         <div className="grid gap-3 sm:grid-cols-2">
                           <button
                             type="button"
-                            onClick={() => updateBountyData("rewardType", "self-fund")}
+                            onClick={() =>
+                              updateBountyData("rewardType", "self-fund")
+                            }
                             className={`rounded-xl border p-4 text-left transition ${
                               bountyData.rewardType === "self-fund"
                                 ? "border-[#00D6A0]/50 bg-[#00D6A0]/[0.07]"
@@ -1382,13 +1508,19 @@ function Create() {
                               <FiShield className={greenText} size={17} />
                               Self-fund
                             </span>
-                            <span className={`mt-2 block text-xs leading-5 ${muted}`}>
+                            <span
+                              className={`mt-2 block text-xs leading-5 ${muted}`}
+                            >
                               Fund the bounty yourself.
                             </span>
                           </button>
 
-                          <div className={`rounded-xl border p-4 opacity-60 ${divider}`}>
-                            <span className="text-sm font-semibold">Seek funding</span>
+                          <div
+                            className={`rounded-xl border p-4 opacity-60 ${divider}`}
+                          >
+                            <span className="text-sm font-semibold">
+                              Seek funding
+                            </span>
                             <span className={`mt-2 block text-xs ${muted}`}>
                               Coming soon
                             </span>
@@ -1398,13 +1530,17 @@ function Create() {
 
                       <div className={`space-y-3 border-t pt-5 ${divider}`}>
                         <div className="flex items-center justify-between gap-4">
-                          <span className={`text-sm ${muted}`}>Bounty reward</span>
+                          <span className={`text-sm ${muted}`}>
+                            Bounty reward
+                          </span>
                           <span className="text-sm font-semibold">
                             {rewardDisplay} {bountyData.token}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-4">
-                          <span className={`text-sm ${muted}`}>Service fee (7%)</span>
+                          <span className={`text-sm ${muted}`}>
+                            Service fee (7%)
+                          </span>
                           <span className="text-sm font-semibold">
                             {feeDisplay} {bountyData.token}
                           </span>
@@ -1412,7 +1548,9 @@ function Create() {
                         <div className="flex items-center justify-between gap-4 rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/[0.07] p-4">
                           <div>
                             <p className="text-sm font-bold">Total amount</p>
-                            <p className={`mt-1 text-xs ${muted}`}>Reward + service fee</p>
+                            <p className={`mt-1 text-xs ${muted}`}>
+                              Reward + service fee
+                            </p>
                           </div>
                           <p className="text-lg font-bold text-[#00D6A0]">
                             {totalAmountDisplay} {bountyData.token}
@@ -1433,38 +1571,58 @@ function Create() {
                       <div>
                         <h2 className={sectionHeading}>Review your bounty</h2>
                         <p className={`mt-1 text-sm leading-6 ${muted}`}>
-                          Check your details and payout settings before submitting.
+                          Check your details and payout settings before
+                          submitting.
                         </p>
                       </div>
                     </div>
 
                     <div className={`mb-5 rounded-2xl border p-5 ${divider}`}>
-                      <p className={`text-xs font-bold uppercase tracking-[0.14em] ${greenText}`}>
+                      <p
+                        className={`text-xs font-bold uppercase tracking-[0.14em] ${greenText}`}
+                      >
                         Bounty preview
                       </p>
                       <h3 className="mt-3 break-words text-2xl font-bold">
                         {bountyData.title || "Untitled bounty"}
                       </h3>
-                      <p className={`mt-3 whitespace-pre-wrap break-words text-sm leading-6 ${muted}`}>
+                      <p
+                        className={`mt-3 whitespace-pre-wrap break-words text-sm leading-6 ${muted}`}
+                      >
                         {bountyData.description || "No description provided."}
                       </p>
                       <div className="mt-4 flex flex-wrap gap-2">
                         {bountyData.tags.map((tag) => (
-                          <span key={tag} className={`rounded-full border px-3 py-1.5 text-xs ${divider}`}>
+                          <span
+                            key={tag}
+                            className={`rounded-full border px-3 py-1.5 text-xs ${divider}`}
+                          >
                             {tag}
                           </span>
                         ))}
                       </div>
                     </div>
 
-                    <div className={`overflow-hidden rounded-2xl border ${divider}`}>
+                    <div
+                      className={`overflow-hidden rounded-2xl border ${divider}`}
+                    >
                       {[
                         ["Network", selectedChain?.name || "Not selected"],
                         ["Category", bountyData.category || "Not selected"],
                         ["Start date", formatDate(bountyData.startDate)],
                         ["End date", formatDate(bountyData.deadline)],
-                        ["Reward type", bountyData.rewardType.replace("-", " ")],
-                        ["Winner setup", !multipleWinner ? "Single winner" : selectedPayoutType === "MULTI_EQUAL" ? `${winnerCount} winners · Equal split` : `${percentageArray.length} winners · ${percentageArray.join("% / ")}%`],
+                        [
+                          "Reward type",
+                          bountyData.rewardType.replace("-", " "),
+                        ],
+                        [
+                          "Winner setup",
+                          !multipleWinner
+                            ? "Single winner"
+                            : selectedPayoutType === "MULTI_EQUAL"
+                              ? `${winnerCount} winners · Equal split`
+                              : `${percentageArray.length} winners · ${percentageArray.join("% / ")}%`,
+                        ],
                       ].map(([name, value], index) => (
                         <div
                           key={name}
@@ -1472,7 +1630,9 @@ function Create() {
                             index !== 5 ? `border-b ${divider}` : ""
                           }`}
                         >
-                          <span className={`text-xs font-semibold uppercase tracking-wider ${muted}`}>
+                          <span
+                            className={`text-xs font-semibold uppercase tracking-wider ${muted}`}
+                          >
                             {name}
                           </span>
                           <span className="break-words text-sm font-semibold sm:text-right">
@@ -1489,13 +1649,17 @@ function Create() {
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-4 px-4 py-4 sm:px-5">
-                          <span className={`text-sm ${muted}`}>Service fee (7%)</span>
+                          <span className={`text-sm ${muted}`}>
+                            Service fee (7%)
+                          </span>
                           <span className="text-sm font-semibold">
                             {feeDisplay} {bountyData.token}
                           </span>
                         </div>
                         <div className="flex items-center justify-between gap-4 border-t border-[#00D6A0]/20 bg-[#00D6A0]/[0.07] px-4 py-5 sm:px-5">
-                          <span className="text-sm font-bold">Total amount</span>
+                          <span className="text-sm font-bold">
+                            Total amount
+                          </span>
                           <span className="text-lg font-bold text-[#00D6A0]">
                             {totalAmountDisplay} {bountyData.token}
                           </span>
@@ -1515,33 +1679,48 @@ function Create() {
                       </a>
                     )}
 
-                    <div className={`mt-5 flex items-start gap-3 rounded-xl border p-4 ${divider}`}>
-                      <FiShield className={`mt-0.5 shrink-0 ${greenText}`} size={18} />
+                    <div
+                      className={`mt-5 flex items-start gap-3 rounded-xl border p-4 ${divider}`}
+                    >
+                      <FiShield
+                        className={`mt-0.5 shrink-0 ${greenText}`}
+                        size={18}
+                      />
                       <p className={`text-xs leading-5 ${muted}`}>
-                        Creating this bounty requires wallet confirmation and an on-chain
-                        transaction. Verify the network, token, reward, and service fee
-                        before approving it.
+                        Creating this bounty requires wallet confirmation and an
+                        on-chain transaction. Verify the network, token, reward,
+                        and service fee before approving it.
                       </p>
                     </div>
                   </div>
                 )}
 
                 {/* Step navigation */}
-                <div className={`mt-8 flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between ${divider}`}>
+                <div
+                  className={`mt-8 flex flex-col-reverse gap-3 border-t pt-6 sm:flex-row sm:items-center sm:justify-between ${divider}`}
+                >
                   {currentStep === 1 ? (
                     <Link to="/dashboard" className={secondaryButton}>
                       <FiX size={16} />
                       Cancel
                     </Link>
                   ) : (
-                    <button type="button" onClick={prevStep} className={secondaryButton}>
+                    <button
+                      type="button"
+                      onClick={prevStep}
+                      className={secondaryButton}
+                    >
                       <FiArrowLeft size={16} />
                       Previous
                     </button>
                   )}
 
                   {currentStep < totalSteps ? (
-                    <button type="button" onClick={nextStep} className={primaryButton}>
+                    <button
+                      type="button"
+                      onClick={nextStep}
+                      className={primaryButton}
+                    >
                       Continue
                       <FiArrowRight size={16} />
                     </button>
@@ -1580,7 +1759,9 @@ function Create() {
                   </span>
                   <div>
                     <h3 className="text-sm font-bold">Bounty summary</h3>
-                    <p className={`mt-1 text-xs ${muted}`}>Updates as you create</p>
+                    <p className={`mt-1 text-xs ${muted}`}>
+                      Updates as you create
+                    </p>
                   </div>
                 </div>
 
@@ -1606,14 +1787,17 @@ function Create() {
                   <div>
                     <p className={`text-xs ${muted}`}>Selected tags</p>
                     <p className="mt-1 text-sm font-semibold">
-                      {bountyData.tags.length ? bountyData.tags.length : "None"} / 5
+                      {bountyData.tags.length ? bountyData.tags.length : "None"}{" "}
+                      / 5
                     </p>
                   </div>
                 </div>
               </div>
 
               <div className={`rounded-2xl p-5 ${card}`}>
-                <p className={`text-xs font-bold uppercase tracking-[0.14em] ${greenText}`}>
+                <p
+                  className={`text-xs font-bold uppercase tracking-[0.14em] ${greenText}`}
+                >
                   Payment breakdown
                 </p>
 
@@ -1646,12 +1830,17 @@ function Create() {
 
               <div className={`rounded-2xl p-5 ${card}`}>
                 <div className="flex items-start gap-3">
-                  <FiShield className={`mt-0.5 shrink-0 ${greenText}`} size={18} />
+                  <FiShield
+                    className={`mt-0.5 shrink-0 ${greenText}`}
+                    size={18}
+                  />
                   <div>
-                    <h3 className="text-sm font-bold">Your bounty, your rules</h3>
+                    <h3 className="text-sm font-bold">
+                      Your bounty, your rules
+                    </h3>
                     <p className={`mt-2 text-xs leading-5 ${muted}`}>
-                      Make your requirements specific, explain what counts as a successful
-                      submission, and set a realistic deadline.
+                      Make your requirements specific, explain what counts as a
+                      successful submission, and set a realistic deadline.
                     </p>
                   </div>
                 </div>
@@ -1690,7 +1879,9 @@ function Create() {
             aria-modal="true"
             aria-labelledby="equal-split-title"
             className={`w-full max-w-md rounded-2xl border p-6 shadow-2xl ${
-              dark ? "border-white/10 bg-[#101411]" : "border-[#E2E7E1] bg-white"
+              dark
+                ? "border-white/10 bg-[#101411]"
+                : "border-[#E2E7E1] bg-white"
             }`}
             onClick={(event) => event.stopPropagation()}
           >
@@ -1723,7 +1914,11 @@ function Create() {
               max="5"
               step="1"
               value={winnerCount}
-              onChange={(event) => setWinnerCount(event.target.value === "" ? "" : Number(event.target.value))}
+              onChange={(event) =>
+                setWinnerCount(
+                  event.target.value === "" ? "" : Number(event.target.value),
+                )
+              }
               className={inputClass}
             />
 
@@ -1758,7 +1953,9 @@ function Create() {
             aria-modal="true"
             aria-labelledby="percentage-split-title"
             className={`max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border p-6 shadow-2xl ${
-              dark ? "border-white/10 bg-[#101411]" : "border-[#E2E7E1] bg-white"
+              dark
+                ? "border-white/10 bg-[#101411]"
+                : "border-[#E2E7E1] bg-white"
             }`}
             onClick={(event) => event.stopPropagation()}
           >
@@ -1824,16 +2021,27 @@ function Create() {
                 Use whole numbers separated by commas. The total must equal 100.
               </p>
               {percentageInput.trim() !== "" && (
-                <p className={`mt-2 text-xs font-semibold ${
-                  percentageInput.split(",").every((value) => /^\s*\d+\s*$/.test(value))
-                    && percentageInput.split(",").map(Number).reduce((sum, value) => sum + value, 0) === 100
-                    ? "text-[#00D6A0]"
-                    : "text-amber-500"
-                }`}>
-                  Total: {percentageInput.split(",").reduce((sum, value) => {
+                <p
+                  className={`mt-2 text-xs font-semibold ${
+                    percentageInput
+                      .split(",")
+                      .every((value) => /^\s*\d+\s*$/.test(value)) &&
+                    percentageInput
+                      .split(",")
+                      .map(Number)
+                      .reduce((sum, value) => sum + value, 0) === 100
+                      ? "text-[#00D6A0]"
+                      : "text-amber-500"
+                  }`}
+                >
+                  Total:{" "}
+                  {percentageInput.split(",").reduce((sum, value) => {
                     const parsed = value.trim();
-                    return parsed !== "" && /^\d+$/.test(parsed) ? sum + Number(parsed) : sum;
-                  }, 0)}%
+                    return parsed !== "" && /^\d+$/.test(parsed)
+                      ? sum + Number(parsed)
+                      : sum;
+                  }, 0)}
+                  %
                 </p>
               )}
             </div>
