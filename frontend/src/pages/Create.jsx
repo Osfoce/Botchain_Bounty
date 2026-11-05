@@ -293,6 +293,14 @@ function Create() {
         return false;
       }
 
+      // Minimum reward per network (USDC on Arc, BOT on BOT Chain)
+      const minReward = Number(bountyData.network) === 5042 ? 1 : // $1 USD (USDC)
+                       Number(bountyData.network) === 968 ? 0.1 : 0;
+      if (Number(bountyData.reward) < minReward) {
+        showToast.error(`Reward must be at least ${minReward} ${selectedNativeSymbol}.`);
+        return false;
+      }
+
       if (!bountyData.token) {
         showToast.error("Please select a reward token.");
         return false;

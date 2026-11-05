@@ -158,3 +158,49 @@ test("distribution retry preserves existing claimed reward metadata", async (t) 
   assert.equal(result.claimTxHash, existing.claimTxHash);
   assert.equal(result.claimLogIndex, existing.claimLogIndex);
 });
+
+test("new distributed rewards preserve the bounty token and configured decimals", async (t) => {
+  const originalFindOne = Reward.findOne;
+  const originalUpdateOne = Reward.updateOne;
+  const transactionHash = `0x${"c".repeat(64)}`;
+  const winner = "0x0000000000000000000000000000000000000002";
+  const persisted = {
+    bountyId: "bounty-id",
+    blockchainId: 123,
+    chainId: 677,
+    token: "BOT",
+    tokenDecimals: 18,
+    bountyContract: "0x498482e334269a10d0621D3AC5e726734B01DDCe".toLowerCase(),
+    winnerAddress: winner,
+    amount: "1000000000000000000",
+    amountFormatted: "1",
+    status: "assigned",
+    distributionTxHash: transactionHash,
+  };
+  let inserted = false;
+  Reward.findOne = async () => (inserted ? persisted : null);
+  Reward.updateOne = async (_filter, update) => {
+    Object.assign(persisted, update.$setOnInsert);
+    inserted = true;
+    return { upsertedCount: 1 };
+  };
+  t.after(() => {
+    Reward.findOne = originalFindOne;
+    Reward.updateOne = originalUpdateOne;
+  });
+
+  const result = await persistWinnerReward({
+    bounty: { _id: "bounty-id", token: "BOT" },
+    identity: {
+      blockchainId: "123",
+      chainId: 677,
+      bountyContract: persisted.bountyContract,
+      transactionHash,
+    },
+    winner,
+    amountWei: 1000000000000000000n,
+  });
+
+  assert.equal(result.token, "BOT");
+  assert.equal(result.tokenDecimals, 18);
+});

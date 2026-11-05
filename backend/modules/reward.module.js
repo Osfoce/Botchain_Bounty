@@ -12,6 +12,8 @@ const rewardSchema = new mongoose.Schema(
     bountyTitle: { type: String, required: true, trim: true },
     blockchainId: { type: Number, required: true }, // on-chain bounty id
     chainId: { type: String, required: true },
+    token: { type: String, required: true, trim: true, uppercase: true },
+    tokenDecimals: { type: Number, required: true, min: 0, max: 255 },
     bountyContract: { type: String, required: true, lowercase: true },
 
     winnerAddress: {
