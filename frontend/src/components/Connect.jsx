@@ -5,12 +5,16 @@ import { useState } from "react";
 import { FiChevronDown, FiLogOut, FiRadio } from "react-icons/fi";
 import { useDisconnect } from "wagmi";
 import { useTheme } from "../context/ThemeContext";
+import { useAuth } from "../hooks/useAuth";
+import AuthModal from "./AuthModal";
 import WalletSignupButton from "./WalletSignupButton";
 
 function Connect() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
   const { disconnect } = useDisconnect();
   const { dark } = useTheme();
+  const { isAuthenticated } = useAuth();
 
   return (
     <>
@@ -169,11 +173,38 @@ function Connect() {
                 </>
               )}
             </div>
+
+            {connected ? (
+              !isAuthenticated && (
+                <button
+                  type="button"
+                  onClick={() => setAuthModalOpen(true)}
+                  className={`h-10 shrink-0 rounded-full border px-3 text-xs font-bold transition-colors sm:px-4 sm:text-sm ${
+                    dark
+                      ? "border-[#00D6A0]/30 bg-[#00D6A0] text-[#06251c] hover:bg-[#00e6ac]"
+                      : "border-[#00A87D]/20 bg-[#00D6A0] text-[#06251c] hover:bg-[#00e6ac]"
+                  }`}
+                >
+                  Sign in
+                </button>
+              )
+            ) : (
+              <WalletSignupButton
+                compact
+                showMessage={false}
+                className="px-3 py-2 sm:px-4"
+              />
+            )}
           </>
         );
       }}
     </ConnectButton.Custom>
-    <WalletSignupButton compact showMessage={false} className="px-4 py-2" />
+    <AuthModal
+      isOpen={authModalOpen}
+      onClose={() => setAuthModalOpen(false)}
+      title="Verify your wallet"
+      subtitle="Sign a message to securely continue"
+    />
     </>
   );
 }
