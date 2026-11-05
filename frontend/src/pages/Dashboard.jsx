@@ -588,7 +588,7 @@ function Dashboard({ dark, setDark }) {
                       <span
                         className={`text-[10px] font-bold uppercase tracking-[0.16em] ${muted}`}
                       >
-                        BOT CHAIN
+                        MULTI CHAIN
                       </span>
 
                       <span className="text-xs font-semibold text-[#00A87D]">
