@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNav } from "../hooks/useNav";
 
@@ -7,11 +7,12 @@ import {
   FiArrowUpRight,
   FiCheck,
   FiCheckCircle,
-  FiClock,
   FiCode,
   FiGift,
-  FiLayers,
-  FiShield,
+  FiFileText,
+  FiHeart,
+  FiMessageCircle,
+  FiPenTool,
   FiZap,
 } from "react-icons/fi";
 
@@ -25,6 +26,87 @@ const heroMessages = [
   "Create Opportunities.",
 ];
 
+const floatingCards = [
+  {
+    id: "coding",
+    title: "Frontend Development",
+    category: "CODING",
+    reward: "250 USDC",
+    icon: FiCode,
+    className: "hb-card-code",
+    preview: (
+      <div className="hb-card-code-preview">
+        <div className="hb-mini-code-line"><i /> const project = await build();</div>
+        <div className="hb-mini-code-line indent">return project.success;</div>
+        <div className="hb-mini-code-line"><i /> // Ready to launch</div>
+      </div>
+    ),
+  },
+  {
+    id: "design",
+    title: "Creative Design",
+    category: "GRAPHIC DESIGN",
+    reward: "150 USDC",
+    icon: FiPenTool,
+    className: "hb-card-design",
+    preview: (
+      <div className="hb-card-design-preview">
+        <div className="hb-design-shape shape-one" />
+        <div className="hb-design-shape shape-two" />
+        <div className="hb-design-shape shape-three" />
+        <div className="hb-design-preview-text">
+          <strong>THINK.</strong>
+          <strong>CREATE.</strong>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "content",
+    title: "Social Media Content",
+    category: "CONTENT",
+    reward: "100 USDC",
+    icon: FiMessageCircle,
+    className: "hb-card-content",
+    preview: (
+      <div className="hb-card-content-preview">
+        <div className="hb-content-avatar"><FiZap /></div>
+        <div className="hb-content-lines">
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="hb-content-art">
+          <span>CREATE.</span>
+          <strong>INSPIRE.</strong>
+          <span>EARN.</span>
+        </div>
+        <div className="hb-content-reactions">
+          <span><FiHeart /> 248</span>
+          <span><FiMessageCircle /> 36</span>
+        </div>
+      </div>
+    ),
+  },
+  {
+    id: "writing",
+    title: "Article Writing",
+    category: "WRITING",
+    reward: "80 USDC",
+    icon: FiFileText,
+    className: "hb-card-writing",
+    preview: (
+      <div className="hb-card-writing-preview">
+        <span>FEATURED ARTICLE</span>
+        <strong>Ideas can change everything.</strong>
+        <i />
+        <i />
+        <i />
+      </div>
+    ),
+  },
+];
+
 function NetworkBadge({ logo, name }) {
   return (
     <div className="hb-network-badge">
@@ -34,12 +116,49 @@ function NetworkBadge({ logo, name }) {
   );
 }
 
+function FloatingWorkCard({ card, index }) {
+  const Icon = card.icon;
+
+  return (
+    <article
+      className={`hb-floating-card ${card.className}`}
+      style={{ "--card-index": index }}
+    >
+      <div className="hb-card-top">
+        <span className="hb-card-icon">
+          <Icon />
+        </span>
+
+        <span className="hb-card-category">{card.category}</span>
+
+        <span className="hb-card-live">
+          <i />
+          LIVE
+        </span>
+      </div>
+
+      <div className="hb-card-title-row">
+        <strong>{card.title}</strong>
+        <span className="hb-card-arrow">
+          <FiArrowUpRight />
+        </span>
+      </div>
+
+      <div className="hb-card-preview">{card.preview}</div>
+
+      <div className="hb-card-bottom">
+        <span><FiGift /> BOUNTY REWARD</span>
+        <strong>{card.reward}</strong>
+      </div>
+    </article>
+  );
+}
+
 export default function Hero({ dark }) {
   const [heroText, setHeroText] = useState(0);
   const [displayText, setDisplayText] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const visualRef = useRef(null);
   const { handleNavigate } = useNav();
 
   useEffect(() => {
@@ -69,31 +188,6 @@ export default function Hero({ dark }) {
     handleNavigate(path);
   };
 
-  const handleVisualMove = (event) => {
-    if (!visualRef.current || window.innerWidth < 1024) return;
-
-    const rect = visualRef.current.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width;
-    const y = (event.clientY - rect.top) / rect.height;
-
-    visualRef.current.style.setProperty(
-      "--rotate-x",
-      `${(0.5 - y) * 2.5}deg`
-    );
-
-    visualRef.current.style.setProperty(
-      "--rotate-y",
-      `${(x - 0.5) * 4}deg`
-    );
-  };
-
-  const resetVisualMove = () => {
-    if (!visualRef.current) return;
-
-    visualRef.current.style.setProperty("--rotate-x", "0deg");
-    visualRef.current.style.setProperty("--rotate-y", "0deg");
-  };
-
   return (
     <section className={`hb-hero ${dark ? "hb-dark" : "hb-light"}`}>
       <div className="hb-grid" />
@@ -101,7 +195,9 @@ export default function Hero({ dark }) {
       <div className="hb-glow hb-glow-right" />
 
       <div className="hb-hero-container">
+
         {/* LEFT CONTENT */}
+
         <div className="hb-copy">
           <div className="hb-brand">
             <span className="hb-brand-icon">
@@ -160,134 +256,31 @@ export default function Hero({ dark }) {
           </div>
         </div>
 
-        {/* RIGHT VISUAL */}
-        <div
-          className="hb-visual"
-          onMouseMove={handleVisualMove}
-          onMouseLeave={resetVisualMove}
-        >
+        {/* RIGHT SIDE - FLOATING CARDS */}
+
+        <div className="hb-visual">
           <div className="hb-visual-glow" />
 
-          {/* Background light trails */}
-          <div className="hb-light-trails">
-            <span />
-            <span />
-            <span />
-            <span />
-          </div>
-
-          {/* Orbital rings */}
           <div className="hb-orbit hb-orbit-one" />
           <div className="hb-orbit hb-orbit-two" />
-          <div className="hb-orbit hb-orbit-three" />
 
-          {/* Central interface */}
-          <div ref={visualRef} className="hb-interface">
-            <div className="hb-interface-top">
-              <div className="hb-interface-brand">
-                <span className="hb-interface-mark">
-                  <FiZap />
-                </span>
-                <strong>HAPPY BOUNTY</strong>
-              </div>
-
-              <div className="hb-interface-status">
-                <span className="hb-live-dot" />
-                LIVE
-              </div>
-            </div>
-
-            <div className="hb-interface-content">
-              <div className="hb-interface-heading">
-                <div>
-                  <span className="hb-interface-overline">
-                    THE BOUNTY NETWORK
-                  </span>
-                  <h2>Make it happen.</h2>
-                </div>
-
-                <div className="hb-interface-heading-icon">
-                  <FiLayers />
-                </div>
-              </div>
-
-              <div className="hb-featured-bounty">
-                <div className="hb-featured-top">
-                  <span>FEATURED BOUNTY</span>
-                  <span className="hb-active-tag">
-                    <i />
-                    OPEN
-                  </span>
-                </div>
-
-                <div className="hb-featured-main">
-                  <div className="hb-featured-icon">
-                    <FiCode />
-                  </div>
-
-                  <div className="hb-featured-info">
-                    <strong>Build. Create. Earn.</strong>
-                    <span>Complete a challenge</span>
-                  </div>
-
-                  <FiArrowUpRight className="hb-featured-arrow" />
-                </div>
-
-                <div className="hb-interface-divider" />
-
-                <div className="hb-featured-bottom">
-                  <div>
-                    <span>AVAILABLE REWARD</span>
-                    <strong>250 <small>USDC</small></strong>
-                  </div>
-
-                  <div className="hb-reward-symbol">
-                    <FiGift />
-                  </div>
-                </div>
-              </div>
-
-              <div className="hb-interface-progress">
-                <div className="hb-progress-heading">
-                  <span>OPPORTUNITY STATUS</span>
-                  <strong>ACTIVE</strong>
-                </div>
-                <div className="hb-progress-track">
-                  <span />
-                </div>
-              </div>
-            </div>
-
-            <div className="hb-interface-footer">
-              <span><FiShield /> Secure rewards</span>
-              <span>Explore opportunities <FiArrowUpRight /></span>
-            </div>
+          <div className="hb-floating-label">
+            <span className="hb-live-dot" />
+            REAL SKILLS. REAL OPPORTUNITIES.
           </div>
 
-          {/* Large floating network coins */}
-          <div className="hb-coin-platform hb-platform-left">
-            <div className="hb-platform-ring" />
-            <div className="hb-platform-base" />
-            <div className="hb-coin hb-coin-happy">
-              <div className="hb-coin-inner">
-                <FiZap />
-              </div>
-            </div>
-            <div className="hb-platform-light" />
+          <div className="hb-cards-stage">
+            {floatingCards.map((card, index) => (
+              <FloatingWorkCard
+                key={card.id}
+                card={card}
+                index={index}
+              />
+            ))}
           </div>
 
-          <div className="hb-coin-platform hb-platform-right">
-            <div className="hb-platform-ring" />
-            <div className="hb-platform-base" />
-            <div className="hb-coin hb-coin-bot">
-              <div className="hb-coin-inner">
-                <img src={BotchainLogo} alt="Botchain" />
-              </div>
-            </div>
-            <div className="hb-platform-light" />
-          </div>
+          {/* NETWORK SYMBOLS */}
 
-          {/* Floating network symbols */}
           <div className="hb-floating-network hb-floating-arc">
             <img src={ArcLogo} alt="Arc Network" />
           </div>
@@ -296,21 +289,32 @@ export default function Hero({ dark }) {
             <img src={BotchainLogo} alt="Botchain Network" />
           </div>
 
-          {/* Compact reward notification */}
+          {/* REWARD NOTIFICATION */}
+
           <div className="hb-floating-reward">
             <span className="hb-floating-reward-icon">
               <FiGift />
             </span>
+
             <div>
               <small>REWARD UNLOCKED</small>
               <strong>250 USDC</strong>
             </div>
+
             <FiCheckCircle className="hb-floating-check" />
           </div>
+
+          {/* APPROVAL NOTIFICATION */}
 
           <div className="hb-floating-approved">
             <span><FiCheck /></span>
             Approved
+          </div>
+
+          <div className="hb-visual-caption">
+            <span>01</span>
+            <i />
+            <strong>ONE PLATFORM. MANY POSSIBILITIES.</strong>
           </div>
         </div>
       </div>
@@ -322,7 +326,7 @@ export default function Hero({ dark }) {
           position: relative;
           isolation: isolate;
           width: 100%;
-          min-height: 550px;
+          min-height: 590px;
           overflow: hidden;
         }
 
@@ -342,15 +346,8 @@ export default function Hero({ dark }) {
           z-index: -3;
           pointer-events: none;
           background-image:
-            linear-gradient(
-              ${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px,
-              transparent 1px
-            ),
-            linear-gradient(
-              90deg,
-              ${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px,
-              transparent 1px
-            );
+            linear-gradient(${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px, transparent 1px),
+            linear-gradient(90deg, ${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px, transparent 1px);
           background-size: 52px 52px;
           mask-image: linear-gradient(to bottom, black, transparent 90%);
         }
@@ -383,14 +380,14 @@ export default function Hero({ dark }) {
           position: relative;
           z-index: 1;
           display: grid;
-          grid-template-columns: .9fr 1.1fr;
+          grid-template-columns: minmax(0, .95fr) minmax(0, 1.05fr);
           align-items: center;
-          gap: 25px;
+          gap: 55px;
           width: 100%;
-          max-width: 1250px;
-          min-height: 550px;
+          max-width: 1320px;
+          min-height: 590px;
           margin: 0 auto;
-          padding: 75px 48px 48px;
+          padding: 80px 55px 65px;
         }
 
         /* LEFT CONTENT */
@@ -398,7 +395,7 @@ export default function Hero({ dark }) {
         .hb-copy {
           position: relative;
           z-index: 3;
-          max-width: 480px;
+          max-width: 490px;
           animation: hbFadeUp .8s ease both;
         }
 
@@ -406,7 +403,7 @@ export default function Hero({ dark }) {
           display: flex;
           align-items: center;
           gap: 9px;
-          margin-bottom: 29px;
+          margin-bottom: 31px;
           font-size: 14px;
           font-weight: 950;
           letter-spacing: .12em;
@@ -418,7 +415,7 @@ export default function Hero({ dark }) {
           height: 32px;
           place-items: center;
           border: 1px solid rgba(0,214,160,.35);
-          border-radius: 9px;
+          border-radius: 6px;
           background: rgba(0,214,160,.11);
           color: var(--green);
           font-size: 17px;
@@ -429,10 +426,10 @@ export default function Hero({ dark }) {
           display: inline-flex;
           align-items: center;
           gap: 9px;
-          margin-bottom: 18px;
+          margin-bottom: 19px;
           padding: 8px 11px;
           border: 1px solid rgba(0,214,160,.25);
-          border-radius: 100px;
+          border-radius: 4px;
           background: rgba(0,214,160,.07);
           color: ${dark ? "#9CF9DD" : "#007E62"};
           font-size: 8px;
@@ -467,9 +464,9 @@ export default function Hero({ dark }) {
 
         .hb-heading {
           margin: 0;
-          font-size: clamp(39px, 4.4vw, 63px);
+          font-size: clamp(42px, 4.5vw, 65px);
           font-weight: 950;
-          line-height: 1;
+          line-height: 1.02;
           letter-spacing: -.07em;
         }
 
@@ -479,11 +476,11 @@ export default function Hero({ dark }) {
         }
 
         .hb-description {
-          max-width: 400px;
-          margin-top: 19px;
+          max-width: 410px;
+          margin-top: 21px;
           color: ${dark ? "rgba(255,255,255,.58)" : "#59665F"};
           font-size: 12px;
-          line-height: 1.85;
+          line-height: 1.9;
         }
 
         .hb-typing {
@@ -491,7 +488,7 @@ export default function Hero({ dark }) {
           align-items: center;
           gap: 5px;
           min-height: 25px;
-          margin-top: 11px;
+          margin-top: 12px;
           color: var(--green);
           font-size: 12px;
           font-weight: 850;
@@ -513,8 +510,8 @@ export default function Hero({ dark }) {
         .hb-actions {
           display: flex;
           flex-wrap: wrap;
-          gap: 10px;
-          margin-top: 23px;
+          gap: 12px;
+          margin-top: 25px;
         }
 
         .hb-button {
@@ -522,14 +519,13 @@ export default function Hero({ dark }) {
           align-items: center;
           justify-content: center;
           gap: 10px;
-          min-height: 43px;
-          padding: 0 18px;
-          border-radius: 9px;
+          min-height: 45px;
+          padding: 0 19px;
+          border-radius: 5px;
           font-size: 11px;
           font-weight: 900;
           text-decoration: none;
-          transition: transform .25s ease, box-shadow .25s ease,
-            background .25s ease, border-color .25s ease;
+          transition: transform .25s ease, box-shadow .25s ease, background .25s ease, border-color .25s ease;
         }
 
         .hb-button svg {
@@ -572,12 +568,12 @@ export default function Hero({ dark }) {
           display: flex;
           flex-wrap: wrap;
           align-items: center;
-          gap: 9px;
-          margin-top: 27px;
+          gap: 10px;
+          margin-top: 29px;
         }
 
         .hb-powered-label {
-          margin-right: 2px;
+          margin-right: 3px;
           color: ${dark ? "rgba(255,255,255,.36)" : "#849188"};
           font-size: 8px;
           font-weight: 900;
@@ -587,10 +583,10 @@ export default function Hero({ dark }) {
         .hb-network-badge {
           display: inline-flex;
           align-items: center;
-          gap: 6px;
-          padding: 5px 9px;
+          gap: 7px;
+          padding: 6px 10px;
           border: 1px solid ${dark ? "rgba(255,255,255,.12)" : "rgba(0,0,0,.08)"};
-          border-radius: 30px;
+          border-radius: 4px;
           background: ${dark ? "rgba(255,255,255,.035)" : "#fff"};
           font-size: 9px;
           font-weight: 850;
@@ -616,8 +612,7 @@ export default function Hero({ dark }) {
           align-items: center;
           justify-content: center;
           min-width: 0;
-          min-height: 470px;
-          perspective: 1400px;
+          min-height: 480px;
           isolation: isolate;
           animation: hbVisualEnter 1s .15s ease both;
         }
@@ -636,8 +631,8 @@ export default function Hero({ dark }) {
         .hb-visual-glow {
           position: absolute;
           z-index: -3;
-          width: 75%;
-          height: 75%;
+          width: 65%;
+          height: 65%;
           border-radius: 50%;
           background: rgba(0,214,160,.2);
           filter: blur(85px);
@@ -645,269 +640,167 @@ export default function Hero({ dark }) {
         }
 
         @keyframes hbGlowPulse {
-          0%, 100% { transform: scale(.85); opacity: .55; }
-          50% { transform: scale(1.1); opacity: 1; }
+          0%, 100% {
+            transform: scale(.85);
+            opacity: .55;
+          }
+          50% {
+            transform: scale(1.1);
+            opacity: 1;
+          }
         }
-
-        /* LIGHT TRAILS */
-
-        .hb-light-trails {
-          position: absolute;
-          z-index: -1;
-          inset: 10% -5% 5%;
-          overflow: hidden;
-          pointer-events: none;
-          transform: rotate(-8deg);
-        }
-
-        .hb-light-trails span {
-          position: absolute;
-          left: -15%;
-          width: 135%;
-          height: 95px;
-          border-top: 1px solid rgba(0,214,160,.55);
-          border-radius: 50%;
-          filter: drop-shadow(0 0 5px rgba(0,214,160,.75));
-          transform: rotate(-8deg);
-        }
-
-        .hb-light-trails span:nth-child(1) {
-          top: 39%;
-        }
-
-        .hb-light-trails span:nth-child(2) {
-          top: 44%;
-          height: 120px;
-          border-color: rgba(0,214,160,.25);
-          transform: rotate(-13deg);
-        }
-
-        .hb-light-trails span:nth-child(3) {
-          top: 50%;
-          height: 145px;
-          border-color: rgba(0,214,160,.2);
-          transform: rotate(-4deg);
-        }
-
-        .hb-light-trails span:nth-child(4) {
-          top: 57%;
-          height: 160px;
-          border-color: rgba(0,214,160,.12);
-          transform: rotate(-11deg);
-        }
-
-        /* ORBIT RINGS */
 
         .hb-orbit {
           position: absolute;
           z-index: -2;
-          border: 1px solid rgba(0,214,160,.16);
+          border: 1px solid rgba(0,214,160,.13);
           border-radius: 50%;
           pointer-events: none;
         }
 
         .hb-orbit-one {
-          width: 105%;
-          height: 44%;
-          transform: rotate(-22deg);
+          width: 92%;
+          height: 59%;
+          transform: rotate(-24deg);
           animation: hbOrbit 35s linear infinite;
         }
 
         .hb-orbit-two {
-          width: 90%;
-          height: 80%;
-          transform: rotate(28deg);
-          border-color: rgba(0,214,160,.1);
-          animation: hbOrbit 45s linear infinite reverse;
-        }
-
-        .hb-orbit-three {
           width: 75%;
-          height: 65%;
+          height: 82%;
+          transform: rotate(28deg);
           border-color: rgba(0,214,160,.08);
-          transform: rotate(-40deg);
+          animation: hbOrbit 45s linear infinite reverse;
         }
 
         @keyframes hbOrbit {
           to { rotate: 360deg; }
         }
 
-        /* MAIN INTERFACE */
-
-        .hb-interface {
-          position: relative;
-          z-index: 3;
-          width: 77%;
-          max-width: 430px;
-          min-width: 300px;
-          overflow: hidden;
-          border: 1px solid rgba(0,214,160,.3);
-          border-radius: 17px;
-          background: ${dark
-            ? "linear-gradient(145deg, rgba(13,29,23,.98), rgba(5,12,10,.99))"
-            : "linear-gradient(145deg, #FFFFFF, #EAF8F1)"};
-          color: ${dark ? "#F5FFF9" : "#17251D"};
-          box-shadow:
-            0 35px 85px rgba(0,0,0,.35),
-            0 0 0 1px rgba(0,214,160,.07),
-            0 0 45px rgba(0,214,160,.12),
-            inset 0 1px 0 rgba(255,255,255,.1);
-          backdrop-filter: blur(25px);
-          transform:
-            rotateY(calc(-8deg + var(--rotate-y, 0deg)))
-            rotateX(calc(3deg + var(--rotate-x, 0deg)));
-          transform-style: preserve-3d;
-          transition: transform .2s ease;
-          animation: hbInterfaceFloat 7s ease-in-out infinite;
-        }
-
-        @keyframes hbInterfaceFloat {
-          0%, 100% { translate: 0 0; }
-          50% { translate: 0 -7px; }
-        }
-
-        .hb-interface::before {
+        .hb-floating-label {
           position: absolute;
-          top: 0;
-          left: 15%;
-          width: 70%;
-          height: 1px;
-          background: linear-gradient(
-            90deg,
-            transparent,
-            rgba(0,214,160,.8),
-            transparent
-          );
-          content: "";
-        }
-
-        .hb-interface-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          min-height: 55px;
-          padding: 12px 16px;
-          border-bottom: 1px solid ${dark
-            ? "rgba(255,255,255,.08)"
-            : "rgba(0,0,0,.07)"};
-          background: ${dark ? "rgba(255,255,255,.025)" : "rgba(0,100,65,.025)"};
-        }
-
-        .hb-interface-brand {
+          top: 1%;
+          left: 50%;
           display: flex;
           align-items: center;
           gap: 9px;
-          font-size: 9px;
-          letter-spacing: .12em;
+          color: ${dark ? "rgba(255,255,255,.55)" : "#718078"};
+          font-size: 8px;
+          font-weight: 900;
+          letter-spacing: .13em;
+          white-space: nowrap;
+          transform: translateX(-50%);
         }
 
-        .hb-interface-mark {
+        /* THE CARD ARRANGEMENT */
+
+        .hb-cards-stage {
+          position: relative;
           display: grid;
-          width: 28px;
-          height: 28px;
-          place-items: center;
-          border: 1px solid rgba(0,214,160,.4);
-          border-radius: 8px;
-          background: rgba(0,214,160,.13);
-          color: var(--green);
-          font-size: 15px;
-          box-shadow: 0 0 15px rgba(0,214,160,.12);
+          width: 100%;
+          max-width: 540px;
+          min-height: 400px;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          grid-template-rows: repeat(2, auto);
+          align-items: center;
+          justify-items: center;
+          column-gap: 30px;
+          row-gap: 27px;
+          padding: 43px 15px 35px;
         }
 
-        .hb-interface-status {
+        .hb-floating-card {
+          position: relative;
+          z-index: 2;
+          width: 100%;
+          max-width: 235px;
+          min-width: 0;
+          padding: 13px;
+          overflow: hidden;
+          border: 1px solid ${dark ? "rgba(0,214,160,.26)" : "rgba(0,145,99,.22)"};
+          border-radius: 5px;
+          background: ${dark
+            ? "linear-gradient(145deg, rgba(17,35,27,.97), rgba(7,17,13,.98))"
+            : "linear-gradient(145deg, #FFFFFF, #EAF8F1)"};
+          color: ${dark ? "#F5FFF9" : "#17251D"};
+          box-shadow: 0 15px 38px rgba(0,0,0,.14), 0 0 20px rgba(0,214,160,.055);
+          transition: border-color .3s ease, box-shadow .3s ease;
+          animation: hbCardFloat 6s ease-in-out infinite;
+          animation-delay: calc(var(--card-index) * -.9s);
+        }
+
+        .hb-floating-card:hover {
+          z-index: 5;
+          border-color: rgba(0,214,160,.7);
+          box-shadow: 0 20px 45px rgba(0,0,0,.22), 0 0 24px rgba(0,214,160,.14);
+        }
+
+        @keyframes hbCardFloat {
+          0%, 100% { translate: 0 0; }
+          50% { translate: 0 -9px; }
+        }
+
+        /* Each card has its own position and angle.
+           The floating animation uses translate, so these rotations remain intact. */
+
+        .hb-card-code {
+          transform: rotate(-3deg) translateY(5px);
+        }
+
+        .hb-card-design {
+          transform: rotate(3deg) translateY(17px);
+        }
+
+        .hb-card-content {
+          transform: rotate(2deg) translateY(-5px);
+        }
+
+        .hb-card-writing {
+          transform: rotate(-2deg) translateY(10px);
+        }
+
+        .hb-card-top {
           display: flex;
           align-items: center;
           gap: 7px;
-          padding: 6px 9px;
-          border: 1px solid rgba(0,214,160,.25);
-          border-radius: 6px;
-          color: var(--green);
-          font-size: 7px;
-          font-weight: 950;
-          letter-spacing: .1em;
+          min-width: 0;
+          margin-bottom: 10px;
         }
 
-        .hb-interface-status .hb-live-dot {
-          width: 5px;
-          height: 5px;
-          flex-basis: 5px;
-        }
-
-        .hb-interface-content {
-          padding: 22px 20px 19px;
-        }
-
-        .hb-interface-heading {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 20px;
-        }
-
-        .hb-interface-overline {
-          color: var(--green);
-          font-size: 7px;
-          font-weight: 950;
-          letter-spacing: .17em;
-        }
-
-        .hb-interface-heading h2 {
-          margin-top: 7px;
-          font-size: clamp(21px, 2.2vw, 28px);
-          font-weight: 950;
-          letter-spacing: -.06em;
-        }
-
-        .hb-interface-heading-icon {
+        .hb-card-icon {
           display: grid;
-          width: 42px;
-          height: 42px;
+          width: 26px;
+          height: 26px;
+          flex: 0 0 26px;
           place-items: center;
-          border: 1px solid rgba(0,214,160,.24);
-          border-radius: 11px;
-          background: rgba(0,214,160,.09);
+          border: 1px solid rgba(0,214,160,.25);
+          border-radius: 4px;
+          background: rgba(0,214,160,.12);
           color: var(--green);
-          font-size: 20px;
+          font-size: 13px;
         }
 
-        .hb-featured-bounty {
-          position: relative;
-          padding: 16px;
-          border: 1px solid ${dark
-            ? "rgba(255,255,255,.12)"
-            : "rgba(0,90,60,.12)"};
-          border-radius: 12px;
-          background: ${dark
-            ? "linear-gradient(135deg, rgba(255,255,255,.065), rgba(255,255,255,.018))"
-            : "linear-gradient(135deg, #F8FFFB, #EAF8F1)"};
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
-        }
-
-        .hb-featured-top {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          margin-bottom: 18px;
-          color: ${dark ? "rgba(255,255,255,.45)" : "#7A8980"};
+        .hb-card-category {
+          overflow: hidden;
+          flex: 1;
+          color: var(--green);
           font-size: 7px;
           font-weight: 950;
-          letter-spacing: .12em;
+          letter-spacing: .09em;
+          text-overflow: ellipsis;
+          white-space: nowrap;
         }
 
-        .hb-active-tag {
+        .hb-card-live {
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 5px 8px;
-          border-radius: 5px;
-          background: rgba(0,214,160,.11);
-          color: var(--green);
-          font-size: 7px;
+          gap: 4px;
+          color: ${dark ? "rgba(255,255,255,.55)" : "#718078"};
+          font-size: 6px;
+          font-weight: 900;
         }
 
-        .hb-active-tag i {
+        .hb-card-live i {
           width: 5px;
           height: 5px;
           border-radius: 50%;
@@ -915,341 +808,285 @@ export default function Hero({ dark }) {
           box-shadow: 0 0 7px var(--green);
         }
 
-        .hb-featured-main {
+        .hb-card-title-row {
           display: flex;
           align-items: center;
-          gap: 12px;
+          justify-content: space-between;
+          gap: 6px;
+          margin-bottom: 10px;
         }
 
-        .hb-featured-icon {
-          display: grid;
-          width: 47px;
-          height: 47px;
-          flex: 0 0 47px;
-          place-items: center;
-          border: 1px solid rgba(0,214,160,.3);
-          border-radius: 12px;
-          background: linear-gradient(
-            145deg,
-            rgba(0,214,160,.2),
-            rgba(0,214,160,.055)
-          );
-          color: var(--green);
-          font-size: 22px;
-          box-shadow: 0 0 22px rgba(0,214,160,.1);
-        }
-
-        .hb-featured-info {
-          display: flex;
-          min-width: 0;
-          flex: 1;
-          flex-direction: column;
-          gap: 5px;
-        }
-
-        .hb-featured-info strong {
-          font-size: 12px;
-          font-weight: 950;
+        .hb-card-title-row strong {
+          font-size: 10px;
+          font-weight: 900;
           letter-spacing: -.02em;
         }
 
-        .hb-featured-info span {
-          color: ${dark ? "rgba(255,255,255,.45)" : "#77877D"};
-          font-size: 8px;
-        }
-
-        .hb-featured-arrow {
+        .hb-card-arrow {
+          display: grid;
+          width: 21px;
+          height: 21px;
+          flex: 0 0 21px;
+          place-items: center;
+          border: 1px solid rgba(0,214,160,.2);
+          border-radius: 3px;
           color: var(--green);
-          font-size: 17px;
+          font-size: 11px;
         }
 
-        .hb-interface-divider {
-          height: 1px;
-          margin: 17px 0;
-          background: ${dark
-            ? "rgba(255,255,255,.09)"
-            : "rgba(0,0,0,.08)"};
+        .hb-card-preview {
+          min-height: 80px;
+          overflow: hidden;
+          border: 1px solid ${dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.06)"};
+          border-radius: 3px;
+          background: ${dark ? "rgba(0,0,0,.22)" : "rgba(255,255,255,.7)"};
         }
 
-        .hb-featured-bottom {
+        .hb-card-bottom {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 6px;
+          margin-top: 10px;
+          padding-top: 8px;
+          border-top: 1px solid ${dark ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.07)"};
         }
 
-        .hb-featured-bottom > div:first-child {
+        .hb-card-bottom span {
+          display: flex;
+          align-items: center;
+          gap: 5px;
+          color: ${dark ? "rgba(255,255,255,.47)" : "#718078"};
+          font-size: 6px;
+          font-weight: 900;
+          letter-spacing: .05em;
+        }
+
+        .hb-card-bottom span svg {
+          color: var(--green);
+          font-size: 10px;
+        }
+
+        .hb-card-bottom strong {
+          color: var(--green);
+          font-size: 10px;
+          font-weight: 950;
+        }
+
+        /* CODING PREVIEW */
+
+        .hb-card-code-preview {
+          display: flex;
+          justify-content: center;
+          flex-direction: column;
+          gap: 10px;
+          height: 80px;
+          padding: 10px;
+          color: ${dark ? "#A7F3D0" : "#087A58"};
+          font-family: "Fira Code", Consolas, monospace;
+          font-size: 7px;
+        }
+
+        .hb-mini-code-line {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .hb-mini-code-line i {
+          display: inline-block;
+          width: 5px;
+          height: 5px;
+          margin-right: 5px;
+          border-radius: 50%;
+          background: var(--green);
+        }
+
+        .hb-mini-code-line.indent {
+          padding-left: 12px;
+          opacity: .7;
+        }
+
+        /* DESIGN PREVIEW */
+
+        .hb-card-design-preview {
+          position: relative;
+          display: flex;
+          align-items: center;
+          height: 80px;
+          overflow: hidden;
+          padding: 10px;
+          background: linear-gradient(120deg, #073D2E, #087B59 65%, #00D6A0);
+          color: white;
+        }
+
+        .hb-design-preview-text {
+          position: relative;
+          z-index: 2;
           display: flex;
           flex-direction: column;
-          gap: 6px;
-        }
-
-        .hb-featured-bottom > div:first-child > span {
-          color: ${dark ? "rgba(255,255,255,.42)" : "#829087"};
-          font-size: 7px;
-          font-weight: 900;
-          letter-spacing: .1em;
-        }
-
-        .hb-featured-bottom strong {
-          color: var(--green);
-          font-size: 27px;
+          font-size: 18px;
           font-weight: 950;
-          letter-spacing: -.06em;
+          line-height: .95;
+          letter-spacing: -.07em;
         }
 
-        .hb-featured-bottom strong small {
-          font-size: 11px;
-          letter-spacing: 0;
+        .hb-design-preview-text strong:last-child {
+          color: #A8FFDD;
         }
 
-        .hb-reward-symbol {
-          display: grid;
-          width: 42px;
-          height: 42px;
-          place-items: center;
-          border: 1px solid rgba(0,214,160,.25);
+        .hb-design-shape {
+          position: absolute;
+          border: 1px solid rgba(255,255,255,.5);
+          transform: rotate(35deg);
+        }
+
+        .shape-one {
+          top: 12px;
+          right: 25px;
+          width: 39px;
+          height: 39px;
           border-radius: 50%;
-          background: rgba(0,214,160,.1);
+          background: rgba(255,255,255,.13);
+        }
+
+        .shape-two {
+          right: 12px;
+          bottom: 9px;
+          width: 23px;
+          height: 23px;
+          background: #A8FFDD;
+        }
+
+        .shape-three {
+          top: 9px;
+          right: 10px;
+          width: 13px;
+          height: 13px;
+          border-radius: 50%;
+          background: rgba(255,255,255,.5);
+        }
+
+        /* CONTENT PREVIEW */
+
+        .hb-card-content-preview {
+          position: relative;
+          display: grid;
+          grid-template-columns: 25px 1fr;
+          gap: 7px;
+          min-height: 80px;
+          padding: 9px;
+        }
+
+        .hb-content-avatar {
+          display: grid;
+          width: 24px;
+          height: 24px;
+          place-items: center;
+          border-radius: 50%;
+          background: rgba(0,214,160,.14);
           color: var(--green);
-          font-size: 19px;
         }
 
-        .hb-interface-progress {
-          margin-top: 18px;
-        }
-
-        .hb-progress-heading {
+        .hb-content-lines {
           display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 9px;
+          flex-direction: column;
+          justify-content: center;
+          gap: 5px;
+        }
+
+        .hb-content-lines i {
+          width: 90%;
+          height: 4px;
+          border-radius: 4px;
+          background: ${dark ? "rgba(255,255,255,.2)" : "rgba(0,0,0,.12)"};
+        }
+
+        .hb-content-lines i:nth-child(2) { width: 70%; }
+        .hb-content-lines i:nth-child(3) { width: 45%; }
+
+        .hb-content-art {
+          display: flex;
+          grid-column: 1 / -1;
+          justify-content: center;
+          flex-direction: column;
+          min-height: 38px;
+          padding: 5px 9px;
+          border-radius: 2px;
+          background: linear-gradient(110deg, #073D2E, #00A879);
+          color: white;
           font-size: 7px;
-          font-weight: 900;
+          font-weight: 850;
           letter-spacing: .1em;
         }
 
-        .hb-progress-heading span {
-          color: ${dark ? "rgba(255,255,255,.4)" : "#849188"};
+        .hb-content-art strong {
+          color: #A8FFDD;
+          font-size: 13px;
         }
 
-        .hb-progress-heading strong {
-          color: var(--green);
+        .hb-content-reactions {
+          display: flex;
+          grid-column: 1 / -1;
+          gap: 13px;
+          color: ${dark ? "rgba(255,255,255,.5)" : "#718078"};
+          font-size: 6px;
         }
 
-        .hb-progress-track {
-          height: 4px;
-          overflow: hidden;
-          border-radius: 20px;
-          background: ${dark ? "rgba(255,255,255,.1)" : "rgba(0,0,0,.08)"};
-        }
-
-        .hb-progress-track span {
-          display: block;
-          width: 72%;
-          height: 100%;
-          border-radius: inherit;
-          background: linear-gradient(90deg, #008F69, #00E7AD);
-          box-shadow: 0 0 12px rgba(0,214,160,.55);
-          animation: hbProgress 2s ease both;
-        }
-
-        @keyframes hbProgress {
-          from { width: 0; }
-          to { width: 72%; }
-        }
-
-        .hb-interface-footer {
+        .hb-content-reactions span {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 10px;
-          padding: 12px 16px;
-          border-top: 1px solid ${dark
-            ? "rgba(255,255,255,.08)"
-            : "rgba(0,0,0,.07)"};
-          background: ${dark ? "rgba(255,255,255,.02)" : "rgba(0,100,65,.025)"};
-          color: ${dark ? "rgba(255,255,255,.46)" : "#718078"};
-          font-size: 7px;
-          font-weight: 800;
+          gap: 4px;
         }
 
-        .hb-interface-footer span {
+        /* WRITING PREVIEW */
+
+        .hb-card-writing-preview {
           display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-
-        .hb-interface-footer svg {
-          color: var(--green);
-          font-size: 11px;
-        }
-
-        .hb-interface-footer span:last-child {
-          color: var(--green);
-        }
-
-        /* 3D NETWORK COINS */
-
-        .hb-coin-platform {
-          position: absolute;
-          z-index: 2;
-          display: flex;
-          align-items: center;
           justify-content: center;
-          width: 145px;
-          height: 155px;
-          pointer-events: none;
+          flex-direction: column;
+          gap: 7px;
+          min-height: 80px;
+          padding: 10px;
         }
 
-        .hb-platform-left {
-          bottom: 0;
-          left: -1%;
-          animation: hbCoinFloat 6s ease-in-out infinite;
+        .hb-card-writing-preview > span {
+          color: var(--green);
+          font-size: 6px;
+          font-weight: 950;
+          letter-spacing: .12em;
         }
 
-        .hb-platform-right {
-          right: -1%;
-          bottom: 1%;
-          animation: hbCoinFloat 6s -3s ease-in-out infinite;
+        .hb-card-writing-preview strong {
+          max-width: 160px;
+          color: ${dark ? "#E8FFF3" : "#263C31"};
+          font-size: 11px;
+          line-height: 1.25;
         }
 
-        @keyframes hbCoinFloat {
-          0%, 100% { translate: 0 0; }
-          50% { translate: 0 -9px; }
+        .hb-card-writing-preview i {
+          width: 95%;
+          height: 3px;
+          border-radius: 3px;
+          background: ${dark ? "rgba(255,255,255,.17)" : "rgba(0,0,0,.1)"};
         }
 
-        .hb-coin {
-          position: absolute;
-          z-index: 2;
-          top: 4px;
-          display: grid;
-          width: 91px;
-          height: 91px;
-          place-items: center;
-          border: 2px solid rgba(0,214,160,.85);
-          border-radius: 50%;
-          background: radial-gradient(
-            circle at 30% 25%,
-            #B5FFE5 0%,
-            #19C994 24%,
-            #007E5D 68%,
-            #042B20 100%
-          );
-          box-shadow:
-            0 0 15px rgba(0,214,160,.55),
-            0 0 35px rgba(0,214,160,.35),
-            inset 0 0 15px rgba(255,255,255,.25),
-            inset -8px -10px 20px rgba(0,0,0,.4);
-          transform: rotate(-12deg);
-        }
+        .hb-card-writing-preview i:nth-of-type(2) { width: 78%; }
+        .hb-card-writing-preview i:nth-of-type(3) { width: 55%; }
 
-        .hb-coin::before {
-          position: absolute;
-          inset: 6px;
-          border: 1px solid rgba(255,255,255,.24);
-          border-radius: 50%;
-          content: "";
-        }
-
-        .hb-coin-inner {
-          display: grid;
-          width: 55px;
-          height: 55px;
-          place-items: center;
-          color: #E4FFF5;
-          font-size: 36px;
-          filter: drop-shadow(0 3px 5px rgba(0,0,0,.35));
-        }
-
-        .hb-coin-inner img {
-          width: 43px;
-          height: 43px;
-          object-fit: contain;
-          filter: brightness(0) invert(1) drop-shadow(0 3px 5px rgba(0,0,0,.3));
-        }
-
-        .hb-coin-bot {
-          width: 98px;
-          height: 98px;
-          background: radial-gradient(
-            circle at 30% 25%,
-            #D5FFED 0%,
-            #00B981 25%,
-            #006E50 70%,
-            #04251B 100%
-          );
-          box-shadow:
-            0 0 18px rgba(0,214,160,.65),
-            0 0 40px rgba(0,214,160,.4),
-            inset 0 0 17px rgba(255,255,255,.2),
-            inset -8px -10px 20px rgba(0,0,0,.45);
-        }
-
-        .hb-platform-ring {
-          position: absolute;
-          bottom: 20px;
-          width: 140px;
-          height: 35px;
-          border: 1px solid rgba(0,214,160,.8);
-          border-radius: 50%;
-          box-shadow:
-            0 0 12px rgba(0,214,160,.45),
-            inset 0 0 10px rgba(0,214,160,.2);
-          transform: rotateX(65deg);
-        }
-
-        .hb-platform-ring::after {
-          position: absolute;
-          inset: 5px;
-          border: 1px solid rgba(0,214,160,.3);
-          border-radius: 50%;
-          content: "";
-        }
-
-        .hb-platform-base {
-          position: absolute;
-          bottom: 17px;
-          width: 105px;
-          height: 15px;
-          border: 1px solid rgba(0,214,160,.55);
-          border-radius: 50%;
-          background: linear-gradient(
-            180deg,
-            rgba(0,214,160,.25),
-            rgba(0,45,32,.9)
-          );
-          box-shadow: 0 8px 20px rgba(0,214,160,.2);
-        }
-
-        .hb-platform-light {
-          position: absolute;
-          bottom: 0;
-          width: 100px;
-          height: 20px;
-          border-radius: 50%;
-          background: rgba(0,214,160,.3);
-          filter: blur(18px);
-        }
-
-        /* SMALL FLOATING NETWORK LOGOS */
+        /* FLOATING NETWORK LOGOS */
 
         .hb-floating-network {
           position: absolute;
           z-index: 5;
           display: grid;
-          width: 48px;
-          height: 48px;
+          width: 42px;
+          height: 42px;
           place-items: center;
-          border: 1px solid rgba(0,214,160,.5);
+          border: 1px solid rgba(0,214,160,.4);
           border-radius: 50%;
-          background: radial-gradient(
-            circle at 35% 25%,
-            ${dark ? "#174E3B" : "#D5F8E9"},
-            ${dark ? "#071B14" : "#A2EACD"} 75%
-          );
-          box-shadow:
-            0 0 22px rgba(0,214,160,.22),
-            0 0 45px rgba(0,214,160,.1);
+          background: radial-gradient(circle at 35% 25%, ${dark ? "#174E3B" : "#D5F8E9"}, ${dark ? "#071B14" : "#A2EACD"} 75%);
+          box-shadow: 0 0 22px rgba(0,214,160,.18);
           animation: hbFloat 6s ease-in-out infinite;
         }
 
@@ -1260,13 +1097,13 @@ export default function Hero({ dark }) {
         }
 
         .hb-floating-arc {
-          top: 8%;
+          top: 10%;
           left: 2%;
         }
 
         .hb-floating-bot {
-          top: 7%;
-          right: 1%;
+          top: 10%;
+          right: 2%;
           animation-delay: -3s;
         }
 
@@ -1275,19 +1112,19 @@ export default function Hero({ dark }) {
           50% { translate: 0 -8px; }
         }
 
-        /* FLOATING NOTIFICATIONS */
+        /* REWARD NOTIFICATION */
 
         .hb-floating-reward {
           position: absolute;
           z-index: 6;
-          top: 0;
-          left: 12%;
+          bottom: 8%;
+          left: 1%;
           display: flex;
           align-items: center;
           gap: 9px;
           padding: 9px 11px;
           border: 1px solid rgba(0,214,160,.3);
-          border-radius: 10px;
+          border-radius: 4px;
           background: ${dark ? "rgba(7,22,16,.96)" : "rgba(255,255,255,.97)"};
           box-shadow: 0 12px 30px rgba(0,0,0,.17);
           backdrop-filter: blur(15px);
@@ -1299,7 +1136,7 @@ export default function Hero({ dark }) {
           width: 29px;
           height: 29px;
           place-items: center;
-          border-radius: 8px;
+          border-radius: 4px;
           background: rgba(0,214,160,.14);
           color: var(--green);
           font-size: 14px;
@@ -1327,17 +1164,19 @@ export default function Hero({ dark }) {
           font-size: 14px;
         }
 
+        /* APPROVED NOTIFICATION */
+
         .hb-floating-approved {
           position: absolute;
           z-index: 6;
-          right: 5%;
-          bottom: 6%;
+          right: 2%;
+          bottom: 7%;
           display: flex;
           align-items: center;
           gap: 7px;
           padding: 8px 11px;
           border: 1px solid rgba(0,214,160,.28);
-          border-radius: 8px;
+          border-radius: 4px;
           background: ${dark ? "rgba(7,22,16,.96)" : "rgba(255,255,255,.97)"};
           color: ${dark ? "#E4FFF4" : "#254336"};
           box-shadow: 0 10px 25px rgba(0,0,0,.13);
@@ -1357,6 +1196,31 @@ export default function Hero({ dark }) {
           color: var(--green);
         }
 
+        .hb-visual-caption {
+          position: absolute;
+          right: 50%;
+          bottom: 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          color: ${dark ? "rgba(255,255,255,.4)" : "#849188"};
+          font-size: 7px;
+          font-weight: 900;
+          letter-spacing: .1em;
+          white-space: nowrap;
+          transform: translateX(50%);
+        }
+
+        .hb-visual-caption span {
+          color: var(--green);
+        }
+
+        .hb-visual-caption i {
+          width: 23px;
+          height: 1px;
+          background: var(--green);
+        }
+
         @keyframes hbFadeUp {
           from {
             opacity: 0;
@@ -1372,27 +1236,26 @@ export default function Hero({ dark }) {
 
         @media (max-width: 1100px) {
           .hb-hero-container {
-            grid-template-columns: .9fr 1.1fr;
-            gap: 17px;
+            gap: 30px;
             padding-right: 30px;
             padding-left: 30px;
           }
 
           .hb-heading {
-            font-size: clamp(38px, 5vw, 55px);
+            font-size: clamp(39px, 5vw, 55px);
           }
 
-          .hb-interface {
-            width: 83%;
+          .hb-cards-stage {
+            column-gap: 18px;
+            row-gap: 23px;
           }
 
-          .hb-coin-platform {
-            transform: scale(.83);
+          .hb-floating-card {
+            padding: 11px;
           }
 
-          .hb-floating-network {
-            width: 41px;
-            height: 41px;
+          .hb-card-title-row strong {
+            font-size: 9px;
           }
         }
 
@@ -1405,9 +1268,9 @@ export default function Hero({ dark }) {
 
           .hb-hero-container {
             grid-template-columns: 1fr;
-            gap: 10px;
+            gap: 20px;
             min-height: auto;
-            padding: 85px 23px 35px;
+            padding: 85px 25px 40px;
           }
 
           .hb-copy {
@@ -1438,29 +1301,13 @@ export default function Hero({ dark }) {
           .hb-visual {
             width: 100%;
             max-width: 590px;
-            min-height: 450px;
+            min-height: 465px;
             margin: 0 auto;
           }
 
-          .hb-interface {
-            width: 76%;
-            transform: none;
-          }
-
-          .hb-coin-platform {
-            transform: scale(.9);
-          }
-
-          .hb-platform-left {
-            left: -1%;
-          }
-
-          .hb-platform-right {
-            right: -1%;
-          }
-
-          .hb-floating-reward {
-            left: 7%;
+          .hb-cards-stage {
+            max-width: 520px;
+            min-height: 400px;
           }
         }
 
@@ -1468,8 +1315,8 @@ export default function Hero({ dark }) {
 
         @media (max-width: 560px) {
           .hb-hero-container {
-            gap: 4px;
-            padding: 80px 16px 28px;
+            gap: 12px;
+            padding: 78px 17px 35px;
           }
 
           .hb-brand {
@@ -1527,169 +1374,111 @@ export default function Hero({ dark }) {
           }
 
           .hb-visual {
-            min-height: 370px;
+            min-height: 400px;
             margin-top: 8px;
           }
 
-          .hb-interface {
-            width: 78%;
-            min-width: 0;
-            border-radius: 13px;
-          }
-
-          .hb-interface-top {
-            min-height: 43px;
-            padding: 8px 10px;
-          }
-
-          .hb-interface-brand {
-            gap: 6px;
-            font-size: 7px;
-          }
-
-          .hb-interface-mark {
-            width: 23px;
-            height: 23px;
-            font-size: 12px;
-          }
-
-          .hb-interface-status {
-            padding: 5px 7px;
+          .hb-floating-label {
+            top: 0;
             font-size: 6px;
           }
 
-          .hb-interface-content {
-            padding: 14px 12px 13px;
+          .hb-cards-stage {
+            width: 100%;
+            min-height: 350px;
+            column-gap: 13px;
+            row-gap: 21px;
+            padding: 35px 2px 40px;
           }
 
-          .hb-interface-heading {
-            margin-bottom: 13px;
+          .hb-floating-card {
+            max-width: 220px;
+            padding: 9px;
           }
 
-          .hb-interface-overline {
+          .hb-card-top {
+            gap: 5px;
+            margin-bottom: 7px;
+          }
+
+          .hb-card-icon {
+            width: 22px;
+            height: 22px;
+            flex-basis: 22px;
+          }
+
+          .hb-card-category {
             font-size: 6px;
           }
 
-          .hb-interface-heading h2 {
-            margin-top: 5px;
-            font-size: 19px;
+          .hb-card-title-row {
+            margin-bottom: 7px;
           }
 
-          .hb-interface-heading-icon {
-            width: 34px;
-            height: 34px;
-            font-size: 16px;
+          .hb-card-title-row strong {
+            font-size: 8px;
           }
 
-          .hb-featured-bounty {
-            padding: 11px;
+          .hb-card-preview {
+            min-height: 70px;
           }
 
-          .hb-featured-top {
-            margin-bottom: 12px;
-            font-size: 6px;
+          .hb-card-bottom {
+            margin-top: 7px;
+            padding-top: 6px;
           }
 
-          .hb-featured-main {
-            gap: 8px;
+          .hb-card-bottom span {
+            font-size: 5px;
           }
 
-          .hb-featured-icon {
-            width: 37px;
-            height: 37px;
-            flex-basis: 37px;
-            font-size: 17px;
+          .hb-card-bottom strong {
+            font-size: 8px;
           }
 
-          .hb-featured-info strong {
+          .hb-card-code-preview,
+          .hb-card-design-preview {
+            height: 70px;
+          }
+
+          .hb-card-content-preview,
+          .hb-card-writing-preview {
+            min-height: 70px;
+          }
+
+          .hb-card-writing-preview strong {
             font-size: 9px;
           }
 
-          .hb-featured-info span {
-            font-size: 7px;
-          }
-
-          .hb-featured-bottom strong {
-            font-size: 23px;
-          }
-
-          .hb-featured-bottom strong small {
-            font-size: 9px;
-          }
-
-          .hb-reward-symbol {
-            width: 34px;
-            height: 34px;
-            font-size: 15px;
-          }
-
-          .hb-interface-progress {
-            margin-top: 13px;
-          }
-
-          .hb-interface-footer {
-            padding: 9px 10px;
+          .hb-card-code-preview {
             font-size: 6px;
-          }
-
-          .hb-coin-platform {
-            transform: scale(.67);
-          }
-
-          .hb-platform-left {
-            left: -9%;
-            bottom: -1%;
-          }
-
-          .hb-platform-right {
-            right: -9%;
-            bottom: 0;
-          }
-
-          .hb-coin {
-            width: 80px;
-            height: 80px;
-          }
-
-          .hb-coin-bot {
-            width: 86px;
-            height: 86px;
-          }
-
-          .hb-coin-inner {
-            font-size: 30px;
-          }
-
-          .hb-coin-inner img {
-            width: 37px;
-            height: 37px;
           }
 
           .hb-floating-network {
-            width: 34px;
-            height: 34px;
+            width: 31px;
+            height: 31px;
           }
 
           .hb-floating-arc {
-            top: 3%;
+            top: 7%;
             left: 0;
           }
 
           .hb-floating-bot {
-            top: 3%;
+            top: 7%;
             right: 0;
           }
 
           .hb-floating-reward {
-            top: 0;
-            left: 12%;
+            bottom: 2%;
+            left: 0;
             gap: 6px;
             padding: 6px 8px;
           }
 
           .hb-floating-reward-icon {
-            width: 23px;
-            height: 23px;
+            width: 22px;
+            height: 22px;
             font-size: 11px;
           }
 
@@ -1706,7 +1495,7 @@ export default function Hero({ dark }) {
           }
 
           .hb-floating-approved {
-            right: 5%;
+            right: 0;
             bottom: 2%;
             gap: 5px;
             padding: 6px 8px;
@@ -1716,6 +1505,11 @@ export default function Hero({ dark }) {
           .hb-floating-approved > span {
             width: 15px;
             height: 15px;
+          }
+
+          .hb-visual-caption {
+            bottom: -19px;
+            font-size: 6px;
           }
         }
 
@@ -1735,27 +1529,35 @@ export default function Hero({ dark }) {
           }
 
           .hb-visual {
-            min-height: 335px;
+            min-height: 365px;
           }
 
-          .hb-interface {
-            width: 80%;
+          .hb-cards-stage {
+            min-height: 325px;
+            column-gap: 9px;
+            row-gap: 17px;
           }
 
-          .hb-coin-platform {
-            transform: scale(.56);
+          .hb-floating-card {
+            padding: 7px;
           }
 
-          .hb-platform-left {
-            left: -12%;
+          .hb-card-title-row strong {
+            font-size: 7px;
           }
 
-          .hb-platform-right {
-            right: -12%;
+          .hb-card-preview {
+            min-height: 64px;
           }
 
-          .hb-floating-reward {
-            left: 9%;
+          .hb-card-code-preview,
+          .hb-card-design-preview {
+            height: 64px;
+          }
+
+          .hb-card-content-preview,
+          .hb-card-writing-preview {
+            min-height: 64px;
           }
         }
 
