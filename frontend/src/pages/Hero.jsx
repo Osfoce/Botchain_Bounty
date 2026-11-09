@@ -9,7 +9,6 @@ import {
   FiCheckCircle,
   FiCode,
   FiGift,
-  FiFileText,
   FiHeart,
   FiMessageCircle,
   FiPenTool,
@@ -18,6 +17,7 @@ import {
 
 import ArcLogo from "../assets/images/arc.png";
 import BotchainLogo from "../assets/images/bot.png";
+import WorldImage from "../assets/images/world.png";
 
 const heroMessages = [
   "Earn Real Rewards.",
@@ -26,131 +26,60 @@ const heroMessages = [
   "Create Opportunities.",
 ];
 
-const floatingCards = [
+const skills = [
   {
     id: "coding",
-    title: "Frontend Development",
-    category: "CODING",
-    reward: "250 USDC",
+    label: "Coding",
+    detail: "Build & develop",
     icon: FiCode,
-    className: "hb-card-code",
-    preview: (
-      <div className="hb-card-code-preview">
-        <div className="hb-mini-code-line"><i /> const project = await build();</div>
-        <div className="hb-mini-code-line indent">return project.success;</div>
-        <div className="hb-mini-code-line"><i /> // Ready to launch</div>
-      </div>
-    ),
+    className: "hb-skill-coding",
   },
   {
     id: "design",
-    title: "Creative Design",
-    category: "GRAPHIC DESIGN",
-    reward: "150 USDC",
+    label: "Design",
+    detail: "Create something",
     icon: FiPenTool,
-    className: "hb-card-design",
-    preview: (
-      <div className="hb-card-design-preview">
-        <div className="hb-design-shape shape-one" />
-        <div className="hb-design-shape shape-two" />
-        <div className="hb-design-shape shape-three" />
-        <div className="hb-design-preview-text">
-          <strong>THINK.</strong>
-          <strong>CREATE.</strong>
-        </div>
-      </div>
-    ),
+    className: "hb-skill-design",
   },
   {
     id: "content",
-    title: "Social Media Content",
-    category: "CONTENT",
-    reward: "100 USDC",
+    label: "Content",
+    detail: "Share your ideas",
     icon: FiMessageCircle,
-    className: "hb-card-content",
-    preview: (
-      <div className="hb-card-content-preview">
-        <div className="hb-content-avatar"><FiZap /></div>
-        <div className="hb-content-lines">
-          <i />
-          <i />
-          <i />
-        </div>
-        <div className="hb-content-art">
-          <span>CREATE.</span>
-          <strong>INSPIRE.</strong>
-          <span>EARN.</span>
-        </div>
-        <div className="hb-content-reactions">
-          <span><FiHeart /> 248</span>
-          <span><FiMessageCircle /> 36</span>
-        </div>
-      </div>
-    ),
+    className: "hb-skill-content",
   },
   {
-    id: "writing",
-    title: "Article Writing",
-    category: "WRITING",
-    reward: "80 USDC",
-    icon: FiFileText,
-    className: "hb-card-writing",
-    preview: (
-      <div className="hb-card-writing-preview">
-        <span>FEATURED ARTICLE</span>
-        <strong>Ideas can change everything.</strong>
-        <i />
-        <i />
-        <i />
-      </div>
-    ),
+    id: "ai",
+    label: "AI & Innovation",
+    detail: "Build the future",
+    icon: FiZap,
+    className: "hb-skill-ai",
   },
 ];
 
 function NetworkBadge({ logo, name }) {
   return (
     <div className="hb-network-badge">
-      <img src={logo} alt={name} />
+      <img src={logo} alt={`${name} logo`} />
       <span>{name}</span>
     </div>
   );
 }
 
-function FloatingWorkCard({ card, index }) {
-  const Icon = card.icon;
+function FloatingSkill({ skill }) {
+  const Icon = skill.icon;
 
   return (
-    <article
-      className={`hb-floating-card ${card.className}`}
-      style={{ "--card-index": index }}
-    >
-      <div className="hb-card-top">
-        <span className="hb-card-icon">
-          <Icon />
-        </span>
+    <div className={`hb-skill-float ${skill.className}`}>
+      <span className="hb-skill-icon">
+        <Icon />
+      </span>
 
-        <span className="hb-card-category">{card.category}</span>
-
-        <span className="hb-card-live">
-          <i />
-          LIVE
-        </span>
-      </div>
-
-      <div className="hb-card-title-row">
-        <strong>{card.title}</strong>
-        <span className="hb-card-arrow">
-          <FiArrowUpRight />
-        </span>
-      </div>
-
-      <div className="hb-card-preview">{card.preview}</div>
-
-      <div className="hb-card-bottom">
-        <span><FiGift /> BOUNTY REWARD</span>
-        <strong>{card.reward}</strong>
-      </div>
-    </article>
+      <span className="hb-skill-info">
+        <strong>{skill.label}</strong>
+        <small>{skill.detail}</small>
+      </span>
+    </div>
   );
 }
 
@@ -195,7 +124,6 @@ export default function Hero({ dark }) {
       <div className="hb-glow hb-glow-right" />
 
       <div className="hb-hero-container">
-
         {/* LEFT CONTENT */}
 
         <div className="hb-copy">
@@ -256,38 +184,51 @@ export default function Hero({ dark }) {
           </div>
         </div>
 
-        {/* RIGHT SIDE - FLOATING CARDS */}
+        {/* RIGHT SIDE - GLOBE VISUAL */}
 
         <div className="hb-visual">
           <div className="hb-visual-glow" />
 
           <div className="hb-orbit hb-orbit-one" />
           <div className="hb-orbit hb-orbit-two" />
+          <div className="hb-orbit hb-orbit-three" />
 
-          <div className="hb-floating-label">
+          <div className="hb-visual-label">
             <span className="hb-live-dot" />
-            REAL SKILLS. REAL OPPORTUNITIES.
+            CONNECTING SKILLS TO OPPORTUNITIES
           </div>
 
-          <div className="hb-cards-stage">
-            {floatingCards.map((card, index) => (
-              <FloatingWorkCard
-                key={card.id}
-                card={card}
-                index={index}
-              />
-            ))}
-          </div>
-
-          {/* NETWORK SYMBOLS */}
+          {/* NETWORK LOGOS */}
 
           <div className="hb-floating-network hb-floating-arc">
             <img src={ArcLogo} alt="Arc Network" />
+            <span>ARC</span>
           </div>
 
           <div className="hb-floating-network hb-floating-bot">
             <img src={BotchainLogo} alt="Botchain Network" />
+            <span>BOTCHAIN</span>
           </div>
+
+          {/* GLOBE */}
+
+          <div className="hb-world-container">
+            <div className="hb-world-halo" />
+
+            <img
+              src={WorldImage}
+              alt="Digital world connecting creators, developers and opportunities"
+              className="hb-world-image"
+            />
+
+            <div className="hb-world-shine" />
+          </div>
+
+          {/* FLOATING SKILL ICONS */}
+
+          {skills.map((skill) => (
+            <FloatingSkill key={skill.id} skill={skill} />
+          ))}
 
           {/* REWARD NOTIFICATION */}
 
@@ -307,9 +248,13 @@ export default function Hero({ dark }) {
           {/* APPROVAL NOTIFICATION */}
 
           <div className="hb-floating-approved">
-            <span><FiCheck /></span>
-            Approved
+            <span>
+              <FiCheck />
+            </span>
+            Work Approved
           </div>
+
+          {/* VISUAL CAPTION */}
 
           <div className="hb-visual-caption">
             <span>01</span>
@@ -346,8 +291,15 @@ export default function Hero({ dark }) {
           z-index: -3;
           pointer-events: none;
           background-image:
-            linear-gradient(${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px, transparent 1px),
-            linear-gradient(90deg, ${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px, transparent 1px);
+            linear-gradient(
+              ${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px,
+              transparent 1px
+            ),
+            linear-gradient(
+              90deg,
+              ${dark ? "rgba(255,255,255,.025)" : "rgba(0,60,40,.035)"} 1px,
+              transparent 1px
+            );
           background-size: 52px 52px;
           mask-image: linear-gradient(to bottom, black, transparent 90%);
         }
@@ -458,8 +410,14 @@ export default function Hero({ dark }) {
         }
 
         @keyframes hbPing {
-          from { transform: scale(.5); opacity: .8; }
-          to { transform: scale(2); opacity: 0; }
+          from {
+            transform: scale(.5);
+            opacity: .8;
+          }
+          to {
+            transform: scale(2);
+            opacity: 0;
+          }
         }
 
         .hb-heading {
@@ -525,7 +483,11 @@ export default function Hero({ dark }) {
           font-size: 11px;
           font-weight: 900;
           text-decoration: none;
-          transition: transform .25s ease, box-shadow .25s ease, background .25s ease, border-color .25s ease;
+          transition:
+            transform .25s ease,
+            box-shadow .25s ease,
+            background .25s ease,
+            border-color .25s ease;
         }
 
         .hb-button svg {
@@ -604,7 +566,7 @@ export default function Hero({ dark }) {
           object-fit: contain;
         }
 
-        /* RIGHT VISUAL */
+        /* RIGHT GLOBE VISUAL */
 
         .hb-visual {
           position: relative;
@@ -612,7 +574,7 @@ export default function Hero({ dark }) {
           align-items: center;
           justify-content: center;
           min-width: 0;
-          min-height: 480px;
+          min-height: 500px;
           isolation: isolate;
           animation: hbVisualEnter 1s .15s ease both;
         }
@@ -634,7 +596,7 @@ export default function Hero({ dark }) {
           width: 65%;
           height: 65%;
           border-radius: 50%;
-          background: rgba(0,214,160,.2);
+          background: rgba(0,214,160,.18);
           filter: blur(85px);
           animation: hbGlowPulse 6s ease-in-out infinite;
         }
@@ -653,33 +615,42 @@ export default function Hero({ dark }) {
         .hb-orbit {
           position: absolute;
           z-index: -2;
-          border: 1px solid rgba(0,214,160,.13);
+          border: 1px solid rgba(0,214,160,.15);
           border-radius: 50%;
           pointer-events: none;
         }
 
         .hb-orbit-one {
-          width: 92%;
-          height: 59%;
-          transform: rotate(-24deg);
+          width: 90%;
+          height: 57%;
+          transform: rotate(-25deg);
           animation: hbOrbit 35s linear infinite;
         }
 
         .hb-orbit-two {
-          width: 75%;
-          height: 82%;
+          width: 74%;
+          height: 83%;
           transform: rotate(28deg);
-          border-color: rgba(0,214,160,.08);
+          border-color: rgba(0,214,160,.10);
           animation: hbOrbit 45s linear infinite reverse;
+        }
+
+        .hb-orbit-three {
+          width: 105%;
+          height: 43%;
+          transform: rotate(12deg);
+          border-style: dashed;
+          border-color: rgba(0,214,160,.09);
+          animation: hbOrbit 55s linear infinite;
         }
 
         @keyframes hbOrbit {
           to { rotate: 360deg; }
         }
 
-        .hb-floating-label {
+        .hb-visual-label {
           position: absolute;
-          top: 1%;
+          top: 2%;
           left: 50%;
           display: flex;
           align-items: center;
@@ -687,429 +658,229 @@ export default function Hero({ dark }) {
           color: ${dark ? "rgba(255,255,255,.55)" : "#718078"};
           font-size: 8px;
           font-weight: 900;
-          letter-spacing: .13em;
+          letter-spacing: .12em;
           white-space: nowrap;
           transform: translateX(-50%);
         }
 
-        /* THE CARD ARRANGEMENT */
+        /* GLOBE IMAGE */
 
-        .hb-cards-stage {
+        .hb-world-container {
           position: relative;
+          z-index: 1;
           display: grid;
-          width: 100%;
-          max-width: 540px;
-          min-height: 400px;
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-          grid-template-rows: repeat(2, auto);
-          align-items: center;
-          justify-items: center;
-          column-gap: 30px;
-          row-gap: 27px;
-          padding: 43px 15px 35px;
-        }
-
-        .hb-floating-card {
-          position: relative;
-          z-index: 2;
-          width: 100%;
-          max-width: 235px;
-          min-width: 0;
-          padding: 13px;
-          overflow: hidden;
-          border: 1px solid ${dark ? "rgba(0,214,160,.26)" : "rgba(0,145,99,.22)"};
-          border-radius: 5px;
-          background: ${dark
-            ? "linear-gradient(145deg, rgba(17,35,27,.97), rgba(7,17,13,.98))"
-            : "linear-gradient(145deg, #FFFFFF, #EAF8F1)"};
-          color: ${dark ? "#F5FFF9" : "#17251D"};
-          box-shadow: 0 15px 38px rgba(0,0,0,.14), 0 0 20px rgba(0,214,160,.055);
-          transition: border-color .3s ease, box-shadow .3s ease;
-          animation: hbCardFloat 6s ease-in-out infinite;
-          animation-delay: calc(var(--card-index) * -.9s);
-        }
-
-        .hb-floating-card:hover {
-          z-index: 5;
-          border-color: rgba(0,214,160,.7);
-          box-shadow: 0 20px 45px rgba(0,0,0,.22), 0 0 24px rgba(0,214,160,.14);
-        }
-
-        @keyframes hbCardFloat {
-          0%, 100% { translate: 0 0; }
-          50% { translate: 0 -9px; }
-        }
-
-        /* Each card has its own position and angle.
-           The floating animation uses translate, so these rotations remain intact. */
-
-        .hb-card-code {
-          transform: rotate(-3deg) translateY(5px);
-        }
-
-        .hb-card-design {
-          transform: rotate(3deg) translateY(17px);
-        }
-
-        .hb-card-content {
-          transform: rotate(2deg) translateY(-5px);
-        }
-
-        .hb-card-writing {
-          transform: rotate(-2deg) translateY(10px);
-        }
-
-        .hb-card-top {
-          display: flex;
-          align-items: center;
-          gap: 7px;
-          min-width: 0;
-          margin-bottom: 10px;
-        }
-
-        .hb-card-icon {
-          display: grid;
-          width: 26px;
-          height: 26px;
-          flex: 0 0 26px;
+          width: min(78%, 420px);
+          aspect-ratio: 1;
           place-items: center;
-          border: 1px solid rgba(0,214,160,.25);
-          border-radius: 4px;
-          background: rgba(0,214,160,.12);
-          color: var(--green);
-          font-size: 13px;
+          isolation: isolate;
+          animation: hbWorldFloat 7s ease-in-out infinite;
         }
 
-        .hb-card-category {
-          overflow: hidden;
-          flex: 1;
-          color: var(--green);
-          font-size: 7px;
-          font-weight: 950;
-          letter-spacing: .09em;
-          text-overflow: ellipsis;
-          white-space: nowrap;
+        @keyframes hbWorldFloat {
+          0%, 100% {
+            transform: translateY(0);
+          }
+          50% {
+            transform: translateY(-10px);
+          }
         }
 
-        .hb-card-live {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-          color: ${dark ? "rgba(255,255,255,.55)" : "#718078"};
-          font-size: 6px;
-          font-weight: 900;
-        }
-
-        .hb-card-live i {
-          width: 5px;
-          height: 5px;
-          border-radius: 50%;
-          background: var(--green);
-          box-shadow: 0 0 7px var(--green);
-        }
-
-        .hb-card-title-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 6px;
-          margin-bottom: 10px;
-        }
-
-        .hb-card-title-row strong {
-          font-size: 10px;
-          font-weight: 900;
-          letter-spacing: -.02em;
-        }
-
-        .hb-card-arrow {
-          display: grid;
-          width: 21px;
-          height: 21px;
-          flex: 0 0 21px;
-          place-items: center;
-          border: 1px solid rgba(0,214,160,.2);
-          border-radius: 3px;
-          color: var(--green);
-          font-size: 11px;
-        }
-
-        .hb-card-preview {
-          min-height: 80px;
-          overflow: hidden;
-          border: 1px solid ${dark ? "rgba(255,255,255,.08)" : "rgba(0,0,0,.06)"};
-          border-radius: 3px;
-          background: ${dark ? "rgba(0,0,0,.22)" : "rgba(255,255,255,.7)"};
-        }
-
-        .hb-card-bottom {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 6px;
-          margin-top: 10px;
-          padding-top: 8px;
-          border-top: 1px solid ${dark ? "rgba(255,255,255,.09)" : "rgba(0,0,0,.07)"};
-        }
-
-        .hb-card-bottom span {
-          display: flex;
-          align-items: center;
-          gap: 5px;
-          color: ${dark ? "rgba(255,255,255,.47)" : "#718078"};
-          font-size: 6px;
-          font-weight: 900;
-          letter-spacing: .05em;
-        }
-
-        .hb-card-bottom span svg {
-          color: var(--green);
-          font-size: 10px;
-        }
-
-        .hb-card-bottom strong {
-          color: var(--green);
-          font-size: 10px;
-          font-weight: 950;
-        }
-
-        /* CODING PREVIEW */
-
-        .hb-card-code-preview {
-          display: flex;
-          justify-content: center;
-          flex-direction: column;
-          gap: 10px;
-          height: 80px;
-          padding: 10px;
-          color: ${dark ? "#A7F3D0" : "#087A58"};
-          font-family: "Fira Code", Consolas, monospace;
-          font-size: 7px;
-        }
-
-        .hb-mini-code-line {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        .hb-mini-code-line i {
-          display: inline-block;
-          width: 5px;
-          height: 5px;
-          margin-right: 5px;
-          border-radius: 50%;
-          background: var(--green);
-        }
-
-        .hb-mini-code-line.indent {
-          padding-left: 12px;
-          opacity: .7;
-        }
-
-        /* DESIGN PREVIEW */
-
-        .hb-card-design-preview {
-          position: relative;
-          display: flex;
-          align-items: center;
-          height: 80px;
-          overflow: hidden;
-          padding: 10px;
-          background: linear-gradient(120deg, #073D2E, #087B59 65%, #00D6A0);
-          color: white;
-        }
-
-        .hb-design-preview-text {
-          position: relative;
-          z-index: 2;
-          display: flex;
-          flex-direction: column;
-          font-size: 18px;
-          font-weight: 950;
-          line-height: .95;
-          letter-spacing: -.07em;
-        }
-
-        .hb-design-preview-text strong:last-child {
-          color: #A8FFDD;
-        }
-
-        .hb-design-shape {
+        .hb-world-halo {
           position: absolute;
-          border: 1px solid rgba(255,255,255,.5);
-          transform: rotate(35deg);
-        }
-
-        .shape-one {
-          top: 12px;
-          right: 25px;
-          width: 39px;
-          height: 39px;
+          z-index: -2;
+          inset: 8%;
           border-radius: 50%;
-          background: rgba(255,255,255,.13);
+          background: rgba(0,214,160,.18);
+          filter: blur(45px);
+          animation: hbHaloPulse 5s ease-in-out infinite;
         }
 
-        .shape-two {
-          right: 12px;
-          bottom: 9px;
-          width: 23px;
-          height: 23px;
-          background: #A8FFDD;
+        @keyframes hbHaloPulse {
+          0%, 100% {
+            transform: scale(.88);
+            opacity: .45;
+          }
+          50% {
+            transform: scale(1.12);
+            opacity: .85;
+          }
         }
 
-        .shape-three {
-          top: 9px;
-          right: 10px;
-          width: 13px;
-          height: 13px;
-          border-radius: 50%;
-          background: rgba(255,255,255,.5);
-        }
-
-        /* CONTENT PREVIEW */
-
-        .hb-card-content-preview {
+        .hb-world-image {
           position: relative;
-          display: grid;
-          grid-template-columns: 25px 1fr;
-          gap: 7px;
-          min-height: 80px;
-          padding: 9px;
+          z-index: 1;
+          display: block;
+          width: 100%;
+          height: 100%;
+          object-fit: contain;
+          user-select: none;
+          pointer-events: none;
+          filter: ${dark
+            ? "drop-shadow(0 0 24px rgba(0,214,160,.23))"
+            : "drop-shadow(0 15px 25px rgba(0,120,80,.13))"};
+          animation: hbWorldGlow 5s ease-in-out infinite;
         }
 
-        .hb-content-avatar {
-          display: grid;
-          width: 24px;
-          height: 24px;
-          place-items: center;
+        @keyframes hbWorldGlow {
+          0%, 100% {
+            filter: ${dark
+              ? "drop-shadow(0 0 20px rgba(0,214,160,.18))"
+              : "drop-shadow(0 12px 22px rgba(0,120,80,.11))"};
+          }
+          50% {
+            filter: ${dark
+              ? "drop-shadow(0 0 34px rgba(0,214,160,.35))"
+              : "drop-shadow(0 15px 30px rgba(0,120,80,.20))"};
+          }
+        }
+
+        .hb-world-shine {
+          position: absolute;
+          z-index: 2;
+          inset: 4%;
+          border: 1px solid rgba(0,214,160,.16);
           border-radius: 50%;
-          background: rgba(0,214,160,.14);
-          color: var(--green);
+          pointer-events: none;
+          box-shadow:
+            inset 0 0 30px rgba(0,214,160,.07),
+            0 0 25px rgba(0,214,160,.06);
         }
-
-        .hb-content-lines {
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          gap: 5px;
-        }
-
-        .hb-content-lines i {
-          width: 90%;
-          height: 4px;
-          border-radius: 4px;
-          background: ${dark ? "rgba(255,255,255,.2)" : "rgba(0,0,0,.12)"};
-        }
-
-        .hb-content-lines i:nth-child(2) { width: 70%; }
-        .hb-content-lines i:nth-child(3) { width: 45%; }
-
-        .hb-content-art {
-          display: flex;
-          grid-column: 1 / -1;
-          justify-content: center;
-          flex-direction: column;
-          min-height: 38px;
-          padding: 5px 9px;
-          border-radius: 2px;
-          background: linear-gradient(110deg, #073D2E, #00A879);
-          color: white;
-          font-size: 7px;
-          font-weight: 850;
-          letter-spacing: .1em;
-        }
-
-        .hb-content-art strong {
-          color: #A8FFDD;
-          font-size: 13px;
-        }
-
-        .hb-content-reactions {
-          display: flex;
-          grid-column: 1 / -1;
-          gap: 13px;
-          color: ${dark ? "rgba(255,255,255,.5)" : "#718078"};
-          font-size: 6px;
-        }
-
-        .hb-content-reactions span {
-          display: flex;
-          align-items: center;
-          gap: 4px;
-        }
-
-        /* WRITING PREVIEW */
-
-        .hb-card-writing-preview {
-          display: flex;
-          justify-content: center;
-          flex-direction: column;
-          gap: 7px;
-          min-height: 80px;
-          padding: 10px;
-        }
-
-        .hb-card-writing-preview > span {
-          color: var(--green);
-          font-size: 6px;
-          font-weight: 950;
-          letter-spacing: .12em;
-        }
-
-        .hb-card-writing-preview strong {
-          max-width: 160px;
-          color: ${dark ? "#E8FFF3" : "#263C31"};
-          font-size: 11px;
-          line-height: 1.25;
-        }
-
-        .hb-card-writing-preview i {
-          width: 95%;
-          height: 3px;
-          border-radius: 3px;
-          background: ${dark ? "rgba(255,255,255,.17)" : "rgba(0,0,0,.1)"};
-        }
-
-        .hb-card-writing-preview i:nth-of-type(2) { width: 78%; }
-        .hb-card-writing-preview i:nth-of-type(3) { width: 55%; }
 
         /* FLOATING NETWORK LOGOS */
 
         .hb-floating-network {
           position: absolute;
           z-index: 5;
-          display: grid;
-          width: 42px;
-          height: 42px;
-          place-items: center;
-          border: 1px solid rgba(0,214,160,.4);
-          border-radius: 50%;
-          background: radial-gradient(circle at 35% 25%, ${dark ? "#174E3B" : "#D5F8E9"}, ${dark ? "#071B14" : "#A2EACD"} 75%);
-          box-shadow: 0 0 22px rgba(0,214,160,.18);
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 9px 12px;
+          border: 1px solid rgba(0,214,160,.3);
+          border-radius: 7px;
+          background: ${dark
+            ? "rgba(9,28,20,.92)"
+            : "rgba(255,255,255,.94)"};
+          color: ${dark ? "#E9FFF5" : "#183B2D"};
+          box-shadow: 0 10px 30px rgba(0,0,0,.10);
+          backdrop-filter: blur(14px);
           animation: hbFloat 6s ease-in-out infinite;
         }
 
         .hb-floating-network img {
-          width: 55%;
-          height: 55%;
+          width: 23px;
+          height: 23px;
           object-fit: contain;
         }
 
+        .hb-floating-network span {
+          font-size: 8px;
+          font-weight: 950;
+          letter-spacing: .08em;
+        }
+
         .hb-floating-arc {
-          top: 10%;
-          left: 2%;
+          top: 12%;
+          left: 1%;
         }
 
         .hb-floating-bot {
-          top: 10%;
-          right: 2%;
+          top: 12%;
+          right: 0;
           animation-delay: -3s;
         }
 
+        /* FLOATING SKILL CARDS */
+
+        .hb-skill-float {
+          position: absolute;
+          z-index: 4;
+          display: flex;
+          align-items: center;
+          gap: 9px;
+          min-width: 135px;
+          padding: 10px 12px;
+          border: 1px solid ${dark
+            ? "rgba(0,214,160,.25)"
+            : "rgba(0,145,99,.20)"};
+          border-radius: 6px;
+          background: ${dark
+            ? "rgba(12,29,22,.94)"
+            : "rgba(255,255,255,.95)"};
+          color: ${dark ? "#F2FFF8" : "#1B3528"};
+          box-shadow: 0 12px 30px rgba(0,0,0,.10);
+          backdrop-filter: blur(14px);
+          animation: hbFloat 5.5s ease-in-out infinite;
+          transition: border-color .25s ease, box-shadow .25s ease;
+        }
+
+        .hb-skill-float:hover {
+          border-color: var(--green);
+          box-shadow: 0 12px 30px rgba(0,214,160,.14);
+        }
+
+        .hb-skill-icon {
+          display: grid;
+          width: 32px;
+          height: 32px;
+          flex: 0 0 32px;
+          place-items: center;
+          border: 1px solid rgba(0,214,160,.2);
+          border-radius: 5px;
+          background: rgba(0,214,160,.12);
+          color: var(--green);
+          font-size: 16px;
+        }
+
+        .hb-skill-info {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .hb-skill-info strong {
+          font-size: 9px;
+          font-weight: 900;
+          white-space: nowrap;
+        }
+
+        .hb-skill-info small {
+          color: ${dark ? "rgba(255,255,255,.48)" : "#7B8980"};
+          font-size: 7px;
+          font-weight: 650;
+          white-space: nowrap;
+        }
+
+        .hb-skill-coding {
+          top: 28%;
+          left: -1%;
+          animation-delay: -1s;
+        }
+
+        .hb-skill-design {
+          top: 32%;
+          right: -2%;
+          animation-delay: -3s;
+        }
+
+        .hb-skill-content {
+          bottom: 23%;
+          left: 0;
+          animation-delay: -2s;
+        }
+
+        .hb-skill-ai {
+          right: 0;
+          bottom: 22%;
+          animation-delay: -4s;
+        }
+
         @keyframes hbFloat {
-          0%, 100% { translate: 0 0; }
-          50% { translate: 0 -8px; }
+          0%, 100% {
+            translate: 0 0;
+          }
+          50% {
+            translate: 0 -8px;
+          }
         }
 
         /* REWARD NOTIFICATION */
@@ -1117,16 +888,18 @@ export default function Hero({ dark }) {
         .hb-floating-reward {
           position: absolute;
           z-index: 6;
-          bottom: 8%;
-          left: 1%;
+          bottom: 7%;
+          left: 3%;
           display: flex;
           align-items: center;
           gap: 9px;
           padding: 9px 11px;
           border: 1px solid rgba(0,214,160,.3);
-          border-radius: 4px;
-          background: ${dark ? "rgba(7,22,16,.96)" : "rgba(255,255,255,.97)"};
-          box-shadow: 0 12px 30px rgba(0,0,0,.17);
+          border-radius: 5px;
+          background: ${dark
+            ? "rgba(7,22,16,.96)"
+            : "rgba(255,255,255,.97)"};
+          box-shadow: 0 12px 30px rgba(0,0,0,.12);
           backdrop-filter: blur(15px);
           animation: hbFloat 5s ease-in-out infinite;
         }
@@ -1164,7 +937,7 @@ export default function Hero({ dark }) {
           font-size: 14px;
         }
 
-        /* APPROVED NOTIFICATION */
+        /* APPROVAL NOTIFICATION */
 
         .hb-floating-approved {
           position: absolute;
@@ -1176,10 +949,12 @@ export default function Hero({ dark }) {
           gap: 7px;
           padding: 8px 11px;
           border: 1px solid rgba(0,214,160,.28);
-          border-radius: 4px;
-          background: ${dark ? "rgba(7,22,16,.96)" : "rgba(255,255,255,.97)"};
+          border-radius: 5px;
+          background: ${dark
+            ? "rgba(7,22,16,.96)"
+            : "rgba(255,255,255,.97)"};
           color: ${dark ? "#E4FFF4" : "#254336"};
-          box-shadow: 0 10px 25px rgba(0,0,0,.13);
+          box-shadow: 0 10px 25px rgba(0,0,0,.10);
           font-size: 8px;
           font-weight: 900;
           backdrop-filter: blur(15px);
@@ -1245,17 +1020,17 @@ export default function Hero({ dark }) {
             font-size: clamp(39px, 5vw, 55px);
           }
 
-          .hb-cards-stage {
-            column-gap: 18px;
-            row-gap: 23px;
+          .hb-visual {
+            min-height: 450px;
           }
 
-          .hb-floating-card {
-            padding: 11px;
+          .hb-world-container {
+            width: 75%;
           }
 
-          .hb-card-title-row strong {
-            font-size: 9px;
+          .hb-skill-float {
+            min-width: 120px;
+            padding: 8px 9px;
           }
         }
 
@@ -1301,13 +1076,36 @@ export default function Hero({ dark }) {
           .hb-visual {
             width: 100%;
             max-width: 590px;
-            min-height: 465px;
+            min-height: 490px;
             margin: 0 auto;
           }
 
-          .hb-cards-stage {
-            max-width: 520px;
-            min-height: 400px;
+          .hb-world-container {
+            width: min(70%, 390px);
+          }
+
+          .hb-floating-arc {
+            left: 5%;
+          }
+
+          .hb-floating-bot {
+            right: 5%;
+          }
+
+          .hb-skill-coding {
+            left: 1%;
+          }
+
+          .hb-skill-design {
+            right: 1%;
+          }
+
+          .hb-skill-content {
+            left: 2%;
+          }
+
+          .hb-skill-ai {
+            right: 2%;
           }
         }
 
@@ -1315,7 +1113,7 @@ export default function Hero({ dark }) {
 
         @media (max-width: 560px) {
           .hb-hero-container {
-            gap: 12px;
+            gap: 10px;
             padding: 78px 17px 35px;
           }
 
@@ -1374,103 +1172,86 @@ export default function Hero({ dark }) {
           }
 
           .hb-visual {
-            min-height: 400px;
+            min-height: 390px;
             margin-top: 8px;
           }
 
-          .hb-floating-label {
-            top: 0;
+          .hb-visual-label {
+            top: 1%;
             font-size: 6px;
           }
 
-          .hb-cards-stage {
-            width: 100%;
-            min-height: 350px;
-            column-gap: 13px;
-            row-gap: 21px;
-            padding: 35px 2px 40px;
-          }
-
-          .hb-floating-card {
-            max-width: 220px;
-            padding: 9px;
-          }
-
-          .hb-card-top {
-            gap: 5px;
-            margin-bottom: 7px;
-          }
-
-          .hb-card-icon {
-            width: 22px;
-            height: 22px;
-            flex-basis: 22px;
-          }
-
-          .hb-card-category {
-            font-size: 6px;
-          }
-
-          .hb-card-title-row {
-            margin-bottom: 7px;
-          }
-
-          .hb-card-title-row strong {
-            font-size: 8px;
-          }
-
-          .hb-card-preview {
-            min-height: 70px;
-          }
-
-          .hb-card-bottom {
-            margin-top: 7px;
-            padding-top: 6px;
-          }
-
-          .hb-card-bottom span {
-            font-size: 5px;
-          }
-
-          .hb-card-bottom strong {
-            font-size: 8px;
-          }
-
-          .hb-card-code-preview,
-          .hb-card-design-preview {
-            height: 70px;
-          }
-
-          .hb-card-content-preview,
-          .hb-card-writing-preview {
-            min-height: 70px;
-          }
-
-          .hb-card-writing-preview strong {
-            font-size: 9px;
-          }
-
-          .hb-card-code-preview {
-            font-size: 6px;
+          .hb-world-container {
+            width: 76%;
           }
 
           .hb-floating-network {
-            width: 31px;
-            height: 31px;
+            gap: 5px;
+            padding: 6px 8px;
+          }
+
+          .hb-floating-network img {
+            width: 18px;
+            height: 18px;
+          }
+
+          .hb-floating-network span {
+            font-size: 6px;
           }
 
           .hb-floating-arc {
-            top: 7%;
+            top: 9%;
             left: 0;
           }
 
           .hb-floating-bot {
-            top: 7%;
+            top: 9%;
             right: 0;
           }
 
+          .hb-skill-float {
+            min-width: 108px;
+            gap: 6px;
+            padding: 7px;
+          }
+
+          .hb-skill-icon {
+            width: 26px;
+            height: 26px;
+            flex-basis: 26px;
+            font-size: 13px;
+          }
+
+          .hb-skill-info strong {
+            font-size: 7px;
+          }
+
+          .hb-skill-info small {
+            font-size: 6px;
+          }
+
+          .hb-skill-coding {
+            top: 28%;
+            left: -1%;
+          }
+
+          .hb-skill-design {
+            top: 34%;
+            right: -1%;
+          }
+
+          .hb-skill-content {
+            bottom: 22%;
+            left: -1%;
+          }
+
+          .hb-skill-ai {
+            right: -1%;
+            bottom: 21%;
+          }
+
           .hb-floating-reward {
-            bottom: 2%;
+            bottom: 3%;
             left: 0;
             gap: 6px;
             padding: 6px 8px;
@@ -1496,7 +1277,7 @@ export default function Hero({ dark }) {
 
           .hb-floating-approved {
             right: 0;
-            bottom: 2%;
+            bottom: 3%;
             gap: 5px;
             padding: 6px 8px;
             font-size: 6px;
@@ -1508,7 +1289,7 @@ export default function Hero({ dark }) {
           }
 
           .hb-visual-caption {
-            bottom: -19px;
+            bottom: -17px;
             font-size: 6px;
           }
         }
@@ -1529,35 +1310,24 @@ export default function Hero({ dark }) {
           }
 
           .hb-visual {
-            min-height: 365px;
+            min-height: 350px;
           }
 
-          .hb-cards-stage {
-            min-height: 325px;
-            column-gap: 9px;
-            row-gap: 17px;
+          .hb-world-container {
+            width: 73%;
           }
 
-          .hb-floating-card {
-            padding: 7px;
+          .hb-skill-float {
+            min-width: 100px;
+            padding: 6px;
           }
 
-          .hb-card-title-row strong {
-            font-size: 7px;
+          .hb-skill-info strong {
+            font-size: 6px;
           }
 
-          .hb-card-preview {
-            min-height: 64px;
-          }
-
-          .hb-card-code-preview,
-          .hb-card-design-preview {
-            height: 64px;
-          }
-
-          .hb-card-content-preview,
-          .hb-card-writing-preview {
-            min-height: 64px;
+          .hb-skill-info small {
+            font-size: 5px;
           }
         }
 
