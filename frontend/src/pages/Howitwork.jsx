@@ -19,7 +19,6 @@ import {
 
 import ArcLogo from "../assets/images/arc.png";
 import BotchainLogo from "../assets/images/bot.png";
-import WorldImage from "../assets/images/world.png";
 import happyBountyVideo from "../Video/happy-demo.mp4";
 
 const HowItWorks = () => {
@@ -211,82 +210,6 @@ const HowItWorks = () => {
                 );
               })}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ROTATING WORLD SECTION */}
-      <section className="relative overflow-hidden px-5 py-16 sm:px-8 sm:py-24">
-        <div className="pointer-events-none absolute left-1/2 top-1/2 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#00D6A0]/[0.06] blur-[100px]" />
-
-        <div className="relative mx-auto max-w-5xl">
-          <div className="mb-5 text-center">
-            <span className="hb-reveal text-sm font-semibold uppercase tracking-[0.2em] text-[#00D6A0]">
-              Global opportunities
-            </span>
-
-            <h2 className="hb-reveal hb-delay-1 mt-4 text-3xl font-bold sm:text-4xl">
-              Opportunities have no borders.
-            </h2>
-
-            <p className={`hb-reveal hb-delay-2 mx-auto mt-4 max-w-2xl leading-7 ${theme.muted}`}>
-              Connect with bounty opportunities and contribute to growing
-              communities from anywhere in the world.
-            </p>
-          </div>
-
-          <div className="hb-reveal hb-globe-stage relative mx-auto mt-8 flex aspect-square w-full max-w-[420px] items-center justify-center sm:max-w-[480px]">
-            {/* Ambient background glow */}
-            <div className="hb-globe-glow pointer-events-none absolute inset-[12%] rounded-full bg-[#00D6A0]/20 blur-[65px]" />
-
-            {/* Outer orbit */}
-            <div className="hb-globe-orbit pointer-events-none absolute inset-[5%] rounded-full border border-[#00D6A0]/20" />
-
-            {/* Second orbit */}
-            <div className="hb-globe-orbit-two pointer-events-none absolute inset-[13%] rounded-[50%] border border-dashed border-[#00D6A0]/20" />
-
-            {/* Horizontal orbit */}
-            <div className="hb-globe-orbit-horizontal pointer-events-none absolute left-0 right-0 top-1/2 h-[35%] -translate-y-1/2 rounded-[50%] border border-[#00D6A0]/25" />
-
-            {/* Globe image */}
-            <div className="hb-globe-image-wrap relative z-10 flex h-[76%] w-[76%] items-center justify-center">
-              <img
-                src={WorldImage}
-                alt="Global network of opportunities"
-                className="hb-rotating-world h-full w-full object-contain"
-              />
-            </div>
-
-            {/* Orbit markers */}
-            <div className="hb-orbit-dot hb-orbit-dot-one absolute left-[16%] top-[25%] z-20" />
-            <div className="hb-orbit-dot hb-orbit-dot-two absolute right-[13%] top-[40%] z-20" />
-            <div className="hb-orbit-dot hb-orbit-dot-three absolute bottom-[20%] left-[36%] z-20" />
-
-            {/* Floating ecosystem labels */}
-            <div className={`${theme.card} hb-globe-label hb-globe-label-left absolute left-0 top-[35%] z-30 flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xl sm:px-4 sm:py-3`}>
-              <img src={ArcLogo} alt="Arc" className="h-6 w-6 object-contain" />
-              <span className="text-sm font-semibold">Arc</span>
-            </div>
-
-            <div className={`${theme.card} hb-globe-label hb-globe-label-right absolute bottom-[27%] right-0 z-30 flex items-center gap-2 rounded-xl border px-3 py-2 shadow-xl sm:px-4 sm:py-3`}>
-              <img
-                src={BotchainLogo}
-                alt="Botchain"
-                className="h-6 w-6 object-contain"
-              />
-              <span className="text-sm font-semibold">Botchain</span>
-            </div>
-          </div>
-
-          <div className="hb-reveal mt-4 flex flex-wrap items-center justify-center gap-3">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#00D6A0]/20 bg-[#00D6A0]/5 px-4 py-2 text-xs font-medium text-[#00D6A0]">
-              <FiGlobe />
-              Global participation
-            </span>
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#00D6A0]/20 bg-[#00D6A0]/5 px-4 py-2 text-xs font-medium text-[#00D6A0]">
-              <FiZap />
-              Growing ecosystems
-            </span>
           </div>
         </div>
       </section>
@@ -508,6 +431,7 @@ const HowItWorks = () => {
           will-change: opacity, transform, filter;
         }
 
+        /* VISIBLE STATE */
         .hb-reveal.hb-visible {
           opacity: 1;
           filter: blur(0);
@@ -560,145 +484,6 @@ const HowItWorks = () => {
           }
         }
 
-        /* ROTATING GLOBE */
-        .hb-globe-stage {
-          perspective: 1100px;
-          isolation: isolate;
-        }
-
-        .hb-globe-image-wrap {
-          perspective: 1000px;
-          transform-style: preserve-3d;
-        }
-
-        .hb-rotating-world {
-          display: block;
-          object-fit: contain;
-          transform-style: preserve-3d;
-          backface-visibility: visible;
-          transform-origin: center;
-          animation: hbWorldRotate 35s linear infinite;
-          will-change: transform;
-          filter:
-            drop-shadow(0 0 18px rgba(0, 214, 160, .2))
-            drop-shadow(0 0 38px rgba(0, 214, 160, .1));
-        }
-
-        @keyframes hbWorldRotate {
-          from {
-            transform: rotateY(0deg);
-          }
-          to {
-            transform: rotateY(360deg);
-          }
-        }
-
-        /* GLOBE GLOW */
-        .hb-globe-glow {
-          animation: hbGlobePulse 5s ease-in-out infinite;
-        }
-
-        @keyframes hbGlobePulse {
-          0%, 100% {
-            opacity: .4;
-            transform: scale(.9);
-          }
-          50% {
-            opacity: .85;
-            transform: scale(1.1);
-          }
-        }
-
-        /* ORBIT RINGS */
-        .hb-globe-orbit {
-          animation: hbOrbitRotate 24s linear infinite;
-        }
-
-        .hb-globe-orbit-two {
-          animation: hbOrbitRotateReverse 32s linear infinite;
-        }
-
-        .hb-globe-orbit-horizontal {
-          animation: hbHorizontalOrbit 18s ease-in-out infinite alternate;
-        }
-
-        @keyframes hbOrbitRotate {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-
-        @keyframes hbOrbitRotateReverse {
-          from {
-            transform: rotate(360deg);
-          }
-          to {
-            transform: rotate(0deg);
-          }
-        }
-
-        @keyframes hbHorizontalOrbit {
-          from {
-            transform: translateY(-50%) rotateX(65deg) rotateZ(-12deg);
-          }
-          to {
-            transform: translateY(-50%) rotateX(65deg) rotateZ(12deg);
-          }
-        }
-
-        /* GLOBE DOTS */
-        .hb-orbit-dot {
-          width: 9px;
-          height: 9px;
-          border-radius: 50%;
-          background: #00D6A0;
-          box-shadow:
-            0 0 8px rgba(0, 214, 160, .9),
-            0 0 18px rgba(0, 214, 160, .5);
-          animation: hbDotPulse 2.5s ease-in-out infinite;
-        }
-
-        .hb-orbit-dot-two {
-          animation-delay: .8s;
-        }
-
-        .hb-orbit-dot-three {
-          animation-delay: 1.5s;
-        }
-
-        @keyframes hbDotPulse {
-          0%, 100% {
-            opacity: .5;
-            transform: scale(.8);
-          }
-          50% {
-            opacity: 1;
-            transform: scale(1.35);
-          }
-        }
-
-        /* FLOATING LABELS */
-        .hb-globe-label {
-          animation: hbGlobeFloat 5s ease-in-out infinite;
-          box-shadow: 0 12px 35px rgba(0, 0, 0, .08);
-        }
-
-        .hb-globe-label-right {
-          animation-delay: 1.5s;
-        }
-
-        @keyframes hbGlobeFloat {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-10px);
-          }
-        }
-
         /* VIDEO REVEAL */
         .hb-video {
           transition:
@@ -737,20 +522,6 @@ const HowItWorks = () => {
             transform: translate3d(0, 0, 0) scale(1);
             filter: blur(0);
           }
-
-          .hb-globe-label {
-            padding: 7px 10px;
-          }
-
-          .hb-globe-label img {
-            width: 20px;
-            height: 20px;
-          }
-
-          .hb-orbit-dot {
-            width: 7px;
-            height: 7px;
-          }
         }
 
         /* ACCESSIBILITY */
@@ -761,14 +532,7 @@ const HowItWorks = () => {
           .hb-video,
           .hb-bottom-card,
           .hb-hero-glow,
-          .hb-heading-glow,
-          .hb-rotating-world,
-          .hb-globe-glow,
-          .hb-globe-orbit,
-          .hb-globe-orbit-two,
-          .hb-globe-orbit-horizontal,
-          .hb-orbit-dot,
-          .hb-globe-label {
+          .hb-heading-glow {
             animation: none !important;
             transition: none !important;
             opacity: 1 !important;
