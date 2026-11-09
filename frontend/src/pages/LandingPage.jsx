@@ -186,7 +186,7 @@ function LandingPage({ dark, setDark }) {
       {/* HERO */}
       <section
         className={`
-          hero-shell relative z-10 mx-3 mt-5 overflow-hidden rounded-2xl
+          hero-shell relative z-10 mx-3 mt-2 md:mt-5 overflow-hidden rounded-2xl
           transition-colors duration-500 sm:mx-6 lg:mx-12
           ${dark ? "bg-[#080908]" : "bg-[#f6f5ef]"}
         `}
