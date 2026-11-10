@@ -1,5 +1,5 @@
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   FiBriefcase,
   FiCheck,
@@ -22,12 +22,31 @@ import BotchainLogo from "../assets/images/bot.png";
 import happyBountyVideo from "../Video/happy-demo.mp4";
 
 const HowItWorks = () => {
-  const [isDark, setIsDark] = useState(true);
-  const animationObserver = useRef(null);
+  const [isDark, setIsDark] = useState(() => {
+    const html = document.documentElement;
+    const body = document.body;
 
+    return (
+      html.classList.contains("dark") ||
+      body.classList.contains("dark") ||
+      html.getAttribute("data-theme") === "dark" ||
+      body.getAttribute("data-theme") === "dark"
+    );
+  });
+
+  // Detect dark/light theme changes
   useEffect(() => {
     const updateTheme = () => {
-      setIsDark(document.documentElement.classList.contains("dark"));
+      const html = document.documentElement;
+      const body = document.body;
+
+      const dark =
+        html.classList.contains("dark") ||
+        body.classList.contains("dark") ||
+        html.getAttribute("data-theme") === "dark" ||
+        body.getAttribute("data-theme") === "dark";
+
+      setIsDark(dark);
     };
 
     updateTheme();
@@ -36,59 +55,29 @@ const HowItWorks = () => {
 
     observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
     });
 
     return () => observer.disconnect();
   }, []);
 
-  // Scroll reveal animations
-  useEffect(() => {
-    const elements = document.querySelectorAll(".hb-reveal");
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      elements.forEach((element) => {
-        element.classList.add("hb-visible");
-      });
-      return;
-    }
-
-    animationObserver.current = new IntersectionObserver(
-      (entries, observer) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("hb-visible");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      {
-        threshold: 0.12,
-        rootMargin: "0px 0px -45px 0px",
-      }
-    );
-
-    elements.forEach((element) => {
-      animationObserver.current.observe(element);
-    });
-
-    return () => {
-      animationObserver.current?.disconnect();
-    };
-  }, []);
-
   const theme = {
-    background: isDark ? "bg-[#080908]" : "bg-[#f6f5ef]",
+    background: isDark ? "bg-[#080B0D]" : "bg-[#F3F5F3]",
     text: isDark ? "text-white" : "text-[#151515]",
     muted: isDark ? "text-gray-400" : "text-gray-600",
+
     card: isDark
       ? "bg-[#101411] border-white/10"
       : "bg-white border-black/10",
+
     secondaryCard: isDark
       ? "bg-[#0b100d] border-white/10"
-      : "bg-[#f0f2ec] border-black/10",
-    green: "#00D6A0",
-    greenHover: "#008A66",
+      : "bg-[#F5F7F5] border-black/10",
   };
 
   const highlights = [
@@ -195,13 +184,15 @@ const HowItWorks = () => {
                   <div
                     key={item.title}
                     className={`${theme.card} hb-reveal hb-card group rounded-2xl border p-5 transition-all duration-300 hover:-translate-y-1 hover:border-[#00D6A0]/40`}
-                    style={{ "--reveal-delay": `${index * 130}ms` }}
+                    style={{ "--reveal-delay": `${index * 100}ms` }}
                   >
-                    <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[#00D6A0]/10 text-xl text-[#00D6A0] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+                    <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-[#00D6A0]/10 text-xl text-[#00D6A0] transition-transform duration-300 group-hover:scale-110">
                       <Icon />
                     </div>
 
-                    <h3 className="text-base font-semibold">{item.title}</h3>
+                    <h3 className="text-base font-semibold">
+                      {item.title}
+                    </h3>
 
                     <p className={`mt-2 text-sm leading-6 ${theme.muted}`}>
                       {item.description}
@@ -226,7 +217,9 @@ const HowItWorks = () => {
               Built for growing communities
             </h2>
 
-            <p className={`hb-reveal hb-delay-2 mx-auto mt-4 max-w-2xl ${theme.muted}`}>
+            <p
+              className={`hb-reveal hb-delay-2 mx-auto mt-4 max-w-2xl ${theme.muted}`}
+            >
               Discover opportunities and participate in the ecosystems
               supported by Happy Bounty.
             </p>
@@ -237,12 +230,12 @@ const HowItWorks = () => {
               <div
                 key={ecosystem.name}
                 className={`${theme.card} hb-reveal hb-card group relative overflow-hidden rounded-3xl border p-6 transition-all duration-300 hover:-translate-y-1 hover:border-[#00D6A0]/40 sm:p-8`}
-                style={{ "--reveal-delay": `${index * 160}ms` }}
+                style={{ "--reveal-delay": `${index * 100}ms` }}
               >
                 <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-[#00D6A0]/5 blur-3xl transition-all duration-300 group-hover:bg-[#00D6A0]/10" />
 
                 <div className="relative flex items-start gap-5">
-                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#00D6A0]/20 bg-[#00D6A0]/5 p-3 transition-all duration-500 group-hover:rotate-3 group-hover:scale-110">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl border border-[#00D6A0]/20 bg-[#00D6A0]/5 p-3 transition-transform duration-300 group-hover:scale-105">
                     <img
                       src={ecosystem.logo}
                       alt={`${ecosystem.name} logo`}
@@ -252,7 +245,9 @@ const HowItWorks = () => {
 
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-xl font-bold">{ecosystem.name}</h3>
+                      <h3 className="text-xl font-bold">
+                        {ecosystem.name}
+                      </h3>
 
                       <span className="rounded-full border border-[#00D6A0]/25 bg-[#00D6A0]/10 px-2.5 py-1 text-xs font-medium text-[#00D6A0]">
                         Ecosystem
@@ -301,10 +296,10 @@ const HowItWorks = () => {
                 <div
                   key={step.number}
                   className={`${theme.card} hb-reveal hb-card group relative rounded-2xl border p-6 transition-all duration-300 hover:-translate-y-1 hover:border-[#00D6A0]/40`}
-                  style={{ "--reveal-delay": `${index * 120}ms` }}
+                  style={{ "--reveal-delay": `${index * 100}ms` }}
                 >
                   <div className="mb-6 flex items-center justify-between">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#00D6A0]/10 text-xl text-[#00D6A0] transition-transform duration-300 group-hover:scale-110 group-hover:rotate-3">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#00D6A0]/10 text-xl text-[#00D6A0] transition-transform duration-300 group-hover:scale-110">
                       <Icon />
                     </div>
 
@@ -313,7 +308,9 @@ const HowItWorks = () => {
                     </span>
                   </div>
 
-                  <h3 className="text-lg font-semibold">{step.title}</h3>
+                  <h3 className="text-lg font-semibold">
+                    {step.title}
+                  </h3>
 
                   <p className={`mt-3 text-sm leading-6 ${theme.muted}`}>
                     {step.description}
@@ -344,7 +341,9 @@ const HowItWorks = () => {
               Get to know Happy Bounty
             </h2>
 
-            <p className={`hb-reveal hb-delay-2 mx-auto mt-4 max-w-2xl ${theme.muted}`}>
+            <p
+              className={`hb-reveal hb-delay-2 mx-auto mt-4 max-w-2xl ${theme.muted}`}
+            >
               See how contributors discover tasks, submit work, and earn
               rewards through the platform.
             </p>
@@ -375,7 +374,7 @@ const HowItWorks = () => {
           >
             <div className="pointer-events-none absolute left-1/2 top-0 h-40 w-72 -translate-x-1/2 rounded-full bg-[#00D6A0]/10 blur-[80px] hb-hero-glow" />
 
-            <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#00D6A0]/20 bg-[#00D6A0]/10 text-3xl text-[#00D6A0] transition-transform duration-500 hover:rotate-6 hover:scale-110">
+            <div className="relative mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border border-[#00D6A0]/20 bg-[#00D6A0]/10 text-3xl text-[#00D6A0] transition-transform duration-300 hover:scale-110">
               <FiUsers />
             </div>
 
@@ -416,44 +415,49 @@ const HowItWorks = () => {
         </div>
       </section>
 
-      {/* ANIMATION STYLES */}
+      {/* ZOOM-IN ANIMATION STYLES */}
       <style>{`
-        /* INITIAL REVEAL STATE */
         .hb-reveal {
-          opacity: 0;
-          filter: blur(9px);
-          transform: translate3d(0, 32px, 0) scale(.985);
-          transition:
-            opacity 800ms cubic-bezier(.2,.8,.2,1),
-            transform 850ms cubic-bezier(.2,.8,.2,1),
-            filter 850ms cubic-bezier(.2,.8,.2,1);
-          transition-delay: var(--reveal-delay, 0ms);
-          will-change: opacity, transform, filter;
+          opacity: 1 !important;
+          filter: none !important;
+          transform: none;
+          animation: hbZoomIn 650ms cubic-bezier(.2,.8,.2,1) both;
+          animation-delay: var(--reveal-delay, 0ms);
+          will-change: transform;
         }
 
-        /* VISIBLE STATE */
-        .hb-reveal.hb-visible {
-          opacity: 1;
-          filter: blur(0);
-          transform: translate3d(0, 0, 0) scale(1);
+        @keyframes hbZoomIn {
+          from {
+            opacity: 1;
+            transform: scale(.96);
+          }
+
+          to {
+            opacity: 1;
+            transform: scale(1);
+          }
         }
 
-        /* CARD REVEALS */
+        .hb-delay-1 {
+          --reveal-delay: 100ms;
+        }
+
+        .hb-delay-2 {
+          --reveal-delay: 180ms;
+        }
+
         .hb-card {
           transition:
-            opacity 800ms cubic-bezier(.2,.8,.2,1),
-            transform 850ms cubic-bezier(.2,.8,.2,1),
-            filter 850ms cubic-bezier(.2,.8,.2,1),
+            transform 300ms ease,
             border-color 300ms ease,
             box-shadow 350ms ease,
             background-color 300ms ease;
         }
 
-        .hb-card.hb-visible:hover {
+        .hb-card:hover {
           box-shadow: 0 16px 45px rgba(0, 214, 160, .08);
         }
 
-        /* HERO GLOW */
         .hb-hero-glow {
           animation: hbAmbientGlow 7s ease-in-out infinite;
         }
@@ -463,13 +467,13 @@ const HowItWorks = () => {
             opacity: .5;
             transform: translateX(-50%) scale(.9);
           }
+
           50% {
             opacity: 1;
             transform: translateX(-50%) scale(1.12);
           }
         }
 
-        /* HEADING ACCENT */
         .hb-heading-glow {
           text-shadow: 0 0 28px rgba(0, 214, 160, .12);
           animation: hbHeadingGlow 4s ease-in-out infinite;
@@ -479,55 +483,33 @@ const HowItWorks = () => {
           0%, 100% {
             text-shadow: 0 0 12px rgba(0, 214, 160, .08);
           }
+
           50% {
             text-shadow: 0 0 30px rgba(0, 214, 160, .28);
           }
         }
 
-        /* VIDEO REVEAL */
         .hb-video {
-          transition:
-            opacity 900ms ease,
-            transform 900ms cubic-bezier(.2,.8,.2,1),
-            box-shadow 400ms ease;
+          transition: box-shadow 400ms ease;
         }
 
-        .hb-video.hb-visible:hover {
+        .hb-video:hover {
           box-shadow: 0 25px 80px rgba(0, 214, 160, .10);
         }
 
-        /* BOTTOM CARD */
         .hb-bottom-card {
           transition:
-            opacity 850ms ease,
-            transform 900ms cubic-bezier(.2,.8,.2,1),
-            filter 850ms ease,
             border-color 350ms ease,
             box-shadow 350ms ease;
         }
 
-        .hb-bottom-card.hb-visible:hover {
+        .hb-bottom-card:hover {
           border-color: rgba(0, 214, 160, .3);
           box-shadow: 0 20px 65px rgba(0, 214, 160, .055);
         }
 
-        /* MOBILE */
-        @media (max-width: 640px) {
-          .hb-reveal {
-            transform: translate3d(0, 22px, 0) scale(.99);
-            filter: blur(6px);
-          }
-
-          .hb-reveal.hb-visible {
-            transform: translate3d(0, 0, 0) scale(1);
-            filter: blur(0);
-          }
-        }
-
-        /* ACCESSIBILITY */
         @media (prefers-reduced-motion: reduce) {
           .hb-reveal,
-          .hb-reveal.hb-visible,
           .hb-card,
           .hb-video,
           .hb-bottom-card,
