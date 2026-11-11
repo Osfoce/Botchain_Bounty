@@ -27,16 +27,19 @@ import {
   FiZap,
   FiSend,
   FiLoader,
+  FiMail,
 } from "react-icons/fi";
 
 import NavBar from "../components/Layout/NavBar";
 import Footer from "../components/Layout/Footer";
 import BountyCard from "../components/Bounty/BountyCard";
 
+const SUPPORT_EMAIL = "happybounty9@gmail.com";
+
 const INITIAL_MESSAGE = {
   role: "assistant",
   content:
-    "Hello! 👋 Welcome to Happy Bounty. I'm your AI assistant. I can help you discover bounties, understand rewards, navigate your dashboard, or learn how to participate. What would you like to know?",
+    "Hello! 👋 Welcome to Happy Bounty Help Center. I can help you understand how to create bounties, fund tasks, submit work, receive rewards, and use the platform. What would you like to know?",
   source: "welcome",
 };
 
@@ -76,7 +79,7 @@ function Dashboard({ dark, setDark }) {
   const [enrolledBountyIds, setEnrolledBountyIds] = useState([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  // AI assistant state
+  // Help Center state
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [chatInput, setChatInput] = useState("");
@@ -228,7 +231,7 @@ function Dashboard({ dark, setDark }) {
     loadDataDeletionRequest();
   }, [loadDataDeletionRequest]);
 
-  // Automatically scroll chat to latest message
+  // Automatically scroll chat to the latest message
   useEffect(() => {
     if (assistantOpen) {
       messagesEndRef.current?.scrollIntoView({
@@ -249,18 +252,95 @@ function Dashboard({ dark, setDark }) {
     }
   }, [assistantOpen]);
 
-  // Send message to Happy Bounty hybrid AI assistant
+  // Send the existing conversation to the FAQ support backend.
+  // This does not call OpenAI from the frontend.
+  const requestAssistantReply = async (conversation) => {
+    if (!API_URL) {
+      setChatError(
+        `The support service is currently unavailable. Please email us at ${SUPPORT_EMAIL}.`
+      );
+      return;
+    }
+
+    setChatError("");
+    setSendingMessage(true);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/assistant/chat`,
+        {
+          messages: conversation
+            .filter((item) =>
+              ["user", "assistant"].includes(item.role)
+            )
+            .slice(-10)
+            .map(({ role, content }) => ({
+              role,
+              content,
+            })),
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        }
+      );
+
+      const assistantReply =
+        response.data?.reply ||
+        response.data?.message ||
+        response.data?.response;
+
+      if (
+        !assistantReply ||
+        typeof assistantReply !== "string"
+      ) {
+        throw new Error("The support service returned an empty response.");
+      }
+
+      // Only FAQ answers are labelled as quick answers.
+      // Unmatched questions are treated as support requests.
+      // Any legacy "openai" source is also treated as support.
+      const source =
+        response.data?.source === "free" ? "free" : "support";
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          role: "assistant",
+          content: assistantReply,
+          source,
+        },
+      ]);
+    } catch (error) {
+      console.error("Happy Bounty Help Center error:", error);
+
+      const serverMessage =
+        error.response?.data?.reply ||
+        error.response?.data?.error ||
+        error.response?.data?.message;
+
+      setChatError(
+        serverMessage ||
+          (error.code === "ECONNABORTED"
+            ? "The support service is taking too long to respond. Please try again or email our support team."
+            : `Unable to connect to Happy Bounty support. Please try again or email ${SUPPORT_EMAIL}.`)
+      );
+    } finally {
+      setSendingMessage(false);
+
+      window.setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
+  // Send a new user question
   const sendAssistantMessage = async (messageOverride) => {
     const message = (messageOverride ?? chatInput).trim();
 
     if (!message || sendingMessage) return;
-
-    if (!API_URL) {
-      setChatError(
-        "The assistant is not configured correctly. Please contact support.",
-      );
-      return;
-    }
 
     const updatedMessages = [
       ...messages,
@@ -273,84 +353,35 @@ function Dashboard({ dark, setDark }) {
     setMessages(updatedMessages);
     setChatInput("");
     setChatError("");
-    setSendingMessage(true);
 
-    try {
-      const response = await axios.post(
-        `${API_URL}/assistant/chat`,
-        {
-          messages: updatedMessages.slice(-10).map((item) => ({
-            role: item.role,
-            content: item.content,
-          })),
-        },
-        {
-          timeout: 60000,
-        },
-      );
-
-      const assistantReply =
-        response.data?.reply ||
-        response.data?.message ||
-        response.data?.response;
-
-      if (
-        !assistantReply ||
-        typeof assistantReply !== "string"
-      ) {
-        throw new Error("The assistant returned an empty response.");
-      }
-
-      setMessages((previous) => [
-        ...previous,
-        {
-          role: "assistant",
-          content: assistantReply,
-          source:
-            response.data?.source === "free"
-              ? "free"
-              : "openai",
-        },
-      ]);
-    } catch (error) {
-      console.error("Happy Bounty AI error:", error);
-
-      const errorMessage =
-        error.code === "ECONNABORTED"
-          ? "The assistant is taking too long to respond. Please try again."
-          : error.response?.data?.error ||
-            error.response?.data?.message ||
-            "I couldn't connect right now. Please try again in a moment.";
-
-      setChatError(errorMessage);
-    } finally {
-      setSendingMessage(false);
-
-      window.setTimeout(() => {
-        chatInputRef.current?.focus();
-      }, 100);
-    }
+    await requestAssistantReply(updatedMessages);
   };
 
-  // Retry the most recent failed user question
-  const retryAssistantMessage = () => {
+  // Retry the last question without adding a duplicate user message
+  const retryAssistantMessage = async () => {
     if (sendingMessage) return;
 
     const lastMessage = messages[messages.length - 1];
 
-    if (lastMessage?.role === "user") {
-      setChatError("");
-      sendAssistantMessage(lastMessage.content);
-    }
+    if (lastMessage?.role !== "user") return;
+
+    setChatError("");
+    await requestAssistantReply(messages);
   };
 
-  // Reset assistant conversation
+  // Reset Help Center conversation
   const resetAssistantChat = () => {
     if (sendingMessage) return;
 
     setMessages([INITIAL_MESSAGE]);
     setChatInput("");
     setChatError("");
+  };
+
+  const getMessageLabel = (source) => {
+    if (source === "free") return "Quick answer";
+    if (source === "support") return "Contact support";
+    return "Help Center";
   };
 
   const formatEarnings = (value) => {
@@ -396,19 +427,19 @@ function Dashboard({ dark, setDark }) {
       const response = firstPage.data;
 
       const collections = Object.keys(response.data || {}).filter((key) =>
-        Array.isArray(response.data[key]),
+        Array.isArray(response.data[key])
       );
 
       const totalPages = Math.max(
         1,
         ...Object.values(response.pagination || {}).map(
-          (page) => Number(page.pages) || 0,
-        ),
+          (page) => Number(page.pages) || 0
+        )
       );
 
       if (totalPages > 50) {
         showToast.error(
-          "This export is too large to download at once. Please contact support for assistance.",
+          "This export is too large to download at once. Please contact support for assistance."
         );
         return;
       }
@@ -433,7 +464,7 @@ function Dashboard({ dark, setDark }) {
           Object.entries(response.pagination || {}).map(([key, value]) => [
             key,
             { total: value.total, pages: value.pages },
-          ]),
+          ])
         ),
         excluded: response.excluded || [],
       };
@@ -456,7 +487,7 @@ function Dashboard({ dark, setDark }) {
       console.error("Error exporting user data:", error);
 
       showToast.error(
-        error.response?.data?.error || "Couldn't download your data export.",
+        error.response?.data?.error || "Couldn't download your data export."
       );
     } finally {
       setDataExporting(false);
@@ -480,13 +511,13 @@ function Dashboard({ dark, setDark }) {
       showToast.success(
         data.alreadyOpen
           ? "You already have an open data request."
-          : "Your data request was submitted for review.",
+          : "Your data request was submitted for review."
       );
     } catch (error) {
       console.error("Error submitting data deletion request:", error);
 
       showToast.error(
-        error.response?.data?.error || "Couldn't submit your data request.",
+        error.response?.data?.error || "Couldn't submit your data request."
       );
     } finally {
       setDataRequestSubmitting(false);
@@ -544,7 +575,11 @@ function Dashboard({ dark, setDark }) {
         <div className="relative z-10">
           {/* Hero */}
           <section
-            className={`relative mb-10 overflow-hidden rounded-[28px] border transition-colors duration-300 sm:rounded-[32px] ${heroSurface}`}
+            className={`relative mb-10 overflow-hidden rounded-[28px] border transition-colors duration-300 sm:rounded-[32px] ${
+              dark
+                ? "border-[#00A87D]/20 bg-[#0D1713] text-white"
+                : "border-[#00A87D]/20 bg-white text-[#111311] shadow-sm"
+            }`}
           >
             <div
               aria-hidden="true"
@@ -577,7 +612,9 @@ function Dashboard({ dark, setDark }) {
                   </span>
 
                   <span
-                    className={`text-[10px] font-bold uppercase tracking-[0.22em] ${heroBadgeText}`}
+                    className={`text-[10px] font-bold uppercase tracking-[0.22em] ${
+                      dark ? "text-[#77E5C2]" : "text-[#008F6A]"
+                    }`}
                   >
                     MULTI CHAIN / CONTRIBUTOR HUB
                   </span>
@@ -593,7 +630,9 @@ function Dashboard({ dark, setDark }) {
                 </h1>
 
                 <p
-                  className={`mt-5 max-w-xl text-sm leading-7 sm:text-base ${heroMuted}`}
+                  className={`mt-5 max-w-xl text-sm leading-7 sm:text-base ${
+                    dark ? "text-white/60" : "text-black/60"
+                  }`}
                 >
                   Discover meaningful tasks, complete bounties, and turn your
                   contributions into rewards. Your next opportunity starts here.
@@ -615,7 +654,11 @@ function Dashboard({ dark, setDark }) {
 
                   <Link
                     to="/create"
-                    className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition duration-300 hover:border-[#00A87D]/50 hover:bg-[#00A87D]/10 ${heroSecondaryButton}`}
+                    className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition duration-300 hover:border-[#00A87D]/50 hover:bg-[#00A87D]/10 ${
+                      dark
+                        ? "border-white/15 bg-white/[0.04] text-white/85"
+                        : "border-black/[0.09] bg-black/[0.02] text-[#111311]"
+                    }`}
                   >
                     <FiPlus />
                     Post a bounty
@@ -623,7 +666,9 @@ function Dashboard({ dark, setDark }) {
                 </div>
 
                 <div
-                  className={`mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs ${heroSubtle}`}
+                  className={`mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs ${
+                    dark ? "text-white/50" : "text-black/55"
+                  }`}
                 >
                   <span className="inline-flex items-center gap-2">
                     <FiCheckCircle className="text-[#00A87D]" />
@@ -640,11 +685,17 @@ function Dashboard({ dark, setDark }) {
               {/* Hero side panel */}
               <div className="relative">
                 <div
-                  className={`rounded-2xl border p-5 backdrop-blur-md transition-colors duration-300 sm:p-6 ${panelSurface}`}
+                  className={`rounded-2xl border p-5 backdrop-blur-md transition-colors duration-300 sm:p-6 ${
+                    dark
+                      ? "border-white/10 bg-black/20"
+                      : "border-black/[0.08] bg-[#F7F9F7]"
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-[10px] font-bold uppercase tracking-[0.2em] ${panelMuted}`}
+                      className={`text-[10px] font-bold uppercase tracking-[0.2em] ${
+                        dark ? "text-white/45" : "text-black/45"
+                      }`}
                     >
                       YOUR OVERVIEW
                     </span>
@@ -652,14 +703,24 @@ function Dashboard({ dark, setDark }) {
                     <FiActivity className="text-lg text-[#00A87D]" />
                   </div>
 
-                  <div className={`mt-7 border-b pb-6 ${panelBorder}`}>
-                    <p className={`text-sm ${panelSecondary}`}>
+                  <div
+                    className={`mt-7 border-b pb-6 ${
+                      dark ? "border-white/10" : "border-black/[0.08]"
+                    }`}
+                  >
+                    <p
+                      className={`text-sm ${
+                        dark ? "text-white/55" : "text-black/55"
+                      }`}
+                    >
                       Total rewards earned
                     </p>
 
                     <div className="mt-3 flex items-baseline gap-1.5">
                       <span
-                        className={`text-4xl font-black tracking-tight sm:text-5xl ${panelValue}`}
+                        className={`text-4xl font-black tracking-tight sm:text-5xl ${
+                          dark ? "text-white" : "text-[#111311]"
+                        }`}
                       >
                         {dollars}
                       </span>
@@ -677,9 +738,19 @@ function Dashboard({ dark, setDark }) {
 
                   <div className="mt-5 flex items-center justify-between gap-3">
                     <div>
-                      <p className={`text-xs ${panelMuted}`}>Completed tasks</p>
+                      <p
+                        className={`text-xs ${
+                          dark ? "text-white/45" : "text-black/45"
+                        }`}
+                      >
+                        Completed tasks
+                      </p>
 
-                      <p className={`mt-1 text-2xl font-bold ${panelValue}`}>
+                      <p
+                        className={`mt-1 text-2xl font-bold ${
+                          dark ? "text-white" : "text-[#111311]"
+                        }`}
+                      >
                         {stats.completed}
                       </p>
                     </div>
@@ -691,7 +762,11 @@ function Dashboard({ dark, setDark }) {
 
                   {!isConnected && (
                     <p
-                      className={`mt-5 rounded-lg border px-3 py-2.5 text-[11px] leading-5 ${walletNotice}`}
+                      className={`mt-5 rounded-lg border px-3 py-2.5 text-[11px] leading-5 ${
+                        dark
+                          ? "border-white/10 bg-white/[0.035] text-white/50"
+                          : "border-black/[0.08] bg-black/[0.025] text-black/55"
+                      }`}
                     >
                       Connect your wallet to view your personal contributor
                       statistics.
@@ -868,7 +943,7 @@ function Dashboard({ dark, setDark }) {
                       <span className={`text-xs ${muted}`}>
                         Updated{" "}
                         {new Date(
-                          dataDeletionRequest.updatedAt,
+                          dataDeletionRequest.updatedAt
                         ).toLocaleDateString()}
                       </span>
                     </div>
@@ -889,7 +964,7 @@ function Dashboard({ dark, setDark }) {
                     dataRequestSubmitting ||
                     dataRequestLoading ||
                     ["pending", "reviewing"].includes(
-                      dataDeletionRequest?.status,
+                      dataDeletionRequest?.status
                     )
                   }
                   className={`mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -901,7 +976,7 @@ function Dashboard({ dark, setDark }) {
                   {dataRequestSubmitting
                     ? "Submitting..."
                     : ["pending", "reviewing"].includes(
-                          dataDeletionRequest?.status,
+                          dataDeletionRequest?.status
                         )
                       ? "Request under review"
                       : "Request data review"}
@@ -1110,9 +1185,7 @@ function Dashboard({ dark, setDark }) {
                   No matching bounties
                 </h3>
 
-                <p
-                  className={`relative mx-auto mt-3 max-w-md text-sm leading-6 ${muted}`}
-                >
+                <p className={`relative mx-auto mt-3 max-w-md text-sm leading-6 ${muted}`}>
                   There are no opportunities matching this filter right now. Try
                   another category or check back later.
                 </p>
@@ -1239,12 +1312,13 @@ function Dashboard({ dark, setDark }) {
 
       <Footer dark={dark} />
 
-      {/* Happy Bounty AI chat window */}
+      {/* HAPPY BOUNTY HELP CENTER */}
       {assistantOpen && (
         <section
           role="dialog"
-          aria-label="Happy Bounty AI assistant"
-          className={`hb-chat-window fixed bottom-24 right-4 z-[110] flex h-[min(620px,calc(100dvh-8rem))] w-[calc(100%-2rem)] max-w-[390px] flex-col overflow-hidden rounded-[22px] border shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:right-7 ${
+          aria-label="Happy Bounty Help Center"
+          aria-modal="false"
+          className={`hb-chat-window fixed bottom-[5.5rem] right-4 z-[110] flex w-[calc(100vw-2rem)] max-w-[390px] flex-col overflow-hidden rounded-[22px] border shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:right-7 ${
             dark
               ? "border-white/10 bg-[#101512] text-white"
               : "border-black/[0.08] bg-white text-[#111311]"
@@ -1254,16 +1328,17 @@ function Dashboard({ dark, setDark }) {
           <div className="flex shrink-0 items-center justify-between border-b border-current/[0.08] bg-[#00A87D]/[0.08] px-4 py-4">
             <div className="flex min-w-0 items-center gap-3">
               <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#00A87D] text-white shadow-lg shadow-[#00A87D]/20">
-                <FiZap className="text-lg" />
+                <FiMessageCircle className="text-lg" />
                 <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#101512] bg-[#00E0A5]" />
               </div>
 
               <div className="min-w-0">
                 <h3 className="truncate text-sm font-bold">
-                  Happy Bounty AI
+                  Happy Bounty Help Center
                 </h3>
+
                 <p className={`mt-0.5 text-[10px] ${muted}`}>
-                  Your personal platform assistant
+                  Platform FAQs and support
                 </p>
               </div>
             </div>
@@ -1273,7 +1348,7 @@ function Dashboard({ dark, setDark }) {
                 type="button"
                 onClick={resetAssistantChat}
                 disabled={sendingMessage}
-                aria-label="Reset conversation"
+                aria-label="Start a new conversation"
                 title="New conversation"
                 className={`rounded-lg p-2 transition hover:bg-[#00A87D]/10 hover:text-[#00A87D] disabled:opacity-40 ${muted}`}
               >
@@ -1283,7 +1358,7 @@ function Dashboard({ dark, setDark }) {
               <button
                 type="button"
                 onClick={() => setAssistantOpen(false)}
-                aria-label="Close assistant"
+                aria-label="Close Help Center"
                 className={`rounded-lg p-2 transition hover:bg-[#00A87D]/10 hover:text-[#00A87D] ${muted}`}
               >
                 <FiX className="text-lg" />
@@ -1291,15 +1366,16 @@ function Dashboard({ dark, setDark }) {
             </div>
           </div>
 
-          {/* Messages */}
+          {/* Scrollable messages and FAQ suggestions */}
           <div
             className={`hb-chat-messages min-h-0 flex-1 space-y-4 overflow-y-auto p-4 ${
               dark ? "bg-[#0C110E]" : "bg-[#F7F9F7]"
             }`}
+            aria-live="polite"
           >
             <div className="mx-auto flex max-w-[260px] items-center justify-center gap-2 rounded-full border border-[#00A87D]/15 bg-[#00A87D]/[0.06] px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.13em] text-[#008F6A] dark:text-[#00C995]">
               <FiShield />
-              Happy Bounty assistant
+              Happy Bounty support
             </div>
 
             {messages.map((message, index) => {
@@ -1324,9 +1400,7 @@ function Dashboard({ dark, setDark }) {
                     {!isUser && message.source !== "welcome" && (
                       <div className="mb-1.5">
                         <span className="text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
-                          {message.source === "free"
-                            ? "Quick answer"
-                            : "AI response"}
+                          {getMessageLabel(message.source)}
                         </span>
                       </div>
                     )}
@@ -1334,12 +1408,37 @@ function Dashboard({ dark, setDark }) {
                     <p className="whitespace-pre-wrap break-words">
                       {message.content}
                     </p>
+
+                    {/* Show contact options for questions not covered by FAQs */}
+                    {!isUser && message.source === "support" && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a
+                          href={`mailto:${SUPPORT_EMAIL}`}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#00A87D] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#008F6A]"
+                        >
+                          <FiMail className="h-3.5 w-3.5" />
+                          Email support
+                        </a>
+
+                        <Link
+                          to="/contact"
+                          onClick={() => setAssistantOpen(false)}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00A87D]/50 hover:text-[#00A87D] ${
+                            dark
+                              ? "border-white/10 text-white/75"
+                              : "border-black/10 text-black/65"
+                          }`}
+                        >
+                          Contact Us
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
               );
             })}
 
-            {/* Suggested questions */}
+            {/* Suggested FAQ questions */}
             {messages.length === 1 && !sendingMessage && (
               <div className="space-y-2 pt-1">
                 <p className={`text-[10px] font-semibold ${muted}`}>
@@ -1351,7 +1450,8 @@ function Dashboard({ dark, setDark }) {
                     key={question}
                     type="button"
                     onClick={() => sendAssistantMessage(question)}
-                    className={`block w-full rounded-xl border px-3 py-2.5 text-left text-xs transition hover:border-[#00A87D]/40 hover:bg-[#00A87D]/[0.07] ${
+                    disabled={sendingMessage}
+                    className={`block w-full rounded-xl border px-3 py-2.5 text-left text-xs transition hover:border-[#00A87D]/40 hover:bg-[#00A87D]/[0.07] disabled:opacity-40 ${
                       dark
                         ? "border-white/[0.08] bg-white/[0.025] text-white/75"
                         : "border-black/[0.07] bg-white text-black/65"
@@ -1375,8 +1475,9 @@ function Dashboard({ dark, setDark }) {
                   }`}
                 >
                   <span className="text-[11px] text-[#00A87D]">
-                    Thinking
+                    Checking help topics
                   </span>
+
                   <span className="hb-typing-dot" />
                   <span className="hb-typing-dot" />
                   <span className="hb-typing-dot" />
@@ -1390,19 +1491,44 @@ function Dashboard({ dark, setDark }) {
                 role="alert"
                 className="rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5 text-xs leading-5 text-red-500"
               >
-                {chatError}
+                <p>{chatError}</p>
 
-                <button
-                  type="button"
-                  onClick={retryAssistantMessage}
-                  disabled={
-                    sendingMessage ||
-                    messages[messages.length - 1]?.role !== "user"
-                  }
-                  className="ml-2 font-bold underline disabled:opacity-40"
-                >
-                  Try again
-                </button>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {messages[messages.length - 1]?.role === "user" && (
+                    <button
+                      type="button"
+                      onClick={retryAssistantMessage}
+                      disabled={sendingMessage}
+                      className="font-bold underline disabled:opacity-40"
+                    >
+                      Try again
+                    </button>
+                  )}
+
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}`}
+                    className="inline-flex items-center gap-1.5 font-bold text-[#00A87D] underline"
+                  >
+                    <FiMail />
+                    Email support
+                  </a>
+
+                  <Link
+                    to="/contact"
+                    onClick={() => setAssistantOpen(false)}
+                    className="font-bold text-[#00A87D] underline"
+                  >
+                    Contact Us
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => setChatError("")}
+                    className="font-bold underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             )}
 
@@ -1441,8 +1567,9 @@ function Dashboard({ dark, setDark }) {
                     sendAssistantMessage();
                   }
                 }}
-                placeholder="Ask Happy Bounty AI..."
-                aria-label="Your message"
+                placeholder="Ask Happy Bounty..."
+                aria-label="Type your support question"
+                maxLength={2000}
                 disabled={sendingMessage}
                 className={`max-h-24 min-h-[38px] flex-1 resize-none bg-transparent px-2 py-2 text-xs leading-5 outline-none placeholder:opacity-40 disabled:opacity-50 ${
                   dark ? "text-white" : "text-[#111311]"
@@ -1463,21 +1590,32 @@ function Dashboard({ dark, setDark }) {
               </button>
             </div>
 
-            <p className={`mt-2 text-center text-[9px] ${muted}`}>
-              AI can make mistakes. Verify important information.
-            </p>
+            <div className="mt-2 flex items-center justify-between px-1">
+              <span className={`text-[9px] ${muted}`}>
+                Happy Bounty Help Center
+              </span>
+
+              <span className={`text-[9px] ${muted}`}>
+                {chatInput.length}/2000
+              </span>
+            </div>
           </form>
         </section>
       )}
 
-      {/* Floating AI assistant button */}
+      {/* Floating Help Center button */}
       <button
         type="button"
-        onClick={() => setAssistantOpen((open) => !open)}
+        onClick={() => {
+          setAssistantOpen((open) => !open);
+          setChatError("");
+        }}
         aria-label={
-          assistantOpen ? "Close Happy Bounty AI" : "Open Happy Bounty AI"
+          assistantOpen
+            ? "Close Happy Bounty Help Center"
+            : "Open Happy Bounty Help Center"
         }
-        title="Chat with Happy Bounty AI"
+        title="Contact Happy Bounty support"
         className="fixed bottom-5 right-4 z-[110] flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-[#00A87D] text-white shadow-[0_8px_28px_rgba(0,168,125,0.3)] transition duration-300 hover:-translate-y-1 hover:bg-[#008F6A] sm:bottom-7 sm:right-7 sm:h-14 sm:w-14"
       >
         {assistantOpen ? (
@@ -1534,7 +1672,22 @@ function Dashboard({ dark, setDark }) {
           animation: dashboardFadeIn 500ms ease-out both;
         }
 
+        .hb-chat-window {
+          /*
+            The panel is anchored above the floating button.
+            Its height is capped to reserve room at the top of
+            the viewport for the dashboard navigation.
+          */
+          height: min(620px, calc(100dvh - 13rem));
+          max-height: min(620px, calc(100dvh - 13rem));
+          min-height: 0;
+          transform-origin: bottom right;
+          animation: dashboardFadeIn 180ms ease-out both;
+        }
+
         .hb-chat-messages {
+          min-height: 0;
+          overscroll-behavior: contain;
           scrollbar-width: thin;
           scrollbar-color: rgba(0, 168, 125, 0.35) transparent;
         }
@@ -1565,8 +1718,18 @@ function Dashboard({ dark, setDark }) {
           animation-delay: 0.3s;
         }
 
-        .hb-chat-window {
-          animation: dashboardFadeIn 180ms ease-out both;
+        @media (max-width: 767px) {
+          .hb-chat-window {
+            height: min(620px, calc(100dvh - 12rem));
+            max-height: min(620px, calc(100dvh - 12rem));
+          }
+        }
+
+        @media (max-height: 560px) {
+          .hb-chat-window {
+            height: calc(100dvh - 9rem);
+            max-height: calc(100dvh - 9rem);
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {
