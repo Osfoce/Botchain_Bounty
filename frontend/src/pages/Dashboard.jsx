@@ -37,13 +37,19 @@ const INITIAL_MESSAGE = {
   role: "assistant",
   content:
     "Hello! 👋 Welcome to Happy Bounty. I'm your AI assistant. I can help you discover bounties, understand rewards, navigate your dashboard, or learn how to participate. What would you like to know?",
+  source: "welcome",
 };
 
 const SUGGESTED_QUESTIONS = [
+  "What is Happy Bounty?",
   "How do I create a bounty?",
-  "How do I submit work?",
-  "How do rewards get approved?",
-  "What networks does Happy Bounty support?",
+  "How do I fund a bounty?",
+  "How can I complete a bounty?",
+  "How do I submit my work?",
+  "How do I receive my rewards?",
+  "Which networks does Happy Bounty support?",
+  "What are the platform fees?",
+  "Can AI agents complete bounties?",
 ];
 
 function Dashboard({ dark, setDark }) {
@@ -243,7 +249,7 @@ function Dashboard({ dark, setDark }) {
     }
   }, [assistantOpen]);
 
-  // Send message to Happy Bounty AI
+  // Send message to Happy Bounty hybrid AI assistant
   const sendAssistantMessage = async (messageOverride) => {
     const message = (messageOverride ?? chatInput).trim();
 
@@ -288,7 +294,10 @@ function Dashboard({ dark, setDark }) {
         response.data?.message ||
         response.data?.response;
 
-      if (!assistantReply) {
+      if (
+        !assistantReply ||
+        typeof assistantReply !== "string"
+      ) {
         throw new Error("The assistant returned an empty response.");
       }
 
@@ -297,6 +306,10 @@ function Dashboard({ dark, setDark }) {
         {
           role: "assistant",
           content: assistantReply,
+          source:
+            response.data?.source === "free"
+              ? "free"
+              : "openai",
         },
       ]);
     } catch (error) {
@@ -312,7 +325,22 @@ function Dashboard({ dark, setDark }) {
       setChatError(errorMessage);
     } finally {
       setSendingMessage(false);
-      window.setTimeout(() => chatInputRef.current?.focus(), 100);
+
+      window.setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
+  // Retry the most recent failed user question
+  const retryAssistantMessage = () => {
+    if (sendingMessage) return;
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role === "user") {
+      setChatError("");
+      sendAssistantMessage(lastMessage.content);
     }
   };
 
@@ -1293,6 +1321,16 @@ function Dashboard({ dark, setDark }) {
                           : "rounded-bl-md border border-black/[0.06] bg-white text-[#242924] shadow-sm"
                     }`}
                   >
+                    {!isUser && message.source !== "welcome" && (
+                      <div className="mb-1.5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
+                          {message.source === "free"
+                            ? "Quick answer"
+                            : "AI response"}
+                        </span>
+                      </div>
+                    )}
+
                     <p className="whitespace-pre-wrap break-words">
                       {message.content}
                     </p>
@@ -1353,10 +1391,14 @@ function Dashboard({ dark, setDark }) {
                 className="rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5 text-xs leading-5 text-red-500"
               >
                 {chatError}
+
                 <button
                   type="button"
-                  onClick={() => sendAssistantMessage()}
-                  disabled={sendingMessage || !chatInput.trim()}
+                  onClick={retryAssistantMessage}
+                  disabled={
+                    sendingMessage ||
+                    messages[messages.length - 1]?.role !== "user"
+                  }
                   className="ml-2 font-bold underline disabled:opacity-40"
                 >
                   Try again
