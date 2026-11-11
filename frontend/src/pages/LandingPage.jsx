@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNav } from "../hooks/useNav";
@@ -16,6 +17,7 @@ import {
   FiSend,
   FiLoader,
   FiRefreshCw,
+  FiMail,
 } from "react-icons/fi";
 
 import NavBar from "../components/Layout/NavBar";
@@ -32,10 +34,12 @@ import SupportedNetworks from "./SupportedNetworks";
 import BuiltForWeb3 from "./BuiltForWeb3";
 import Footer from "../components/Layout/Footer";
 
+const SUPPORT_EMAIL = "happybounty9@gmail.com";
+
 const INITIAL_MESSAGE = {
   role: "assistant",
   content:
-    "Hello! 👋 Welcome to Happy Bounty. I'm your AI assistant. I can help you explore bounties, understand rewards, create opportunities, or answer developer questions about AI agents. What would you like to know?",
+    "Hello! 👋 Welcome to Happy Bounty Help Center. I can help you understand how to create bounties, fund tasks, submit work, receive rewards, and use the platform. What would you like to know?",
 };
 
 const SUGGESTED_QUESTIONS = [
@@ -43,10 +47,10 @@ const SUGGESTED_QUESTIONS = [
   "How do I create a bounty?",
   "How do I fund a bounty?",
   "How can I complete a bounty?",
+  "How do I submit my work?",
   "How do I receive my rewards?",
   "Which networks does Happy Bounty support?",
   "What are the platform fees?",
-  "Can AI agents complete bounties?",
 ];
 
 function LandingPage({ dark, setDark }) {
@@ -61,7 +65,7 @@ function LandingPage({ dark, setDark }) {
 
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  // AI assistant state
+  // Help Center state
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [messages, setMessages] = useState([INITIAL_MESSAGE]);
   const [chatInput, setChatInput] = useState("");
@@ -75,7 +79,7 @@ function LandingPage({ dark, setDark }) {
 
   const API_URL = import.meta.env.VITE_API_URL;
 
-  // Keep the existing scroll-to-top behavior.
+  // Scroll-to-top visibility
   useEffect(() => {
     const handleScroll = () => {
       setShowScrollTop(window.scrollY > 420);
@@ -92,7 +96,7 @@ function LandingPage({ dark, setDark }) {
     };
   }, []);
 
-  // Reveal sections smoothly as they enter the viewport.
+  // Reveal sections as they enter the viewport
   useEffect(() => {
     const elements = document.querySelectorAll("[data-reveal]");
 
@@ -103,6 +107,7 @@ function LandingPage({ dark, setDark }) {
       elements.forEach((element) => {
         element.classList.add("reveal-visible");
       });
+
       return;
     }
 
@@ -126,7 +131,7 @@ function LandingPage({ dark, setDark }) {
     return () => observer.disconnect();
   }, [loading, featuredBounties.length]);
 
-  // Automatically scroll to the latest chat message.
+  // Automatically scroll to the latest chat message
   useEffect(() => {
     if (assistantOpen) {
       messagesEndRef.current?.scrollIntoView({
@@ -136,8 +141,19 @@ function LandingPage({ dark, setDark }) {
     }
   }, [messages, assistantOpen, sendingMessage]);
 
+  // Focus input when Help Center opens
+  useEffect(() => {
+    if (assistantOpen) {
+      const timeout = setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 250);
+
+      return () => clearTimeout(timeout);
+    }
+  }, [assistantOpen]);
+
   // FETCH FEATURED BOUNTIES AND STATS
-  // Existing API endpoints, parameters, and response fields are preserved.
+  // Existing API endpoints and response fields are preserved.
   useEffect(() => {
     const fetchFeaturedBounties = async () => {
       try {
@@ -190,16 +206,20 @@ function LandingPage({ dark, setDark }) {
       }
     };
 
-    fetchFeaturedBounties();
-    fetchStats();
-  }, []);
+    if (API_URL) {
+      fetchFeaturedBounties();
+      fetchStats();
+    } else {
+      setLoading(false);
+    }
+  }, [API_URL]);
 
   const navigateTo = (path) => (event) => {
     event.preventDefault();
     handleNavigate(path);
   };
 
-  // SEND MESSAGE TO HAPPY BOUNTY AI
+  // SEND MESSAGE TO FAQ SUPPORT BACKEND
   const sendMessage = async (messageText = chatInput) => {
     const trimmedMessage = messageText.trim();
 
@@ -207,7 +227,8 @@ function LandingPage({ dark, setDark }) {
 
     if (!API_URL) {
       setChatError(
-        "The assistant API address is not configured. Please try again later."
+        "The support service is currently unavailable. Please email us at " +
+          SUPPORT_EMAIL
       );
       return;
     }
@@ -244,12 +265,12 @@ function LandingPage({ dark, setDark }) {
           headers: {
             "Content-Type": "application/json",
           },
-          timeout: 60000,
+          timeout: 30000,
         }
       );
 
       if (!response.data?.reply) {
-        throw new Error("The assistant returned an empty response.");
+        throw new Error("The support assistant returned an empty response.");
       }
 
       setMessages((previous) => [
@@ -257,23 +278,29 @@ function LandingPage({ dark, setDark }) {
         {
           role: "assistant",
           content: response.data.reply,
-          source: response.data.source || "openai",
+          source: response.data.source || "support",
         },
       ]);
     } catch (error) {
-      console.error("Happy Bounty AI error:", error);
+      console.error("Happy Bounty Help Center error:", error);
 
-      const serverMessage = error.response?.data?.error;
+      const serverMessage =
+        error.response?.data?.reply ||
+        error.response?.data?.error;
 
       setChatError(
         serverMessage ||
           (error.code === "ECONNABORTED"
-            ? "The assistant is taking too long to respond. Please try again."
-            : "Unable to connect to Happy Bounty AI. Please try again.")
+            ? "The support service is taking too long to respond. Please try again."
+            : "Unable to connect to Happy Bounty support. Please try again or email us at " +
+              SUPPORT_EMAIL)
       );
     } finally {
       setSendingMessage(false);
-      setTimeout(() => chatInputRef.current?.focus(), 100);
+
+      setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
     }
   };
 
@@ -283,6 +310,12 @@ function LandingPage({ dark, setDark }) {
     setMessages([INITIAL_MESSAGE]);
     setChatInput("");
     setChatError("");
+  };
+
+  const getMessageLabel = (source) => {
+    if (source === "free") return "Quick answer";
+    if (source === "support") return "Support guidance";
+    return "Help Center";
   };
 
   const surfaceClass = dark
@@ -627,13 +660,15 @@ function LandingPage({ dark, setDark }) {
         <Footer />
       </footer>
 
-      {/* HAPPY BOUNTY AI CHAT */}
-      <div className="fixed bottom-5 right-4 z-[100] flex flex-col items-end gap-3 sm:bottom-7 sm:right-7">
+      {/* HAPPY BOUNTY HELP CENTER */}
+      <div className="fixed bottom-5 right-4 z-[110] flex flex-col items-end gap-3 sm:bottom-7 sm:right-7">
+
+        {/* CHAT WINDOW */}
         {assistantOpen && (
           <div
             className={`
               hb-chat-window flex w-[min(390px,calc(100vw-2rem))]
-              flex-col overflow-hidden rounded-[22px] border shadow-2xl
+              flex-col overflow-hidden rounded-[24px] border shadow-2xl
               ${
                 dark
                   ? "border-white/10 bg-[#0B100E] text-white"
@@ -641,37 +676,39 @@ function LandingPage({ dark, setDark }) {
               }
             `}
             role="dialog"
-            aria-label="Happy Bounty AI Assistant"
+            aria-label="Happy Bounty Help Center"
           >
             {/* CHAT HEADER */}
-            <div className="relative overflow-hidden border-b border-[#00D6A0]/15 bg-[#0B1712] px-4 py-4 text-white">
+            <div className="relative shrink-0 overflow-hidden border-b border-[#00D6A0]/15 bg-[#0B1712] px-4 py-4 text-white">
               <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-[#00D6A0]/10 blur-3xl" />
 
               <div className="relative flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl border border-[#00D6A0]/30 bg-[#00D6A0]/10 text-[#00D6A0]">
-                    <FiZap className="h-5 w-5" />
+                  <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#00D6A0]/30 bg-[#00D6A0]/10 text-[#00D6A0]">
+                    <FiMessageCircle className="h-5 w-5" />
+
                     <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0B1712] bg-[#00D6A0]" />
                   </div>
 
                   <div>
                     <h3 className="text-sm font-bold tracking-tight">
-                      Happy Bounty AI
+                      Happy Bounty Help Center
                     </h3>
+
                     <p className="mt-1 flex items-center gap-1.5 text-[10px] text-white/55">
                       <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
-                      Your Web3 assistant
+                      Your personal platform assistant
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     onClick={resetChat}
                     disabled={sendingMessage}
-                    title="Start a new conversation"
-                    aria-label="Reset conversation"
+                    title="New conversation"
+                    aria-label="Start a new conversation"
                     className="rounded-lg p-2 text-white/55 transition hover:bg-white/10 hover:text-[#00D6A0] disabled:opacity-30"
                   >
                     <FiRefreshCw className="h-4 w-4" />
@@ -680,7 +717,7 @@ function LandingPage({ dark, setDark }) {
                   <button
                     type="button"
                     onClick={() => setAssistantOpen(false)}
-                    aria-label="Close AI assistant"
+                    aria-label="Close Help Center"
                     className="rounded-lg p-2 text-white/55 transition hover:bg-white/10 hover:text-white"
                   >
                     <FiX className="h-5 w-5" />
@@ -691,7 +728,7 @@ function LandingPage({ dark, setDark }) {
 
             {/* CHAT MESSAGES */}
             <div
-              className="hb-chat-messages flex min-h-[260px] max-h-[390px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+              className="hb-chat-messages flex min-h-[180px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
               aria-live="polite"
             >
               <div className="mb-1 text-center">
@@ -726,17 +763,13 @@ function LandingPage({ dark, setDark }) {
                       }`}
                     >
                       {!isUser && (
-                        <div className="mb-1.5 flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
-                            <FiZap className="h-3 w-3" />
-                            Happy Bounty AI
-                          </div>
+                        <div className="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
+                          <FiMessageCircle className="h-3 w-3" />
+                          Happy Bounty Support
 
                           {message.source && (
-                            <span className="rounded-full bg-[#00D6A0]/10 px-2 py-1 text-[8px] font-semibold text-[#00A87D]">
-                              {message.source === "free"
-                                ? "Quick answer"
-                                : "AI response"}
+                            <span className="ml-1 rounded-full bg-[#00D6A0]/10 px-2 py-1 text-[8px] font-semibold text-[#00A87D]">
+                              {getMessageLabel(message.source)}
                             </span>
                           )}
                         </div>
@@ -745,6 +778,31 @@ function LandingPage({ dark, setDark }) {
                       <p className="whitespace-pre-wrap break-words">
                         {message.content}
                       </p>
+
+                      {/* SUPPORT CONTACT ACTIONS */}
+                      {!isUser && message.source === "support" && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <a
+                            href={`mailto:${SUPPORT_EMAIL}`}
+                            className="inline-flex items-center gap-2 rounded-lg bg-[#00D6A0] px-3 py-2 text-[10px] font-bold text-[#06231B] transition hover:bg-[#00B98A]"
+                          >
+                            <FiMail className="h-3.5 w-3.5" />
+                            Email support
+                          </a>
+
+                          <Link
+                            to="/contact"
+                            onClick={() => setAssistantOpen(false)}
+                            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00D6A0]/50 hover:text-[#00A87D] ${
+                              dark
+                                ? "border-white/10 text-white/70"
+                                : "border-black/10 text-gray-600"
+                            }`}
+                          >
+                            Contact Us
+                          </Link>
+                        </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -765,7 +823,8 @@ function LandingPage({ dark, setDark }) {
                       <span className="hb-typing-dot h-1.5 w-1.5 rounded-full bg-[#00A87D]" />
                       <span className="hb-typing-dot h-1.5 w-1.5 rounded-full bg-[#00A87D]" />
                     </span>
-                    <span className="text-[10px]">Thinking...</span>
+
+                    <span className="text-[10px]">Checking help topics...</span>
                   </div>
                 </div>
               )}
@@ -775,13 +834,13 @@ function LandingPage({ dark, setDark }) {
 
             {/* SUGGESTED QUESTIONS */}
             {messages.length === 1 && !sendingMessage && (
-              <div className="px-4 pb-3">
+              <div className="shrink-0 px-4 pb-3">
                 <p
                   className={`mb-2 text-[10px] font-semibold ${
                     dark ? "text-white/40" : "text-gray-400"
                   }`}
                 >
-                  QUICK QUESTIONS
+                  YOU CAN ASK ME
                 </p>
 
                 <div className="flex flex-wrap gap-2">
@@ -790,7 +849,8 @@ function LandingPage({ dark, setDark }) {
                       key={question}
                       type="button"
                       onClick={() => sendMessage(question)}
-                      className={`rounded-xl border px-3 py-2 text-left text-[10px] font-medium transition-all hover:border-[#00D6A0]/50 hover:text-[#00A87D] ${
+                      disabled={sendingMessage}
+                      className={`rounded-xl border px-3 py-2 text-left text-[10px] font-medium transition-all hover:border-[#00D6A0]/50 hover:text-[#00A87D] disabled:opacity-40 ${
                         dark
                           ? "border-white/10 bg-white/[0.025] text-white/65"
                           : "border-black/[0.08] bg-white text-gray-600"
@@ -805,17 +865,27 @@ function LandingPage({ dark, setDark }) {
 
             {/* ERROR MESSAGE */}
             {chatError && (
-              <div className="mx-4 mb-2 rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2">
+              <div className="mx-4 mb-2 shrink-0 rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2">
                 <p className="text-[10px] leading-5 text-red-500">
                   {chatError}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setChatError("")}
-                  className="mt-1 text-[10px] font-bold text-red-500 underline"
-                >
-                  Dismiss
-                </button>
+
+                <div className="mt-2 flex items-center gap-3">
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}`}
+                    className="text-[10px] font-bold text-[#00A87D] underline"
+                  >
+                    Email support
+                  </a>
+
+                  <button
+                    type="button"
+                    onClick={() => setChatError("")}
+                    className="text-[10px] font-bold text-red-500 underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
               </div>
             )}
 
@@ -825,7 +895,7 @@ function LandingPage({ dark, setDark }) {
                 event.preventDefault();
                 sendMessage();
               }}
-              className={`border-t p-3 ${
+              className={`shrink-0 border-t p-3 ${
                 dark ? "border-white/[0.07]" : "border-black/[0.07]"
               }`}
             >
@@ -841,10 +911,10 @@ function LandingPage({ dark, setDark }) {
                   type="text"
                   value={chatInput}
                   onChange={(event) => setChatInput(event.target.value)}
-                  placeholder="Ask me anything..."
+                  placeholder="Ask Happy Bounty..."
                   maxLength={2000}
                   disabled={sendingMessage}
-                  aria-label="Type your message"
+                  aria-label="Type your support question"
                   className={`min-w-0 flex-1 bg-transparent px-2 py-2 text-xs outline-none placeholder:text-gray-500 disabled:opacity-50 ${
                     dark ? "text-white" : "text-gray-900"
                   }`}
@@ -870,8 +940,9 @@ function LandingPage({ dark, setDark }) {
                     dark ? "text-white/30" : "text-gray-400"
                   }`}
                 >
-                  Powered by Happy Bounty AI
+                  Happy Bounty Help Center
                 </span>
+
                 <span
                   className={`text-[9px] ${
                     dark ? "text-white/25" : "text-gray-400"
@@ -892,9 +963,11 @@ function LandingPage({ dark, setDark }) {
             setChatError("");
           }}
           aria-label={
-            assistantOpen ? "Close Happy Bounty AI" : "Open Happy Bounty AI"
+            assistantOpen
+              ? "Close Happy Bounty Help Center"
+              : "Open Happy Bounty Help Center"
           }
-          title="Chat with Happy Bounty AI"
+          title="Contact Happy Bounty support"
           className="help-fab flex h-14 w-14 items-center justify-center rounded-full border border-[#00D6A0]/50 bg-[#00D6A0] text-[#06231B] shadow-[0_10px_35px_rgba(0,214,160,0.25)] transition-all duration-300 hover:-translate-y-1 hover:scale-105"
         >
           {assistantOpen ? (
@@ -1037,10 +1110,16 @@ function LandingPage({ dark, setDark }) {
           animation: fabPulse 4s ease-in-out infinite;
         }
 
+        /*
+          Keep the chat above the floating button while reserving
+          enough space at the top so it does not cover the navigation.
+        */
         .hb-chat-window {
           transform-origin: bottom right;
           animation: panelEnter 240ms cubic-bezier(.22, 1, .36, 1) both;
-          max-height: min(620px, calc(100dvh - 115px));
+          height: min(620px, calc(100dvh - 15rem));
+          max-height: min(620px, calc(100dvh - 15rem));
+          min-height: 300px;
         }
 
         .hb-chat-messages {
@@ -1186,7 +1265,17 @@ function LandingPage({ dark, setDark }) {
           }
 
           .hb-chat-window {
-            max-height: calc(100dvh - 105px);
+            height: min(620px, calc(100dvh - 13rem));
+            max-height: min(620px, calc(100dvh - 13rem));
+            min-height: 280px;
+          }
+        }
+
+        @media (max-height: 560px) {
+          .hb-chat-window {
+            height: calc(100dvh - 7rem);
+            max-height: calc(100dvh - 7rem);
+            min-height: 220px;
           }
         }
 
