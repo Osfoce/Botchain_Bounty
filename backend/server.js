@@ -1,15 +1,21 @@
+
 // server.js
 require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
 const mongoose = require("mongoose");
+
 const { connectDB } = require("./config/db");
 const { allowedOrigins } = require("./config/auth");
+
 const ApiRateLimit = require("./modules/apiRateLimit.module");
+
 const {
   createGeneralApiLimiter,
 } = require("./middleware/rateLimit");
+
 const {
   createRequestParsers,
   errorHandler,
@@ -17,8 +23,10 @@ const {
   requestId,
   setPermissionsPolicy,
 } = require("./middleware/requestSecurity");
+
 const startStatusUpdateJob = require("./jobs/updateStatusJob");
 const { startClaimReconcileJob } = require("./jobs/claimReconcileJob");
+
 const DistributionSync = require("./modules/distributionSync.module");
 const ClaimSync = require("./modules/claimSync.module");
 const Reward = require("./modules/reward.module");
@@ -27,7 +35,12 @@ const AuthNonce = require("./modules/authNonce.module");
 const AuthSession = require("./modules/authSession.module");
 const UserDataRequest = require("./modules/userDataRequest.module");
 const SecurityAudit = require("./modules/securityAudit.module");
-const { logRequestError, logSecurityEvent } = require("./utils/requestLogger");
+
+const {
+  logRequestError,
+  logSecurityEvent,
+} = require("./utils/requestLogger");
+
 const {
   startRewardDistributionReconcileJob,
 } = require("./jobs/rewardDistributionReconcileJob");
@@ -42,27 +55,40 @@ const comments = require("./routes/comment.route");
 const analyticsRoutes = require("./routes/analytics.route");
 const authRoutes = require("./routes/auth.route");
 
+// NEW: Happy Bounty AI Assistant route
+const assistantRoutes = require("./routes/assistant.route");
+
 const app = express();
+
 // This backend is an API consumed by Axios clients that do not keep a local
 // response cache. Avoid bodyless conditional 304 responses to JSON requests.
 app.set("etag", false);
+
 const port = process.env.PORT || 5000;
+
 const isDatabaseReady = (connection = mongoose.connection) =>
   connection.readyState === 1;
 
 const trustedProxyHops = process.env.TRUST_PROXY_HOPS;
-if (trustedProxyHops !== undefined && !/^(?:0|[1-9]\d*)$/.test(trustedProxyHops)) {
+
+if (
+  trustedProxyHops !== undefined &&
+  !/^(?:0|[1-9]\d*)$/.test(trustedProxyHops)
+) {
   throw new Error("TRUST_PROXY_HOPS must be a non-negative integer");
 }
+
 if (Number(trustedProxyHops) > 10) {
   throw new Error("TRUST_PROXY_HOPS cannot exceed 10");
 }
+
 app.set(
   "trust proxy",
-  trustedProxyHops === undefined ? false : Number(trustedProxyHops),
+  trustedProxyHops === undefined ? false : Number(trustedProxyHops)
 );
 
 app.use(requestId);
+
 app.use(
   helmet({
     frameguard: { action: "deny" },
@@ -77,37 +103,55 @@ app.use(
     },
     hsts:
       process.env.NODE_ENV === "production"
-        ? { maxAge: 31_536_000, includeSubDomains: true }
+        ? {
+            maxAge: 31_536_000,
+            includeSubDomains: true,
+          }
         : false,
-  }),
+  })
 );
+
 app.use(setPermissionsPolicy);
+
 app.use(
   cors({
     origin(origin, callback) {
       if (!origin || allowedOrigins.has(origin)) {
         return callback(null, true);
       }
+
       const error = new Error("CORS_ORIGIN_DENIED");
       return callback(error);
     },
+
     allowedHeaders: ["Content-Type", "Authorization"],
     methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     maxAge: 600,
-  }),
+  })
 );
+
 app.use("/api", createGeneralApiLimiter());
+
 app.use(rejectUnsupportedContentType);
 app.use(createRequestParsers());
 
+// Health checks
 app.get("/healthz", (req, res) =>
-  res.status(200).json({ status: "ok", requestId: req.requestId }),
+  res.status(200).json({
+    status: "ok",
+    requestId: req.requestId,
+  })
 );
+
 app.get("/readyz", (req, res) => {
   const ready = isDatabaseReady();
+
   return res
     .status(ready ? 200 : 503)
-    .json({ status: ready ? "ready" : "not_ready", requestId: req.requestId });
+    .json({
+      status: ready ? "ready" : "not_ready",
+      requestId: req.requestId,
+    });
 });
 
 // Routes
@@ -120,17 +164,23 @@ app.use("/api", bountyRoute);
 app.use("/api", analyticsRoutes);
 app.use("/api", authRoutes);
 
+// NEW: Happy Bounty AI Assistant
+app.use("/api", assistantRoutes);
+
 // Test route
 app.get("/", (req, res) => {
-  //http://localhost:5000/api/bounty/bounties
+  // http://localhost:5000/api/bounty/bounties
   // http://localhost:5000/api/bounty/id
   // http://localhost:5000/api/bounty/create
   // http://localhost:5000/api/bounty/delete/id
   // http://localhost:5000/api/bounty/update/id
 
-  res.json({ message: "Happy Bounty API working" });
+  res.json({
+    message: "Happy Bounty API working",
+  });
 });
 
+// 404 handler
 app.use((req, res, next) => {
   res.status(404).json({
     code: "NOT_FOUND",
@@ -138,6 +188,7 @@ app.use((req, res, next) => {
     requestId: req.requestId,
   });
 });
+
 app.use(errorHandler);
 
 // Connect to DB and start server
@@ -156,16 +207,18 @@ const startServer = async () => {
       ApiRateLimit.init(),
       SecurityAudit.init(),
     ]);
+
     logSecurityEvent({
       event: "database_indexes_ready",
       severity: "info",
       outcome: "success",
     });
 
-    // Start the cron job only after DB is ready
+    // Start background jobs only after DB is ready
     startStatusUpdateJob();
     startRewardDistributionReconcileJob();
     startClaimReconcileJob();
+
     logSecurityEvent({
       event: "background_jobs_started",
       severity: "info",
@@ -189,4 +242,8 @@ if (require.main === module) {
   startServer();
 }
 
-module.exports = { app, isDatabaseReady, startServer };
+module.exports = {
+  app,
+  isDatabaseReady,
+  startServer,
+};
