@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNav } from "../hooks/useNav";
@@ -40,9 +39,14 @@ const INITIAL_MESSAGE = {
 };
 
 const SUGGESTED_QUESTIONS = [
+  "What is Happy Bounty?",
   "How do I create a bounty?",
-  "How do rewards work?",
+  "How do I fund a bounty?",
   "How can I complete a bounty?",
+  "How do I receive my rewards?",
+  "Which networks does Happy Bounty support?",
+  "What are the platform fees?",
+  "Can AI agents complete bounties?",
 ];
 
 function LandingPage({ dark, setDark }) {
@@ -253,6 +257,7 @@ function LandingPage({ dark, setDark }) {
         {
           role: "assistant",
           content: response.data.reply,
+          source: response.data.source || "openai",
         },
       ]);
     } catch (error) {
@@ -721,9 +726,19 @@ function LandingPage({ dark, setDark }) {
                       }`}
                     >
                       {!isUser && (
-                        <div className="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
-                          <FiZap className="h-3 w-3" />
-                          Happy Bounty AI
+                        <div className="mb-1.5 flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
+                            <FiZap className="h-3 w-3" />
+                            Happy Bounty AI
+                          </div>
+
+                          {message.source && (
+                            <span className="rounded-full bg-[#00D6A0]/10 px-2 py-1 text-[8px] font-semibold text-[#00A87D]">
+                              {message.source === "free"
+                                ? "Quick answer"
+                                : "AI response"}
+                            </span>
+                          )}
                         </div>
                       )}
 
