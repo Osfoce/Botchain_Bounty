@@ -325,6 +325,8 @@ test("self-profile history is paginated and returns explicit DTOs", async (t) =>
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.user.walletAddress, participant);
+  assert.equal(res.body.user.totalEarningsUsd, null);
+  assert.equal(res.body.user.earningsUsdStatus, "incomplete");
   assert.equal("claimedRewards" in res.body.user, false);
   assert.equal("__v" in res.body.user, false);
   assert.equal("__v" in res.body.createdBounties[0], false);
@@ -376,6 +378,8 @@ test("dashboard history returns aggregates and caps enrollment identifiers", asy
   assert.equal(res.body.bounties.total, 3);
   assert.equal(res.body.submissions.pending, 4);
   assert.equal(res.body.submissions.total, 6);
+  assert.equal(res.body.user.totalEarningsUsd, null);
+  assert.equal(res.body.user.earningsUsdStatus, "incomplete");
   assert.equal(res.body.enrolledBountyIds.length, 100);
   assert.deepEqual(res.body.enrollmentPagination, {
     limit: 100,

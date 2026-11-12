@@ -575,6 +575,22 @@ export default function Analytics({ dark = true, setDark }) {
       Number(submissions.rejected || 0);
 
   const successRate = Number(overview.successRate) || 0;
+  const claimedUsdStatus = overview.rewardsClaimedUsdStatus || "unavailable";
+  const claimedUsdValue =
+    claimedUsdStatus === "complete" &&
+    overview.totalRewardsClaimedUsd != null
+      ? `$${amount(overview.totalRewardsClaimedUsd)}`
+      : "—";
+  const claimedUsdDescription =
+    claimedUsdStatus === "complete"
+      ? "Estimated USD value at current prices"
+      : claimedUsdStatus === "incomplete"
+        ? "USD value incomplete for some rewards"
+        : "Current USD pricing is unavailable";
+  const claimedUsdFooter =
+    claimedUsdStatus === "complete"
+      ? "Estimated USD value"
+      : "USD value unavailable";
 
   const metrics = platform
     ? [
@@ -657,14 +673,10 @@ export default function Analytics({ dark = true, setDark }) {
           },
           {
             label: "Rewards claimed",
-            value: amount(
-              overview.totalRewardsClaimed ??
-                overview.rewardsClaimed ??
-                overview.totalClaimedAmount
-            ),
-            description: "Claimed rewards reported by analytics",
+            value: claimedUsdValue,
+            description: claimedUsdDescription,
             icon: FiCheckCircle,
-            footer: "Claim activity",
+            footer: claimedUsdFooter,
           },
           {
             label: "Success rate",
@@ -706,15 +718,11 @@ export default function Analytics({ dark = true, setDark }) {
           },
           {
             label: "Rewards claimed",
-            value: amount(
-              overview.claimedAmount ??
-                overview.totalClaimedAmount ??
-                rewards.claimed
-            ),
-            description: "Claimed reward amount reported",
+            value: claimedUsdValue,
+            description: claimedUsdDescription,
             icon: FiDollarSign,
             featured: true,
-            footer: "Reward overview",
+            footer: claimedUsdFooter,
           },
           {
             label: "Success rate",

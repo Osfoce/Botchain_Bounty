@@ -6,7 +6,8 @@ const {
   sumBountyBudgets,
   sumRewardAmounts,
 } = require("../services/financialAmounts.service");
-const { logRequestError } = require("../utils/requestLogger");
+const { getUsdEarnings } = require("../services/usdEarnings.service");
+const { getSafeErrorCode, logRequestError } = require("../utils/requestLogger");
 
 const WALLET_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const MONTHS_TO_SHOW = 6;
@@ -129,8 +130,9 @@ const makeRecentActivity = (submissions, rewards) => [
   .sort((left, right) => new Date(right.date) - new Date(left.date))
   .slice(0, RECENT_ACTIVITY_LIMIT);
 
-const makePersonalResponse = ({
+const makePersonalResponse = async ({
   role,
+  req,
   bounties,
   submissions,
   rewards,
@@ -145,6 +147,25 @@ const makePersonalResponse = ({
     ["assigned", "claimed"].includes(reward.status),
   );
   const claimedAmount = sumRewardAmounts(claimedRewards);
+  let usdEarnings;
+  try {
+    usdEarnings = await getUsdEarnings({
+      rewards: claimedRewards.map((reward) => ({
+        amountWei: reward.amount,
+        chainId: reward.chainId,
+        token: reward.token,
+        tokenDecimals: reward.tokenDecimals,
+      })),
+    });
+  } catch (error) {
+    logRequestError(req, "analytics_usd_rewards_unavailable", error, "warn");
+    usdEarnings = {
+      status: "unavailable",
+      totalEarningsUsd: null,
+      breakdown: [],
+      errorCode: getSafeErrorCode(error, "USD_VALUATION_UNAVAILABLE"),
+    };
+  }
   const bountyStatuses = bounties.reduce((counts, bounty) => {
     const status = getBountyStatus(bounty, now);
     counts[status] = (counts[status] || 0) + 1;
@@ -162,6 +183,13 @@ const makePersonalResponse = ({
       totalRewardBudget,
       totalRewardsClaimed: claimedAmount,
       claimedAmount,
+      totalRewardsClaimedUsd: usdEarnings.totalEarningsUsd,
+      claimedAmountUsd: usdEarnings.totalEarningsUsd,
+      rewardsClaimedUsdBreakdown: usdEarnings.breakdown,
+      rewardsClaimedUsdStatus: usdEarnings.status,
+      ...(usdEarnings.errorCode
+        ? { rewardsClaimedUsdErrorCode: usdEarnings.errorCode }
+        : {}),
       successRate:
         reviewedSubmissions > 0
           ? (submissionCounts.accepted / reviewedSubmissions) * 100
@@ -362,7 +390,7 @@ const makePlatformResponse = async (now) => {
   };
 };
 
-const getContributorAnalytics = async (wallet, now) => {
+const getContributorAnalytics = async (wallet, now, req) => {
   const [submissions, rewards] = await Promise.all([
     Submission.find({ user: wallet })
       .sort({ submittedAt: -1 })
@@ -370,7 +398,7 @@ const getContributorAnalytics = async (wallet, now) => {
       .lean(),
     Reward.find({ winnerAddress: wallet })
       .sort({ assignedAt: -1 })
-      .select("bountyId bountyTitle assignedAt claimedAt status amount")
+      .select("bountyId bountyTitle assignedAt claimedAt status amount chainId token tokenDecimals")
       .lean(),
   ]);
   const bountyIds = [
@@ -386,6 +414,7 @@ const getContributorAnalytics = async (wallet, now) => {
     : [];
   return makePersonalResponse({
     role: "contributor",
+    req,
     bounties,
     submissions,
     rewards,
@@ -393,7 +422,7 @@ const getContributorAnalytics = async (wallet, now) => {
   });
 };
 
-const getCreatorAnalytics = async (wallet, now) => {
+const getCreatorAnalytics = async (wallet, now, req) => {
   const bounties = await Bounty.find({
     creator: { $regex: `^${wallet}$`, $options: "i" },
   })
@@ -408,13 +437,14 @@ const getCreatorAnalytics = async (wallet, now) => {
           .lean(),
         Reward.find({ bountyId: { $in: bountyIds } })
           .sort({ assignedAt: -1 })
-          .select("bountyId bountyTitle assignedAt claimedAt status amount")
+          .select("bountyId bountyTitle assignedAt claimedAt status amount chainId token tokenDecimals")
           .lean(),
       ])
     : [[], []];
 
   return makePersonalResponse({
     role: "creator",
+    req,
     bounties,
     submissions,
     rewards,
@@ -449,8 +479,8 @@ const getWalletAnalytics = async (req, res) => {
     const now = new Date();
     const result =
       role === "creator"
-        ? await getCreatorAnalytics(normalizedWallet, now)
-        : await getContributorAnalytics(normalizedWallet, now);
+        ? await getCreatorAnalytics(normalizedWallet, now, req)
+        : await getContributorAnalytics(normalizedWallet, now, req);
     return res.status(200).json(result);
   } catch (error) {
     logRequestError(req, "wallet_analytics_failed", error);

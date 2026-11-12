@@ -42,7 +42,35 @@ CoinPaprika quotes are cached for 60 seconds, and provider quotes older than
 stale-cache fallback. Arc USDC returns an explicit $1 peg-assumption quote.
 Testnets and unknown assets are not priced.
 
-## Milestone 3 — Aggregate and display USD values
+- **Backend aggregation**: Add a new service `usdEarnings.service.js` that pulls all claimed rewards for a user, resolves each reward's token symbol/decimals from the `reward` collection, fetches the latest price via the existing price service, multiplies `amount / 10**decimals` by the USD price, and accumulates the sum. Return an object:
+  ```json
+  {
+    "totalEarningsUsd": "123.45",
+    "breakdown": [
+      {"token":"USDC","amount":"100","usd":"100"},
+      {"token":"BOT","amount":"200","usd":"23.45"}
+    ],
+    "valuationStatus": "complete"
+  }
+  ```
+- **API surface**: Extend `GET /api/profile` (or the dashboard endpoint) to include the new `usdEarnings` payload alongside the existing `totalEarnings`. Ensure the response schema is versioned and backward‑compatible.
+- **Frontend consumption**: In `frontend/src/pages/Dashboard.jsx` (and the Analytics page), fetch the new field and render it in a dedicated “USD Earnings (est.)” card. Show the per‑asset breakdown in a tooltip‑style pop‑over for transparency.
+- **Caching & rate‑limiting**: Re‑use the price‑service cache (60 s TTL). Guard against repeated dashboard refreshes by memoising the aggregated USD total per request.
+- **Error handling**: If any price lookup fails or a token lacks a price, mark the whole `valuationStatus` as `incomplete` and display a warning badge. The `totalEarningsUsd` should be omitted or set to `null` in that case.
+- **Testing**: Write unit tests for the aggregation service covering:
+  1. Single‑token rewards (USDC, BOT).
+  2. Mixed‑token rewards.
+  3. Missing price data → `incomplete` status.
+  4. Cache hit vs. miss.
+  5. Large reward lists (performance). 
+- **Documentation**: Update the API spec (`openapi.yaml`) and the UI design doc to describe the new USD earnings card.
+- **Future work**: Once Milestone 4 backfills legacy records, the aggregation will automatically include them, and the `valuationStatus` can transition to `complete` for all users.
+
+---
+
+*The above items complete Milestone 3 and set the stage for Milestone 4.*
+
+**Status: In progress**
 
 - Calculate each claimed reward's current USD value from its exact amount,
   stored decimals, and mapped asset price; sum only converted USD amounts.
@@ -52,6 +80,11 @@ Testnets and unknown assets are not priced.
   label it as an estimated value at current prices.
 - Keep all API consumers consistent; do not silently relabel raw token totals
   as dollars.
+
+Legacy `totalEarnings` values are preserved as raw legacy data but are not
+included in USD totals without a trustworthy asset attribution. Affected
+accounts receive a null USD total and an `incomplete` valuation status until
+Milestone 4 reconciles those records.
 
 ## Milestone 4 — Reconcile legacy earnings and complete verification
 
