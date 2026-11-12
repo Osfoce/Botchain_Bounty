@@ -43,6 +43,9 @@ const INITIAL_MESSAGE = {
   source: "welcome",
 };
 
+const THANK_YOU_REPLY =
+  "You're very welcome! 😊 We're always happy to help. If you have any more questions, feel free to reach us through our Contact Us page or email us at happybounty9@gmail.com.";
+
 const SUGGESTED_QUESTIONS = [
   "What is Happy Bounty?",
   "How do I create a bounty?",
@@ -54,6 +57,39 @@ const SUGGESTED_QUESTIONS = [
   "What are the platform fees?",
   "Can AI agents complete bounties?",
 ];
+
+// Recognize common appreciation messages without making an API request.
+const isThankYouMessage = (message) => {
+  const normalized = message
+    .toLowerCase()
+    .trim()
+    .replace(/[.,!?;:]+/g, "")
+    .replace(/\s+/g, " ");
+
+  const patterns = [
+    /^thanks$/,
+    /^thank you$/,
+    /^thank u$/,
+    /^thanks a lot$/,
+    /^thank you so much$/,
+    /^thanks so much$/,
+    /^many thanks$/,
+    /^much appreciated$/,
+    /^i appreciate it$/,
+    /^really appreciate it$/,
+    /^appreciate it$/,
+    /^thx$/,
+    /^ty$/,
+    /^cheers$/,
+    /^thanks again$/,
+    /^thank you again$/,
+    /^i am grateful$/,
+    /^im grateful$/,
+    /^grateful$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
 
 function Dashboard({ dark, setDark }) {
   const { address, isConnected } = useAccount();
@@ -299,9 +335,6 @@ function Dashboard({ dark, setDark }) {
         throw new Error("The support service returned an empty response.");
       }
 
-      // Only FAQ answers are labelled as quick answers.
-      // Unmatched questions are treated as support requests.
-      // Any legacy "openai" source is also treated as support.
       const source =
         response.data?.source === "free" ? "free" : "support";
 
@@ -354,6 +387,31 @@ function Dashboard({ dark, setDark }) {
     setChatInput("");
     setChatError("");
 
+    // Friendly appreciation replies are handled locally.
+    // No backend or AI request is needed for "Thanks" messages.
+    if (isThankYouMessage(message)) {
+      setSendingMessage(true);
+
+      window.setTimeout(() => {
+        setMessages((previous) => [
+          ...previous,
+          {
+            role: "assistant",
+            content: THANK_YOU_REPLY,
+            source: "thanks",
+          },
+        ]);
+
+        setSendingMessage(false);
+
+        window.setTimeout(() => {
+          chatInputRef.current?.focus();
+        }, 100);
+      }, 450);
+
+      return;
+    }
+
     await requestAssistantReply(updatedMessages);
   };
 
@@ -381,6 +439,7 @@ function Dashboard({ dark, setDark }) {
   const getMessageLabel = (source) => {
     if (source === "free") return "Quick answer";
     if (source === "support") return "Contact support";
+    if (source === "thanks") return "Happy to help";
     return "Help Center";
   };
 
@@ -1409,6 +1468,32 @@ function Dashboard({ dark, setDark }) {
                       {message.content}
                     </p>
 
+                    {/* Contact links in friendly thank-you replies */}
+                    {!isUser && message.source === "thanks" && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link
+                          to="/contact"
+                          onClick={() => setAssistantOpen(false)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#00A87D] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#008F6A]"
+                        >
+                          Contact Us
+                          <FiArrowRight className="h-3 w-3" />
+                        </Link>
+
+                        <a
+                          href={`mailto:${SUPPORT_EMAIL}`}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00A87D]/50 hover:text-[#00A87D] ${
+                            dark
+                              ? "border-white/10 text-white/75"
+                              : "border-black/10 text-black/65"
+                          }`}
+                        >
+                          <FiMail className="h-3.5 w-3.5" />
+                          Email us
+                        </a>
+                      </div>
+                    )}
+
                     {/* Show contact options for questions not covered by FAQs */}
                     {!isUser && message.source === "support" && (
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -1475,7 +1560,7 @@ function Dashboard({ dark, setDark }) {
                   }`}
                 >
                   <span className="text-[11px] text-[#00A87D]">
-                    Checking help topics
+                    Preparing a reply
                   </span>
 
                   <span className="hb-typing-dot" />
@@ -1673,11 +1758,6 @@ function Dashboard({ dark, setDark }) {
         }
 
         .hb-chat-window {
-          /*
-            The panel is anchored above the floating button.
-            Its height is capped to reserve room at the top of
-            the viewport for the dashboard navigation.
-          */
           height: min(620px, calc(100dvh - 13rem));
           max-height: min(620px, calc(100dvh - 13rem));
           min-height: 0;
