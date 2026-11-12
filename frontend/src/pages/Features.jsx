@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+
+import { useEffect, useState } from "react";
 import {
   FiArrowUpRight,
   FiCheckCircle,
@@ -68,69 +69,58 @@ const features = [
 ];
 
 function Features() {
-  const sectionRef = useRef(null);
-  const [isVisible, setIsVisible] = useState(false);
   const { handleNavigate } = useNav();
 
-  const [dark, setDark] = useState(() =>
-    typeof document !== "undefined"
-      ? document.documentElement.classList.contains("dark")
-      : true
-  );
+  // Detect the current application theme.
+  const [dark, setDark] = useState(() => {
+    if (typeof document === "undefined") return true;
 
-  // Detect the application's global theme.
+    const html = document.documentElement;
+    const body = document.body;
+
+    return (
+      html.classList.contains("dark") ||
+      body.classList.contains("dark") ||
+      html.getAttribute("data-theme") === "dark" ||
+      body.getAttribute("data-theme") === "dark"
+    );
+  });
+
   useEffect(() => {
-    const root = document.documentElement;
-
     const updateTheme = () => {
-      setDark(root.classList.contains("dark"));
+      const html = document.documentElement;
+      const body = document.body;
+
+      const isDark =
+        html.classList.contains("dark") ||
+        body.classList.contains("dark") ||
+        html.getAttribute("data-theme") === "dark" ||
+        body.getAttribute("data-theme") === "dark";
+
+      setDark(isDark);
     };
 
     updateTheme();
 
     const observer = new MutationObserver(updateTheme);
 
-    observer.observe(root, {
+    observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ["class"],
+      attributeFilter: ["class", "data-theme"],
+    });
+
+    observer.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
     });
 
     return () => observer.disconnect();
   }, []);
 
-  // Reveal the section when it enters the viewport.
-  useEffect(() => {
-    const section = sectionRef.current;
-
-    if (!section) return;
-
-    if (
-      !("IntersectionObserver" in window) ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      setIsVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-          observer.unobserve(section);
-        }
-      },
-      { threshold: 0.08 }
-    );
-
-    observer.observe(section);
-
-    return () => observer.disconnect();
-  }, []);
-
   const palette = {
-    background: dark ? "#080B0D" : "#F4F7F5",
+    background: dark ? "#080B0D" : "#F3F5F3",
     card: dark ? "#101614" : "#FFFFFF",
-    elevated: dark ? "#141B18" : "#F9FBF9",
+    elevated: dark ? "#141B18" : "#F5F7F5",
     text: dark ? "#F4F7F5" : "#17211B",
     muted: dark ? "#99A69F" : "#6D7971",
     border: dark
@@ -154,111 +144,42 @@ function Features() {
     <>
       <style>{`
         /* =========================================
-           NEW ANIMATION STYLE
-           Crisp movement - no blur or glass effects
+           ZOOM-IN ANIMATION
+           Always visible. No scroll reveal.
         ========================================= */
 
-        @keyframes hbSlideUp {
+        @keyframes hbZoomIn {
           from {
-            opacity: 0;
-            transform: translate3d(0, 30px, 0);
+            scale: 0.96;
           }
+
           to {
-            opacity: 1;
-            transform: translate3d(0, 0, 0);
-          }
-        }
-
-        @keyframes hbSlideRight {
-          from {
-            opacity: 0;
-            transform: translate3d(-28px, 0, 0);
-          }
-          to {
-            opacity: 1;
-            transform: translate3d(0, 0, 0);
-          }
-        }
-
-        @keyframes hbSlideLeft {
-          from {
-            opacity: 0;
-            transform: translate3d(28px, 0, 0);
-          }
-          to {
-            opacity: 1;
-            transform: translate3d(0, 0, 0);
-          }
-        }
-
-        @keyframes hbScaleIn {
-          from {
-            opacity: 0;
-            transform: scale(0.94);
-          }
-          to {
-            opacity: 1;
-            transform: scale(1);
-          }
-        }
-
-        @keyframes hbLineMove {
-          from {
-            transform: scaleX(0);
-            transform-origin: left;
-          }
-          to {
-            transform: scaleX(1);
-            transform-origin: left;
-          }
-        }
-
-        @keyframes hbBorderMove {
-          0%, 100% {
-            border-color: rgba(0, 214, 160, 0.12);
-          }
-          50% {
-            border-color: rgba(0, 214, 160, 0.42);
-          }
-        }
-
-        @keyframes hbIconFloat {
-          0%, 100% {
-            transform: translateY(0);
-          }
-          50% {
-            transform: translateY(-5px);
-          }
-        }
-
-        @keyframes hbTicker {
-          from {
-            transform: translateX(0);
-          }
-          to {
-            transform: translateX(-50%);
+            scale: 1;
           }
         }
 
         .hb-reveal {
-          opacity: 0;
+          opacity: 1 !important;
+          filter: none !important;
+          animation: hbZoomIn 650ms cubic-bezier(.2,.8,.2,1) both;
+          will-change: scale;
         }
 
-        .hb-reveal.hb-visible {
-          animation: hbSlideUp 0.75s cubic-bezier(.2,.75,.25,1) forwards;
+        .hb-delay-1 {
+          animation-delay: 100ms;
         }
 
-        .hb-reveal-left.hb-visible {
-          animation-name: hbSlideRight;
+        .hb-delay-2 {
+          animation-delay: 180ms;
         }
 
-        .hb-reveal-right.hb-visible {
-          animation-name: hbSlideLeft;
+        .hb-delay-3 {
+          animation-delay: 260ms;
         }
 
-        .hb-reveal-scale.hb-visible {
-          animation-name: hbScaleIn;
-        }
+        /* =========================================
+           CARD HOVER
+        ========================================= */
 
         .hb-card {
           position: relative;
@@ -289,6 +210,10 @@ function Features() {
           transform: scaleX(1);
         }
 
+        /* =========================================
+           ECOSYSTEM HOVER
+        ========================================= */
+
         .hb-ecosystem-logo {
           transition:
             transform 0.35s cubic-bezier(.2,.75,.25,1),
@@ -318,6 +243,10 @@ function Features() {
           transform: scaleX(1);
         }
 
+        /* =========================================
+           FEATURE ICONS
+        ========================================= */
+
         .hb-feature-icon {
           transition:
             transform 0.35s ease,
@@ -327,6 +256,10 @@ function Features() {
         .hb-card:hover .hb-feature-icon {
           transform: translateY(-4px) rotate(5deg);
         }
+
+        /* =========================================
+           CTA BUTTONS
+        ========================================= */
 
         .hb-cta {
           transition:
@@ -350,8 +283,34 @@ function Features() {
           color: #00D6A0;
         }
 
+        /* =========================================
+           DECORATIVE ANIMATIONS
+        ========================================= */
+
+        @keyframes hbLineMove {
+          from {
+            transform: scaleX(0);
+            transform-origin: left;
+          }
+
+          to {
+            transform: scaleX(1);
+            transform-origin: left;
+          }
+        }
+
         .hb-accent-line {
           animation: hbLineMove 1s cubic-bezier(.2,.75,.25,1) both;
+        }
+
+        @keyframes hbTicker {
+          from {
+            transform: translateX(0);
+          }
+
+          to {
+            transform: translateX(-50%);
+          }
         }
 
         .hb-ticker-track {
@@ -364,8 +323,28 @@ function Features() {
           animation-play-state: paused;
         }
 
+        @keyframes hbIconFloat {
+          0%, 100% {
+            transform: translateY(0);
+          }
+
+          50% {
+            transform: translateY(-5px);
+          }
+        }
+
         .hb-orbit-icon {
           animation: hbIconFloat 4s ease-in-out infinite;
+        }
+
+        @keyframes hbBorderMove {
+          0%, 100% {
+            border-color: rgba(0, 214, 160, 0.12);
+          }
+
+          50% {
+            border-color: rgba(0, 214, 160, 0.42);
+          }
         }
 
         .hb-animated-border {
@@ -378,14 +357,12 @@ function Features() {
           }
         }
 
+        /* =========================================
+           ACCESSIBILITY
+        ========================================= */
+
         @media (prefers-reduced-motion: reduce) {
           .hb-reveal,
-          .hb-reveal.hb-visible {
-            opacity: 1 !important;
-            animation: none !important;
-            transform: none !important;
-          }
-
           .hb-card,
           .hb-ecosystem-logo,
           .hb-arrow,
@@ -393,9 +370,11 @@ function Features() {
           .hb-cta,
           .hb-ticker-track,
           .hb-orbit-icon,
-          .hb-animated-border {
+          .hb-animated-border,
+          .hb-accent-line {
             animation: none !important;
             transition: none !important;
+            scale: 1 !important;
           }
 
           .hb-card:hover,
@@ -410,14 +389,13 @@ function Features() {
       `}</style>
 
       <section
-        ref={sectionRef}
         className="relative isolate overflow-hidden px-5 py-20 transition-colors duration-500 sm:px-8 sm:py-24 lg:px-12 lg:py-28"
         style={{
           backgroundColor: palette.background,
           color: palette.text,
         }}
       >
-        {/* Clean grid background */}
+        {/* CLEAN GRID BACKGROUND */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-10"
@@ -442,12 +420,9 @@ function Features() {
         />
 
         <div className="mx-auto max-w-7xl">
-          {/* Hero introduction */}
-          <div
-            className={`hb-reveal ${
-              isVisible ? "hb-visible" : ""
-            } mx-auto mb-16 max-w-4xl text-center sm:mb-20`}
-          >
+
+          {/* HERO INTRODUCTION */}
+          <div className="hb-reveal mx-auto mb-16 max-w-4xl text-center sm:mb-20">
             <div
               className="mb-6 inline-flex items-center gap-2.5 rounded-full border px-4 py-2"
               style={{
@@ -469,7 +444,7 @@ function Features() {
             </div>
 
             <h2
-              className="text-4xl font-bold leading-[1.08] tracking-[-0.055em] sm:text-5xl md:text-6xl lg:text-7xl"
+              className="hb-reveal hb-delay-1 text-4xl font-bold leading-[1.08] tracking-[-0.055em] sm:text-5xl md:text-6xl lg:text-7xl"
               style={{ color: palette.text }}
             >
               Your skills have
@@ -480,7 +455,7 @@ function Features() {
             </h2>
 
             <p
-              className="mx-auto mt-6 max-w-2xl text-sm leading-7 sm:text-base sm:leading-8"
+              className="hb-reveal hb-delay-2 mx-auto mt-6 max-w-2xl text-sm leading-7 sm:text-base sm:leading-8"
               style={{ color: palette.muted }}
             >
               Discover bounty opportunities, contribute to real
@@ -488,7 +463,7 @@ function Features() {
               through one multi-chain platform.
             </p>
 
-            <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <div className="hb-reveal hb-delay-3 mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Link
                 to="/dashboard"
                 onClick={navigate("/dashboard")}
@@ -518,7 +493,7 @@ function Features() {
             </div>
 
             <div
-              className="mt-9 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-[10px] font-semibold uppercase tracking-[0.13em] sm:gap-x-7"
+              className="hb-reveal mt-9 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 text-[10px] font-semibold uppercase tracking-[0.13em] sm:gap-x-7"
               style={{ color: palette.muted }}
             >
               <span className="flex items-center gap-2">
@@ -547,14 +522,9 @@ function Features() {
             </div>
           </div>
 
-          {/* Supported ecosystems */}
+          {/* SUPPORTED ECOSYSTEMS */}
           <div id="hb-ecosystems" className="scroll-mt-24">
-            <div
-              className={`hb-reveal ${
-                isVisible ? "hb-visible" : ""
-              } mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between`}
-              style={{ animationDelay: "100ms" }}
-            >
+            <div className="hb-reveal hb-delay-1 mb-7 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p
                   className="text-[10px] font-bold uppercase tracking-[0.2em]"
@@ -581,9 +551,7 @@ function Features() {
               {ecosystems.map((network, index) => (
                 <article
                   key={network.name}
-                  className={`hb-card hb-ecosystem hb-reveal hb-reveal-scale ${
-                    isVisible ? "hb-visible" : ""
-                  } group relative flex min-h-[220px] flex-col overflow-hidden rounded-2xl border p-5 sm:p-7`}
+                  className="hb-card hb-ecosystem hb-reveal group relative flex min-h-[220px] flex-col overflow-hidden rounded-2xl border p-5 sm:p-7"
                   style={{
                     animationDelay: `${180 + index * 130}ms`,
                     backgroundColor: palette.card,
@@ -659,14 +627,9 @@ function Features() {
             </p>
           </div>
 
-          {/* Benefits */}
+          {/* BENEFITS */}
           <div className="mt-20 sm:mt-24">
-            <div
-              className={`hb-reveal hb-reveal-left ${
-                isVisible ? "hb-visible" : ""
-              } mb-8 max-w-2xl`}
-              style={{ animationDelay: "250ms" }}
-            >
+            <div className="hb-reveal mb-8 max-w-2xl">
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.2em]"
                 style={{ color: palette.accent }}
@@ -695,9 +658,7 @@ function Features() {
                 return (
                   <article
                     key={feature.number}
-                    className={`hb-card hb-reveal ${
-                      isVisible ? "hb-visible" : ""
-                    } group flex min-h-[245px] flex-col rounded-2xl border p-5 sm:p-6`}
+                    className="hb-card hb-reveal group flex min-h-[245px] flex-col rounded-2xl border p-5 sm:p-6"
                     style={{
                       animationDelay: `${300 + index * 110}ms`,
                       backgroundColor: palette.card,
@@ -756,13 +717,10 @@ function Features() {
             </div>
           </div>
 
-          {/* Final call to action */}
+          {/* FINAL CALL TO ACTION */}
           <div
-            className={`hb-reveal hb-reveal-right ${
-              isVisible ? "hb-visible" : ""
-            } mt-16 overflow-hidden rounded-3xl border sm:mt-20`}
+            className="hb-reveal mt-16 overflow-hidden rounded-3xl border sm:mt-20"
             style={{
-              animationDelay: "600ms",
               backgroundColor: palette.card,
               borderColor: palette.border,
             }}
@@ -817,13 +775,10 @@ function Features() {
             </div>
           </div>
 
-          {/* Supported ecosystem signature */}
+          {/* SUPPORTED ECOSYSTEM SIGNATURE */}
           <div
-            className={`hb-reveal ${
-              isVisible ? "hb-visible" : ""
-            } mt-10 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 border-t pt-7 sm:gap-x-8`}
+            className="hb-reveal mt-10 flex flex-wrap items-center justify-center gap-x-5 gap-y-3 border-t pt-7 sm:gap-x-8"
             style={{
-              animationDelay: "700ms",
               borderColor: palette.border,
             }}
           >

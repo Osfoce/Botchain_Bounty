@@ -24,17 +24,76 @@ import {
   FiTrendingUp,
   FiX,
   FiZap,
+  FiSend,
+  FiLoader,
+  FiMail,
 } from "react-icons/fi";
 
 import NavBar from "../components/Layout/NavBar";
 import Footer from "../components/Layout/Footer";
 import BountyCard from "../components/Bounty/BountyCard";
 
+const SUPPORT_EMAIL = "happybounty9@gmail.com";
+
+const INITIAL_MESSAGE = {
+  role: "assistant",
+  content:
+    "Hello! 👋 Welcome to Happy Bounty Help Center. I can help you understand how to create bounties, fund tasks, submit work, receive rewards, and use the platform. What would you like to know?",
+  source: "welcome",
+};
+
+const THANK_YOU_REPLY =
+  "You're very welcome! 😊 We're always happy to help. If you have any more questions, feel free to reach us through our Contact Us page or email us at happybounty9@gmail.com.";
+
+const SUGGESTED_QUESTIONS = [
+  "What is Happy Bounty?",
+  "How do I create a bounty?",
+  "How do I fund a bounty?",
+  "How can I complete a bounty?",
+  "How do I submit my work?",
+  "How do I receive my rewards?",
+  "Which networks does Happy Bounty support?",
+  "What are the platform fees?",
+  "Can AI agents complete bounties?",
+];
+
+// Recognize common appreciation messages without making an API request.
+const isThankYouMessage = (message) => {
+  const normalized = message
+    .toLowerCase()
+    .trim()
+    .replace(/[.,!?;:]+/g, "")
+    .replace(/\s+/g, " ");
+
+  const patterns = [
+    /^thanks$/,
+    /^thank you$/,
+    /^thank u$/,
+    /^thanks a lot$/,
+    /^thank you so much$/,
+    /^thanks so much$/,
+    /^many thanks$/,
+    /^much appreciated$/,
+    /^i appreciate it$/,
+    /^really appreciate it$/,
+    /^appreciate it$/,
+    /^thx$/,
+    /^ty$/,
+    /^cheers$/,
+    /^thanks again$/,
+    /^thank you again$/,
+    /^i am grateful$/,
+    /^im grateful$/,
+    /^grateful$/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+};
+
 function Dashboard({ dark, setDark }) {
   const { address, isConnected } = useAccount();
   const { isAuthenticated } = useAuth();
 
-  // Show Admin only when the connected wallet is an admin wallet.
   const isAdmin =
     isConnected && Boolean(address) && isConfiguredAdminWallet(address);
 
@@ -53,7 +112,18 @@ function Dashboard({ dark, setDark }) {
 
   const [enrolledBountyIds, setEnrolledBountyIds] = useState([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
+
+  // Help Center state
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+  const [chatInput, setChatInput] = useState("");
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [chatError, setChatError] = useState("");
+
+  const messagesEndRef = useRef(null);
+  const chatInputRef = useRef(null);
+
+  // Privacy and data controls
   const [dataExporting, setDataExporting] = useState(false);
   const [dataRequestLoading, setDataRequestLoading] = useState(false);
   const [dataRequestSubmitting, setDataRequestSubmitting] = useState(false);
@@ -70,7 +140,6 @@ function Dashboard({ dark, setDark }) {
   const muted = dark ? "text-white/45" : "text-black/45";
   const subtle = dark ? "text-white/65" : "text-black/65";
 
-  // Theme-aware hero styles
   const heroSurface = dark
     ? "border-[#00A87D]/20 bg-[#0D1713] text-white"
     : "border-[#00A87D]/20 bg-white text-[#111311] shadow-sm";
@@ -97,6 +166,7 @@ function Dashboard({ dark, setDark }) {
     ? "border-white/10 bg-white/[0.035] text-white/50"
     : "border-black/[0.08] bg-black/[0.025] text-black/55";
 
+  // Scroll to top visibility
   useEffect(() => {
     const updateScrollState = () => {
       setShowScrollTop(window.scrollY > 360);
@@ -111,6 +181,7 @@ function Dashboard({ dark, setDark }) {
     return () => window.removeEventListener("scroll", updateScrollState);
   }, []);
 
+  // Load bounties
   const loadBounties = useCallback(async () => {
     setLoading(true);
 
@@ -133,6 +204,7 @@ function Dashboard({ dark, setDark }) {
     }
   }, [bountyApi, currentPage, filter]);
 
+  // Load dashboard statistics
   const loadDashboardStats = useCallback(async () => {
     if (!isConnected || !address || !isAuthenticated) return;
 
@@ -153,6 +225,7 @@ function Dashboard({ dark, setDark }) {
     }
   }, [address, isAuthenticated, isConnected, userInfoApi]);
 
+  // Load data deletion request
   const loadDataDeletionRequest = useCallback(async () => {
     if (!isConnected || !address || !isAuthenticated) {
       setDataDeletionRequest(null);
@@ -160,10 +233,12 @@ function Dashboard({ dark, setDark }) {
     }
 
     setDataRequestLoading(true);
+
     try {
       const { data } = await apiClient.get("/user/data-deletion-requests", {
         params: { page: 1, limit: 1 },
       });
+
       setDataDeletionRequest(data.requests?.[0] || null);
     } catch (error) {
       console.error("Error loading data deletion request:", error);
@@ -184,6 +259,182 @@ function Dashboard({ dark, setDark }) {
   useEffect(() => {
     loadDataDeletionRequest();
   }, [loadDataDeletionRequest]);
+
+  // Automatically scroll chat to the latest message
+  useEffect(() => {
+    if (assistantOpen) {
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+  }, [messages, assistantOpen, sendingMessage]);
+
+  // Focus chat input when opened
+  useEffect(() => {
+    if (assistantOpen) {
+      const timeout = window.setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 200);
+
+      return () => window.clearTimeout(timeout);
+    }
+  }, [assistantOpen]);
+
+  // Send the existing conversation to the FAQ support backend.
+  // This does not call OpenAI from the frontend.
+  const requestAssistantReply = async (conversation) => {
+    if (!API_URL) {
+      setChatError(
+        `The support service is currently unavailable. Please email us at ${SUPPORT_EMAIL}.`
+      );
+      return;
+    }
+
+    setChatError("");
+    setSendingMessage(true);
+
+    try {
+      const response = await axios.post(
+        `${API_URL}/assistant/chat`,
+        {
+          messages: conversation
+            .filter((item) =>
+              ["user", "assistant"].includes(item.role)
+            )
+            .slice(-10)
+            .map(({ role, content }) => ({
+              role,
+              content,
+            })),
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+          },
+          timeout: 30000,
+        }
+      );
+
+      const assistantReply =
+        response.data?.reply ||
+        response.data?.message ||
+        response.data?.response;
+
+      if (
+        !assistantReply ||
+        typeof assistantReply !== "string"
+      ) {
+        throw new Error("The support service returned an empty response.");
+      }
+
+      const source =
+        response.data?.source === "free" ? "free" : "support";
+
+      setMessages((previous) => [
+        ...previous,
+        {
+          role: "assistant",
+          content: assistantReply,
+          source,
+        },
+      ]);
+    } catch (error) {
+      console.error("Happy Bounty Help Center error:", error);
+
+      const serverMessage =
+        error.response?.data?.reply ||
+        error.response?.data?.error ||
+        error.response?.data?.message;
+
+      setChatError(
+        serverMessage ||
+          (error.code === "ECONNABORTED"
+            ? "The support service is taking too long to respond. Please try again or email our support team."
+            : `Unable to connect to Happy Bounty support. Please try again or email ${SUPPORT_EMAIL}.`)
+      );
+    } finally {
+      setSendingMessage(false);
+
+      window.setTimeout(() => {
+        chatInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
+  // Send a new user question
+  const sendAssistantMessage = async (messageOverride) => {
+    const message = (messageOverride ?? chatInput).trim();
+
+    if (!message || sendingMessage) return;
+
+    const updatedMessages = [
+      ...messages,
+      {
+        role: "user",
+        content: message,
+      },
+    ];
+
+    setMessages(updatedMessages);
+    setChatInput("");
+    setChatError("");
+
+    // Friendly appreciation replies are handled locally.
+    // No backend or AI request is needed for "Thanks" messages.
+    if (isThankYouMessage(message)) {
+      setSendingMessage(true);
+
+      window.setTimeout(() => {
+        setMessages((previous) => [
+          ...previous,
+          {
+            role: "assistant",
+            content: THANK_YOU_REPLY,
+            source: "thanks",
+          },
+        ]);
+
+        setSendingMessage(false);
+
+        window.setTimeout(() => {
+          chatInputRef.current?.focus();
+        }, 100);
+      }, 450);
+
+      return;
+    }
+
+    await requestAssistantReply(updatedMessages);
+  };
+
+  // Retry the last question without adding a duplicate user message
+  const retryAssistantMessage = async () => {
+    if (sendingMessage) return;
+
+    const lastMessage = messages[messages.length - 1];
+
+    if (lastMessage?.role !== "user") return;
+
+    setChatError("");
+    await requestAssistantReply(messages);
+  };
+
+  // Reset Help Center conversation
+  const resetAssistantChat = () => {
+    if (sendingMessage) return;
+
+    setMessages([INITIAL_MESSAGE]);
+    setChatInput("");
+    setChatError("");
+  };
+
+  const getMessageLabel = (source) => {
+    if (source === "free") return "Quick answer";
+    if (source === "support") return "Contact support";
+    if (source === "thanks") return "Happy to help";
+    return "Help Center";
+  };
 
   const formatEarnings = (value) => {
     const num = Number(value) || 0;
@@ -221,6 +472,7 @@ function Dashboard({ dark, setDark }) {
     }
   };
 
+  // Export account data
   const handleDataExport = async () => {
     if (!isAuthenticated || !address) {
       showToast.error("Sign in with your wallet to export your data.");
@@ -228,34 +480,41 @@ function Dashboard({ dark, setDark }) {
     }
 
     setDataExporting(true);
+
     try {
       const limit = 100;
+
       const firstPage = await apiClient.get("/user/data-export", {
         params: { page: 1, limit },
       });
+
       const response = firstPage.data;
+
       const collections = Object.keys(response.data || {}).filter((key) =>
-        Array.isArray(response.data[key]),
+        Array.isArray(response.data[key])
       );
+
       const totalPages = Math.max(
         1,
         ...Object.values(response.pagination || {}).map(
-          (page) => Number(page.pages) || 0,
-        ),
+          (page) => Number(page.pages) || 0
+        )
       );
 
       if (totalPages > 50) {
         showToast.error(
-          "This export is too large to download at once. Please contact support for assistance.",
+          "This export is too large to download at once. Please contact support for assistance."
         );
         return;
       }
 
       const exportData = { ...response.data };
+
       for (let page = 2; page <= totalPages; page += 1) {
         const { data } = await apiClient.get("/user/data-export", {
           params: { page, limit },
         });
+
         for (const collection of collections) {
           exportData[collection].push(...(data.data[collection] || []));
         }
@@ -269,30 +528,37 @@ function Dashboard({ dark, setDark }) {
           Object.entries(response.pagination || {}).map(([key, value]) => [
             key,
             { total: value.total, pages: value.pages },
-          ]),
+          ])
         ),
         excluded: response.excluded || [],
       };
+
       const blob = new Blob([JSON.stringify(payload, null, 2)], {
         type: "application/json",
       });
+
       const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement("a");
+
       link.href = downloadUrl;
       link.download = `botchain-data-${address.toLowerCase()}.json`;
       link.click();
+
       window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+
       showToast.success("Your data export has been downloaded.");
     } catch (error) {
       console.error("Error exporting user data:", error);
+
       showToast.error(
-        error.response?.data?.error || "Couldn't download your data export.",
+        error.response?.data?.error || "Couldn't download your data export."
       );
     } finally {
       setDataExporting(false);
     }
   };
 
+  // Submit data retention request
   const handleDataDeletionRequest = async () => {
     if (!isAuthenticated || !address) {
       showToast.error("Sign in with your wallet to submit a data request.");
@@ -300,18 +566,22 @@ function Dashboard({ dark, setDark }) {
     }
 
     setDataRequestSubmitting(true);
+
     try {
       const { data } = await apiClient.post("/user/data-deletion-request", {});
+
       setDataDeletionRequest(data.request);
+
       showToast.success(
         data.alreadyOpen
           ? "You already have an open data request."
-          : "Your data request was submitted for review.",
+          : "Your data request was submitted for review."
       );
     } catch (error) {
       console.error("Error submitting data deletion request:", error);
+
       showToast.error(
-        error.response?.data?.error || "Couldn't submit your data request.",
+        error.response?.data?.error || "Couldn't submit your data request."
       );
     } finally {
       setDataRequestSubmitting(false);
@@ -361,7 +631,6 @@ function Dashboard({ dark, setDark }) {
       <NavBar dark={dark} setDark={setDark} />
 
       <main className="relative mx-auto w-full max-w-[1600px] px-4 pt-24 sm:px-6 sm:pt-28 lg:px-10 lg:pt-32">
-        {/* Ambient background */}
         <div
           aria-hidden="true"
           className="pointer-events-none absolute -right-40 top-10 h-[380px] w-[380px] rounded-full bg-[#00A87D]/[0.08] blur-[120px]"
@@ -370,7 +639,11 @@ function Dashboard({ dark, setDark }) {
         <div className="relative z-10">
           {/* Hero */}
           <section
-            className={`relative mb-10 overflow-hidden rounded-[28px] border transition-colors duration-300 sm:rounded-[32px] ${heroSurface}`}
+            className={`relative mb-10 overflow-hidden rounded-[28px] border transition-colors duration-300 sm:rounded-[32px] ${
+              dark
+                ? "border-[#00A87D]/20 bg-[#0D1713] text-white"
+                : "border-[#00A87D]/20 bg-white text-[#111311] shadow-sm"
+            }`}
           >
             <div
               aria-hidden="true"
@@ -403,7 +676,9 @@ function Dashboard({ dark, setDark }) {
                   </span>
 
                   <span
-                    className={`text-[10px] font-bold uppercase tracking-[0.22em] ${heroBadgeText}`}
+                    className={`text-[10px] font-bold uppercase tracking-[0.22em] ${
+                      dark ? "text-[#77E5C2]" : "text-[#008F6A]"
+                    }`}
                   >
                     MULTI CHAIN / CONTRIBUTOR HUB
                   </span>
@@ -419,7 +694,9 @@ function Dashboard({ dark, setDark }) {
                 </h1>
 
                 <p
-                  className={`mt-5 max-w-xl text-sm leading-7 sm:text-base ${heroMuted}`}
+                  className={`mt-5 max-w-xl text-sm leading-7 sm:text-base ${
+                    dark ? "text-white/60" : "text-black/60"
+                  }`}
                 >
                   Discover meaningful tasks, complete bounties, and turn your
                   contributions into rewards. Your next opportunity starts here.
@@ -441,7 +718,11 @@ function Dashboard({ dark, setDark }) {
 
                   <Link
                     to="/create"
-                    className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition duration-300 hover:border-[#00A87D]/50 hover:bg-[#00A87D]/10 ${heroSecondaryButton}`}
+                    className={`inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border px-5 text-sm font-semibold transition duration-300 hover:border-[#00A87D]/50 hover:bg-[#00A87D]/10 ${
+                      dark
+                        ? "border-white/15 bg-white/[0.04] text-white/85"
+                        : "border-black/[0.09] bg-black/[0.02] text-[#111311]"
+                    }`}
                   >
                     <FiPlus />
                     Post a bounty
@@ -449,7 +730,9 @@ function Dashboard({ dark, setDark }) {
                 </div>
 
                 <div
-                  className={`mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs ${heroSubtle}`}
+                  className={`mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 text-xs ${
+                    dark ? "text-white/50" : "text-black/55"
+                  }`}
                 >
                   <span className="inline-flex items-center gap-2">
                     <FiCheckCircle className="text-[#00A87D]" />
@@ -466,11 +749,17 @@ function Dashboard({ dark, setDark }) {
               {/* Hero side panel */}
               <div className="relative">
                 <div
-                  className={`rounded-2xl border p-5 backdrop-blur-md transition-colors duration-300 sm:p-6 ${panelSurface}`}
+                  className={`rounded-2xl border p-5 backdrop-blur-md transition-colors duration-300 sm:p-6 ${
+                    dark
+                      ? "border-white/10 bg-black/20"
+                      : "border-black/[0.08] bg-[#F7F9F7]"
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <span
-                      className={`text-[10px] font-bold uppercase tracking-[0.2em] ${panelMuted}`}
+                      className={`text-[10px] font-bold uppercase tracking-[0.2em] ${
+                        dark ? "text-white/45" : "text-black/45"
+                      }`}
                     >
                       YOUR OVERVIEW
                     </span>
@@ -478,14 +767,24 @@ function Dashboard({ dark, setDark }) {
                     <FiActivity className="text-lg text-[#00A87D]" />
                   </div>
 
-                  <div className={`mt-7 border-b pb-6 ${panelBorder}`}>
-                    <p className={`text-sm ${panelSecondary}`}>
+                  <div
+                    className={`mt-7 border-b pb-6 ${
+                      dark ? "border-white/10" : "border-black/[0.08]"
+                    }`}
+                  >
+                    <p
+                      className={`text-sm ${
+                        dark ? "text-white/55" : "text-black/55"
+                      }`}
+                    >
                       Total rewards earned
                     </p>
 
                     <div className="mt-3 flex items-baseline gap-1.5">
                       <span
-                        className={`text-4xl font-black tracking-tight sm:text-5xl ${panelValue}`}
+                        className={`text-4xl font-black tracking-tight sm:text-5xl ${
+                          dark ? "text-white" : "text-[#111311]"
+                        }`}
                       >
                         {dollars}
                       </span>
@@ -503,9 +802,19 @@ function Dashboard({ dark, setDark }) {
 
                   <div className="mt-5 flex items-center justify-between gap-3">
                     <div>
-                      <p className={`text-xs ${panelMuted}`}>Completed tasks</p>
+                      <p
+                        className={`text-xs ${
+                          dark ? "text-white/45" : "text-black/45"
+                        }`}
+                      >
+                        Completed tasks
+                      </p>
 
-                      <p className={`mt-1 text-2xl font-bold ${panelValue}`}>
+                      <p
+                        className={`mt-1 text-2xl font-bold ${
+                          dark ? "text-white" : "text-[#111311]"
+                        }`}
+                      >
                         {stats.completed}
                       </p>
                     </div>
@@ -517,7 +826,11 @@ function Dashboard({ dark, setDark }) {
 
                   {!isConnected && (
                     <p
-                      className={`mt-5 rounded-lg border px-3 py-2.5 text-[11px] leading-5 ${walletNotice}`}
+                      className={`mt-5 rounded-lg border px-3 py-2.5 text-[11px] leading-5 ${
+                        dark
+                          ? "border-white/10 bg-white/[0.035] text-white/50"
+                          : "border-black/[0.08] bg-black/[0.025] text-black/55"
+                      }`}
                     >
                       Connect your wallet to view your personal contributor
                       statistics.
@@ -612,9 +925,11 @@ function Dashboard({ dark, setDark }) {
               <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#00A87D]">
                 PRIVACY & DATA
               </p>
+
               <h2 className="mt-2 text-xl font-black tracking-tight sm:text-2xl">
                 Your data controls
               </h2>
+
               <p className={`mt-2 max-w-2xl text-sm leading-6 ${muted}`}>
                 Export your account records or request a manual review of data
                 retention. Financial and blockchain records are preserved;
@@ -628,8 +943,10 @@ function Dashboard({ dark, setDark }) {
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
                     <FiDownload />
                   </div>
+
                   <div>
                     <h3 className="font-bold">Download your data</h3>
+
                     <p className={`mt-2 text-sm leading-6 ${muted}`}>
                       Get a JSON export of your profile, bounties, submissions,
                       enrollments, comments, rewards, and claim records.
@@ -637,6 +954,7 @@ function Dashboard({ dark, setDark }) {
                     </p>
                   </div>
                 </div>
+
                 <button
                   type="button"
                   onClick={handleDataExport}
@@ -648,6 +966,7 @@ function Dashboard({ dark, setDark }) {
                   />
                   {dataExporting ? "Preparing export..." : "Download JSON"}
                 </button>
+
                 {!isAuthenticated && (
                   <p className={`mt-3 text-xs ${muted}`}>
                     Connect and sign in with your wallet to use data controls.
@@ -660,8 +979,10 @@ function Dashboard({ dark, setDark }) {
                   <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
                     <FiShield />
                   </div>
+
                   <div>
                     <h3 className="font-bold">Data retention request</h3>
+
                     <p className={`mt-2 text-sm leading-6 ${muted}`}>
                       Submit a request for administrator review. This does not
                       automatically delete records, and necessary financial,
@@ -684,6 +1005,7 @@ function Dashboard({ dark, setDark }) {
                           {dataDeletionRequest.status}
                         </strong>
                       </span>
+
                       <span className={`text-xs ${muted}`}>
                         Updated{" "}
                         {new Date(
@@ -708,7 +1030,7 @@ function Dashboard({ dark, setDark }) {
                     dataRequestSubmitting ||
                     dataRequestLoading ||
                     ["pending", "reviewing"].includes(
-                      dataDeletionRequest?.status,
+                      dataDeletionRequest?.status
                     )
                   }
                   className={`mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
@@ -720,7 +1042,7 @@ function Dashboard({ dark, setDark }) {
                   {dataRequestSubmitting
                     ? "Submitting..."
                     : ["pending", "reviewing"].includes(
-                          dataDeletionRequest?.status,
+                          dataDeletionRequest?.status
                         )
                       ? "Request under review"
                       : "Request data review"}
@@ -749,9 +1071,7 @@ function Dashboard({ dark, setDark }) {
                 </p>
               </div>
 
-              {/* Analytics, Admin, Refresh, and Create buttons */}
               <div className="flex flex-wrap items-center gap-3">
-                {/* Analytics is available to all users */}
                 <Link
                   to="/analytics"
                   className={`inline-flex h-11 items-center justify-center gap-2 rounded-xl border px-4 text-xs font-semibold transition hover:border-[#00A87D]/50 hover:bg-[#00A87D]/10 hover:text-[#00A87D] ${
@@ -764,7 +1084,6 @@ function Dashboard({ dark, setDark }) {
                   Analytics
                 </Link>
 
-                {/* Admin is shown only for configured admin wallets */}
                 {isAdmin && (
                   <Link
                     to="/admin-224466"
@@ -776,7 +1095,6 @@ function Dashboard({ dark, setDark }) {
                   </Link>
                 )}
 
-                {/* Existing Refresh button */}
                 <button
                   type="button"
                   onClick={handleRefresh}
@@ -791,7 +1109,6 @@ function Dashboard({ dark, setDark }) {
                   Refresh
                 </button>
 
-                {/* Existing Create bounty button */}
                 <Link
                   to="/create"
                   className="inline-flex h-11 items-center gap-2 rounded-xl bg-[#00A87D] px-4 text-xs font-bold text-white transition hover:bg-[#008F6A]"
@@ -802,7 +1119,7 @@ function Dashboard({ dark, setDark }) {
               </div>
             </div>
 
-            {/* Filter toolbar */}
+            {/* Filters */}
             <div
               className={`mb-6 flex flex-col gap-4 rounded-2xl border p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between ${surface}`}
             >
@@ -843,7 +1160,7 @@ function Dashboard({ dark, setDark }) {
               </div>
             </div>
 
-            {/* Loading skeletons */}
+            {/* Bounty loading and results */}
             {loading ? (
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {[1, 2, 3, 4, 5, 6].map((item) => (
@@ -934,9 +1251,7 @@ function Dashboard({ dark, setDark }) {
                   No matching bounties
                 </h3>
 
-                <p
-                  className={`relative mx-auto mt-3 max-w-md text-sm leading-6 ${muted}`}
-                >
+                <p className={`relative mx-auto mt-3 max-w-md text-sm leading-6 ${muted}`}>
                   There are no opportunities matching this filter right now. Try
                   another category or check back later.
                 </p>
@@ -1063,93 +1378,339 @@ function Dashboard({ dark, setDark }) {
 
       <Footer dark={dark} />
 
-      {/* Help panel */}
-      {helpOpen && (
-        <div
-          className={`fixed bottom-24 right-4 z-[100] w-[calc(100%-2rem)] max-w-sm overflow-hidden rounded-2xl border shadow-2xl sm:right-7 ${
+      {/* HAPPY BOUNTY HELP CENTER */}
+      {assistantOpen && (
+        <section
+          role="dialog"
+          aria-label="Happy Bounty Help Center"
+          aria-modal="false"
+          className={`hb-chat-window fixed bottom-[5.5rem] right-4 z-[110] flex w-[calc(100vw-2rem)] max-w-[390px] flex-col overflow-hidden rounded-[22px] border shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:right-7 ${
             dark
-              ? "border-white/10 bg-[#101512]"
-              : "border-black/[0.08] bg-white"
+              ? "border-white/10 bg-[#101512] text-white"
+              : "border-black/[0.08] bg-white text-[#111311]"
           }`}
         >
-          <div className="flex items-center justify-between border-b border-current/[0.08] bg-[#00A87D]/[0.08] px-5 py-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#00A87D] text-white">
-                <FiZap />
+          {/* Chat header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-current/[0.08] bg-[#00A87D]/[0.08] px-4 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#00A87D] text-white shadow-lg shadow-[#00A87D]/20">
+                <FiMessageCircle className="text-lg" />
+                <span className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border-2 border-[#101512] bg-[#00E0A5]" />
               </div>
 
-              <div>
-                <h3 className="text-sm font-bold">BOT Chain Help</h3>
+              <div className="min-w-0">
+                <h3 className="truncate text-sm font-bold">
+                  Happy Bounty Help Center
+                </h3>
+
                 <p className={`mt-0.5 text-[10px] ${muted}`}>
-                  Your quick dashboard guide
+                  Platform FAQs and support
                 </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setHelpOpen(false)}
-              aria-label="Close help"
-              className={`rounded-lg p-2 transition hover:bg-[#00A87D]/10 hover:text-[#00A87D] ${muted}`}
-            >
-              <FiX className="text-lg" />
-            </button>
+            <div className="flex shrink-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={resetAssistantChat}
+                disabled={sendingMessage}
+                aria-label="Start a new conversation"
+                title="New conversation"
+                className={`rounded-lg p-2 transition hover:bg-[#00A87D]/10 hover:text-[#00A87D] disabled:opacity-40 ${muted}`}
+              >
+                <FiRefreshCw className="text-sm" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setAssistantOpen(false)}
+                aria-label="Close Help Center"
+                className={`rounded-lg p-2 transition hover:bg-[#00A87D]/10 hover:text-[#00A87D] ${muted}`}
+              >
+                <FiX className="text-lg" />
+              </button>
+            </div>
           </div>
 
-          <div className="space-y-4 p-5">
-            <p className={`text-sm leading-6 ${subtle}`}>
-              Explore available bounties, review their requirements, and follow
-              the instructions to participate and earn rewards.
-            </p>
-
-            <div className={`rounded-xl border p-3 ${surface}`}>
-              <div className="flex items-start gap-3">
-                <FiSearch className="mt-0.5 shrink-0 text-[#00A87D]" />
-
-                <div>
-                  <p className="text-xs font-bold">Discover tasks</p>
-                  <p className={`mt-1 text-xs leading-5 ${muted}`}>
-                    Use the bounty filters to find suitable opportunities.
-                  </p>
-                </div>
-              </div>
+          {/* Scrollable messages and FAQ suggestions */}
+          <div
+            className={`hb-chat-messages min-h-0 flex-1 space-y-4 overflow-y-auto p-4 ${
+              dark ? "bg-[#0C110E]" : "bg-[#F7F9F7]"
+            }`}
+            aria-live="polite"
+          >
+            <div className="mx-auto flex max-w-[260px] items-center justify-center gap-2 rounded-full border border-[#00A87D]/15 bg-[#00A87D]/[0.06] px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.13em] text-[#008F6A] dark:text-[#00C995]">
+              <FiShield />
+              Happy Bounty support
             </div>
 
-            <div className={`rounded-xl border p-3 ${surface}`}>
-              <div className="flex items-start gap-3">
-                <FiPlus className="mt-0.5 shrink-0 text-[#00A87D]" />
+            {messages.map((message, index) => {
+              const isUser = message.role === "user";
 
-                <div>
-                  <p className="text-xs font-bold">Post your own work</p>
-                  <p className={`mt-1 text-xs leading-5 ${muted}`}>
-                    Offer a reward and invite contributors to help with your
-                    task.
-                  </p>
+              return (
+                <div
+                  key={`${index}-${message.role}`}
+                  className={`flex ${
+                    isUser ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[88%] rounded-2xl px-4 py-3 text-[13px] leading-6 ${
+                      isUser
+                        ? "rounded-br-md bg-[#00A87D] text-white"
+                        : dark
+                          ? "rounded-bl-md border border-white/[0.07] bg-white/[0.055] text-white/85"
+                          : "rounded-bl-md border border-black/[0.06] bg-white text-[#242924] shadow-sm"
+                    }`}
+                  >
+                    {!isUser && message.source !== "welcome" && (
+                      <div className="mb-1.5">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
+                          {getMessageLabel(message.source)}
+                        </span>
+                      </div>
+                    )}
+
+                    <p className="whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+
+                    {/* Contact links in friendly thank-you replies */}
+                    {!isUser && message.source === "thanks" && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link
+                          to="/contact"
+                          onClick={() => setAssistantOpen(false)}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#00A87D] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#008F6A]"
+                        >
+                          Contact Us
+                          <FiArrowRight className="h-3 w-3" />
+                        </Link>
+
+                        <a
+                          href={`mailto:${SUPPORT_EMAIL}`}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00A87D]/50 hover:text-[#00A87D] ${
+                            dark
+                              ? "border-white/10 text-white/75"
+                              : "border-black/10 text-black/65"
+                          }`}
+                        >
+                          <FiMail className="h-3.5 w-3.5" />
+                          Email us
+                        </a>
+                      </div>
+                    )}
+
+                    {/* Show contact options for questions not covered by FAQs */}
+                    {!isUser && message.source === "support" && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <a
+                          href={`mailto:${SUPPORT_EMAIL}`}
+                          className="inline-flex items-center gap-2 rounded-lg bg-[#00A87D] px-3 py-2 text-[10px] font-bold text-white transition hover:bg-[#008F6A]"
+                        >
+                          <FiMail className="h-3.5 w-3.5" />
+                          Email support
+                        </a>
+
+                        <Link
+                          to="/contact"
+                          onClick={() => setAssistantOpen(false)}
+                          className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00A87D]/50 hover:text-[#00A87D] ${
+                            dark
+                              ? "border-white/10 text-white/75"
+                              : "border-black/10 text-black/65"
+                          }`}
+                        >
+                          Contact Us
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* Suggested FAQ questions */}
+            {messages.length === 1 && !sendingMessage && (
+              <div className="space-y-2 pt-1">
+                <p className={`text-[10px] font-semibold ${muted}`}>
+                  YOU CAN ASK ME
+                </p>
+
+                {SUGGESTED_QUESTIONS.map((question) => (
+                  <button
+                    key={question}
+                    type="button"
+                    onClick={() => sendAssistantMessage(question)}
+                    disabled={sendingMessage}
+                    className={`block w-full rounded-xl border px-3 py-2.5 text-left text-xs transition hover:border-[#00A87D]/40 hover:bg-[#00A87D]/[0.07] disabled:opacity-40 ${
+                      dark
+                        ? "border-white/[0.08] bg-white/[0.025] text-white/75"
+                        : "border-black/[0.07] bg-white text-black/65"
+                    }`}
+                  >
+                    {question}
+                    <FiArrowRight className="float-right mt-0.5 text-[#00A87D]" />
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Typing indicator */}
+            {sendingMessage && (
+              <div className="flex justify-start">
+                <div
+                  className={`flex items-center gap-2 rounded-2xl rounded-bl-md border px-4 py-3 ${
+                    dark
+                      ? "border-white/[0.07] bg-white/[0.055]"
+                      : "border-black/[0.06] bg-white"
+                  }`}
+                >
+                  <span className="text-[11px] text-[#00A87D]">
+                    Preparing a reply
+                  </span>
+
+                  <span className="hb-typing-dot" />
+                  <span className="hb-typing-dot" />
+                  <span className="hb-typing-dot" />
                 </div>
               </div>
-            </div>
+            )}
 
-            <Link
-              to="/create"
-              onClick={() => setHelpOpen(false)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#00A87D] px-3 py-3 text-xs font-bold text-white transition hover:bg-[#008F6A]"
-            >
-              Create a bounty
-              <FiArrowRight />
-            </Link>
+            {/* Error message */}
+            {chatError && (
+              <div
+                role="alert"
+                className="rounded-xl border border-red-500/20 bg-red-500/[0.07] px-3 py-2.5 text-xs leading-5 text-red-500"
+              >
+                <p>{chatError}</p>
+
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {messages[messages.length - 1]?.role === "user" && (
+                    <button
+                      type="button"
+                      onClick={retryAssistantMessage}
+                      disabled={sendingMessage}
+                      className="font-bold underline disabled:opacity-40"
+                    >
+                      Try again
+                    </button>
+                  )}
+
+                  <a
+                    href={`mailto:${SUPPORT_EMAIL}`}
+                    className="inline-flex items-center gap-1.5 font-bold text-[#00A87D] underline"
+                  >
+                    <FiMail />
+                    Email support
+                  </a>
+
+                  <Link
+                    to="/contact"
+                    onClick={() => setAssistantOpen(false)}
+                    className="font-bold text-[#00A87D] underline"
+                  >
+                    Contact Us
+                  </Link>
+
+                  <button
+                    type="button"
+                    onClick={() => setChatError("")}
+                    className="font-bold underline"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
-        </div>
+
+          {/* Input */}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendAssistantMessage();
+            }}
+            className={`shrink-0 border-t border-current/[0.08] p-3 ${
+              dark ? "bg-[#101512]" : "bg-white"
+            }`}
+          >
+            <div
+              className={`flex items-end gap-2 rounded-2xl border p-2 transition focus-within:border-[#00A87D]/50 focus-within:ring-2 focus-within:ring-[#00A87D]/10 ${
+                dark
+                  ? "border-white/10 bg-black/20"
+                  : "border-black/[0.09] bg-[#F7F9F7]"
+              }`}
+            >
+              <textarea
+                ref={chatInputRef}
+                rows={1}
+                value={chatInput}
+                onChange={(event) => setChatInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter" &&
+                    !event.shiftKey &&
+                    !event.nativeEvent.isComposing
+                  ) {
+                    event.preventDefault();
+                    sendAssistantMessage();
+                  }
+                }}
+                placeholder="Ask Happy Bounty..."
+                aria-label="Type your support question"
+                maxLength={2000}
+                disabled={sendingMessage}
+                className={`max-h-24 min-h-[38px] flex-1 resize-none bg-transparent px-2 py-2 text-xs leading-5 outline-none placeholder:opacity-40 disabled:opacity-50 ${
+                  dark ? "text-white" : "text-[#111311]"
+                }`}
+              />
+
+              <button
+                type="submit"
+                disabled={!chatInput.trim() || sendingMessage}
+                aria-label="Send message"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#00A87D] text-white transition hover:bg-[#008F6A] disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {sendingMessage ? (
+                  <FiLoader className="animate-spin" />
+                ) : (
+                  <FiSend />
+                )}
+              </button>
+            </div>
+
+            <div className="mt-2 flex items-center justify-between px-1">
+              <span className={`text-[9px] ${muted}`}>
+                Happy Bounty Help Center
+              </span>
+
+              <span className={`text-[9px] ${muted}`}>
+                {chatInput.length}/2000
+              </span>
+            </div>
+          </form>
+        </section>
       )}
 
-      {/* Floating help button */}
+      {/* Floating Help Center button */}
       <button
         type="button"
-        onClick={() => setHelpOpen((open) => !open)}
-        aria-label={helpOpen ? "Close BOT Chain help" : "Open BOT Chain help"}
-        title="BOT Chain help"
-        className="fixed bottom-5 right-4 z-[100] flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-[#00A87D] text-white shadow-[0_8px_28px_rgba(0,168,125,0.3)] transition duration-300 hover:-translate-y-1 hover:bg-[#008F6A] sm:bottom-7 sm:right-7 sm:h-14 sm:w-14"
+        onClick={() => {
+          setAssistantOpen((open) => !open);
+          setChatError("");
+        }}
+        aria-label={
+          assistantOpen
+            ? "Close Happy Bounty Help Center"
+            : "Open Happy Bounty Help Center"
+        }
+        title="Contact Happy Bounty support"
+        className="fixed bottom-5 right-4 z-[110] flex h-12 w-12 items-center justify-center rounded-full border border-white/20 bg-[#00A87D] text-white shadow-[0_8px_28px_rgba(0,168,125,0.3)] transition duration-300 hover:-translate-y-1 hover:bg-[#008F6A] sm:bottom-7 sm:right-7 sm:h-14 sm:w-14"
       >
-        {helpOpen ? (
+        {assistantOpen ? (
           <FiX className="text-xl" />
         ) : (
           <FiMessageCircle className="text-xl" />
@@ -1188,8 +1749,74 @@ function Dashboard({ dark, setDark }) {
           }
         }
 
+        @keyframes dashboardTyping {
+          0%, 60%, 100% {
+            transform: translateY(0);
+            opacity: 0.35;
+          }
+          30% {
+            transform: translateY(-4px);
+            opacity: 1;
+          }
+        }
+
         #bounty-list {
           animation: dashboardFadeIn 500ms ease-out both;
+        }
+
+        .hb-chat-window {
+          height: min(620px, calc(100dvh - 13rem));
+          max-height: min(620px, calc(100dvh - 13rem));
+          min-height: 0;
+          transform-origin: bottom right;
+          animation: dashboardFadeIn 180ms ease-out both;
+        }
+
+        .hb-chat-messages {
+          min-height: 0;
+          overscroll-behavior: contain;
+          scrollbar-width: thin;
+          scrollbar-color: rgba(0, 168, 125, 0.35) transparent;
+        }
+
+        .hb-chat-messages::-webkit-scrollbar {
+          width: 5px;
+        }
+
+        .hb-chat-messages::-webkit-scrollbar-thumb {
+          border-radius: 20px;
+          background: rgba(0, 168, 125, 0.35);
+        }
+
+        .hb-typing-dot {
+          width: 5px;
+          height: 5px;
+          display: inline-block;
+          border-radius: 50%;
+          background: #00A87D;
+          animation: dashboardTyping 1.2s infinite ease-in-out;
+        }
+
+        .hb-typing-dot:nth-child(2) {
+          animation-delay: 0.15s;
+        }
+
+        .hb-typing-dot:nth-child(3) {
+          animation-delay: 0.3s;
+        }
+
+        @media (max-width: 767px) {
+          .hb-chat-window {
+            height: min(620px, calc(100dvh - 12rem));
+            max-height: min(620px, calc(100dvh - 12rem));
+          }
+        }
+
+        @media (max-height: 560px) {
+          .hb-chat-window {
+            height: calc(100dvh - 9rem);
+            max-height: calc(100dvh - 9rem);
+          }
         }
 
         @media (prefers-reduced-motion: reduce) {

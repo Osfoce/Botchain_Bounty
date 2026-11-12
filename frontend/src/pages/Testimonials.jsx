@@ -167,54 +167,8 @@ function useDarkTheme() {
   return dark;
 }
 
-// Each reveal element animates when it enters the viewport.
-function useReveal() {
-  const sectionRef = useRef(null);
-  const [visibleElements, setVisibleElements] = useState(false);
-
-  useEffect(() => {
-    const section = sectionRef.current;
-    if (!section) return;
-
-    const elements = section.querySelectorAll("[data-reveal]");
-
-    const reduceMotion =
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    if (
-      reduceMotion ||
-      typeof IntersectionObserver === "undefined"
-    ) {
-      setVisibleElements(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add("hb-community-visible");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      {
-        threshold: 0.08,
-        rootMargin: "0px 0px -35px 0px",
-      }
-    );
-
-    elements.forEach((element) => observer.observe(element));
-
-    return () => observer.disconnect();
-  }, []);
-
-  return { sectionRef, visibleElements };
-}
-
 export default function Testimonials() {
   const dark = useDarkTheme();
-  const { sectionRef } = useReveal();
 
   const [activeSlide, setActiveSlide] = useState(0);
   const [visibleCount, setVisibleCount] = useState(3);
@@ -250,7 +204,7 @@ export default function Testimonials() {
       window.removeEventListener("resize", updateVisibleCount);
   }, []);
 
-  // Measure the actual card width and carousel gap.
+  // Measure actual card width and carousel gap.
   useEffect(() => {
     const viewport = viewportRef.current;
     const firstSlide = firstSlideRef.current;
@@ -295,11 +249,7 @@ export default function Testimonials() {
 
   // Automatic carousel movement.
   useEffect(() => {
-    if (!isPaused || maxSlide === 0) {
-      // Continue below when the carousel is allowed to move.
-    } else {
-      return;
-    }
+    if (isPaused || maxSlide === 0) return;
 
     if (
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -362,16 +312,44 @@ export default function Testimonials() {
   return (
     <>
       <style>{`
-        @keyframes hb-section-enter {
+        /* SIMPLE ZOOM-IN
+           No scroll observer.
+           No blur.
+           No hidden text.
+        */
+
+        @keyframes hbZoomIn {
           from {
-            opacity: 0;
-            transform: translate3d(0, 30px, 0);
-            filter: blur(5px);
+            transform: scale(.96);
+          }
+
+          to {
+            transform: scale(1);
+          }
+        }
+
+        .hb-community-reveal {
+          opacity: 1;
+          filter: none;
+          animation: hbZoomIn .65s cubic-bezier(.2,.8,.2,1) both;
+        }
+
+        .hb-community-grid {
+          background-image:
+            linear-gradient(rgba(0,214,160,.035) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0,214,160,.035) 1px, transparent 1px);
+          background-size: 52px 52px;
+          animation: hb-grid-drift 24s linear infinite;
+          mask-image: linear-gradient(to bottom, black, transparent 90%);
+          -webkit-mask-image: linear-gradient(to bottom, black, transparent 90%);
+        }
+
+        @keyframes hb-grid-drift {
+          from {
+            background-position: 0 0;
           }
           to {
-            opacity: 1;
-            transform: translate3d(0, 0, 0);
-            filter: blur(0);
+            background-position: 52px 52px;
           }
         }
 
@@ -386,15 +364,6 @@ export default function Testimonials() {
           }
         }
 
-        @keyframes hb-grid-drift {
-          from {
-            background-position: 0 0;
-          }
-          to {
-            background-position: 52px 52px;
-          }
-        }
-
         @keyframes hb-card-shine {
           from {
             transform: translateX(-130%) skewX(-15deg);
@@ -402,25 +371,6 @@ export default function Testimonials() {
           to {
             transform: translateX(230%) skewX(-15deg);
           }
-        }
-
-        .hb-community-reveal {
-          opacity: 0;
-          transform: translateY(24px);
-        }
-
-        .hb-community-reveal.hb-community-visible {
-          animation: hb-section-enter .8s cubic-bezier(.2,.75,.25,1) forwards;
-        }
-
-        .hb-community-grid {
-          background-image:
-            linear-gradient(rgba(0,214,160,.035) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(0,214,160,.035) 1px, transparent 1px);
-          background-size: 52px 52px;
-          animation: hb-grid-drift 24s linear infinite;
-          mask-image: linear-gradient(to bottom, black, transparent 90%);
-          -webkit-mask-image: linear-gradient(to bottom, black, transparent 90%);
         }
 
         .hb-community-glow {
@@ -654,16 +604,12 @@ export default function Testimonials() {
 
         @media (prefers-reduced-motion: reduce) {
           .hb-community-reveal,
-          .hb-community-reveal.hb-community-visible {
-            opacity: 1;
-            animation: none !important;
-            transform: none !important;
-            filter: none !important;
-          }
-
           .hb-community-glow,
           .hb-community-grid {
             animation: none !important;
+            opacity: 1 !important;
+            filter: none !important;
+            transform: none !important;
           }
 
           .hb-community-network,
@@ -686,7 +632,6 @@ export default function Testimonials() {
       `}</style>
 
       <section
-        ref={sectionRef}
         aria-labelledby="hb-community-title"
         className={`relative isolate mx-3 my-6 overflow-hidden rounded-[28px] border transition-colors duration-300 sm:mx-5 sm:my-8 md:mx-8 md:rounded-[36px] lg:mx-12 ${theme.section}`}
       >
@@ -708,10 +653,7 @@ export default function Testimonials() {
         <div className="relative mx-auto max-w-[1440px] px-5 py-14 sm:px-8 sm:py-16 md:py-20 lg:px-12 lg:py-24">
 
           {/* Hero heading */}
-          <header
-            data-reveal
-            className="hb-community-reveal mx-auto max-w-4xl text-center"
-          >
+          <header className="hb-community-reveal mx-auto max-w-4xl text-center">
             <div className="mb-6 inline-flex items-center gap-2.5 rounded-full border border-[#00D6A0]/20 bg-[#00D6A0]/[0.06] px-4 py-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
               <span className="text-[9px] font-bold uppercase tracking-[0.17em] text-[#00A87D] sm:text-[10px]">
@@ -740,15 +682,11 @@ export default function Testimonials() {
           </header>
 
           {/* Ecosystem cards */}
-          <div
-            data-reveal
-            className="hb-community-reveal mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-3 sm:mt-12 sm:grid-cols-2 sm:gap-4"
-            style={{ animationDelay: "100ms" }}
-          >
+          <div className="hb-community-reveal mx-auto mt-10 grid max-w-3xl grid-cols-1 gap-3 sm:mt-12 sm:grid-cols-2 sm:gap-4">
             {networks.map((network, index) => (
               <article
                 key={network.symbol}
-                className="hb-community-network group flex items-center gap-4 rounded-2xl border p-4 sm:p-5"
+                className="hb-community-network group flex items-center gap-4 rounded-2xl border border-white/[0.09] bg-white/[0.025] p-4 sm:p-5"
                 style={{ transitionDelay: `${index * 80}ms` }}
               >
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#00D6A0]/15 bg-[#00D6A0]/[0.06] p-2.5">
@@ -785,20 +723,12 @@ export default function Testimonials() {
             ))}
           </div>
 
-          <p
-            data-reveal
-            className={`hb-community-reveal mt-4 text-center text-[10px] ${theme.subtle}`}
-            style={{ animationDelay: "150ms" }}
-          >
+          <p className={`hb-community-reveal mt-4 text-center text-[10px] ${theme.subtle}`}>
             Opportunities across the Arc and BOTCHAIN ecosystems.
           </p>
 
           {/* Carousel heading */}
-          <div
-            data-reveal
-            className="hb-community-reveal mb-3 mt-16 flex flex-col gap-3 sm:mb-5 sm:mt-20 sm:flex-row sm:items-end sm:justify-between"
-            style={{ animationDelay: "100ms" }}
-          >
+          <div className="hb-community-reveal mb-3 mt-16 flex flex-col gap-3 sm:mb-5 sm:mt-20 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#00A87D]">
                 One platform. Many possibilities.
@@ -844,11 +774,7 @@ export default function Testimonials() {
           </div>
 
           {/* Carousel */}
-          <div
-            data-reveal
-            className="hb-community-reveal"
-            style={{ animationDelay: "150ms" }}
-          >
+          <div className="hb-community-reveal">
             <div
               ref={viewportRef}
               className="hb-curve-viewport"
@@ -973,11 +899,7 @@ export default function Testimonials() {
           </div>
 
           {/* Value points */}
-          <div
-            data-reveal
-            className="hb-community-reveal mt-14 sm:mt-20"
-            style={{ animationDelay: "100ms" }}
-          >
+          <div className="hb-community-reveal mt-14 sm:mt-20">
             <div className="mb-6">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#00A87D]">
                 Designed around contribution
@@ -1002,13 +924,11 @@ export default function Testimonials() {
 
           {/* Closing CTA */}
           <div
-            data-reveal
             className={`hb-community-reveal hb-community-cta mt-8 flex flex-col gap-6 rounded-3xl border p-5 sm:mt-10 sm:flex-row sm:items-center sm:justify-between sm:p-8 lg:p-9 ${
               dark
                 ? "border-white/[0.08] bg-white/[0.025]"
                 : "border-black/[0.06] bg-white/75"
             }`}
-            style={{ animationDelay: "150ms" }}
           >
             <div className="flex items-start gap-4">
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[#00D6A0]/20 bg-[#00D6A0]/[0.08] text-[#00A87D]">
@@ -1037,10 +957,7 @@ export default function Testimonials() {
           </div>
 
           {/* Brand footer */}
-          <div
-            data-reveal
-            className={`hb-community-reveal mt-10 flex items-center justify-center gap-3 text-center text-[9px] font-semibold tracking-[0.2em] sm:mt-12 ${theme.subtle}`}
-          >
+          <div className={`hb-community-reveal mt-10 flex items-center justify-center gap-3 text-center text-[9px] font-semibold tracking-[0.2em] sm:mt-12 ${theme.subtle}`}>
             <span className="h-px w-8 bg-[#00D6A0]/40" />
             CREATE. CONTRIBUTE. EARN.
             <span className="h-px w-8 bg-[#00D6A0]/40" />
