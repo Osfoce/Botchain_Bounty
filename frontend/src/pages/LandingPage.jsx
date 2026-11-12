@@ -1,4 +1,3 @@
-
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useNav } from "../hooks/useNav";
@@ -52,6 +51,20 @@ const SUGGESTED_QUESTIONS = [
   "Which networks does Happy Bounty support?",
   "What are the platform fees?",
 ];
+
+// Detect standalone thank-you messages.
+// Messages that contain an additional question still go to the AI assistant.
+const isThankYouMessage = (message) => {
+  const normalized = message
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return /^(thanks|thank you|thank u|thx|many thanks|much appreciated|appreciate it|i appreciate it|cheers|got it thanks|okay thanks|ok thanks|alright thanks|cool thanks|great thanks|perfect thanks|thanks a bunch)( so much| a lot| very much)?$/.test(
+    normalized
+  );
+};
 
 function LandingPage({ dark, setDark }) {
   const [featuredBounties, setFeaturedBounties] = useState([]);
@@ -225,14 +238,6 @@ function LandingPage({ dark, setDark }) {
 
     if (!trimmedMessage || sendingMessage) return;
 
-    if (!API_URL) {
-      setChatError(
-        "The support service is currently unavailable. Please email us at " +
-          SUPPORT_EMAIL
-      );
-      return;
-    }
-
     const userMessage = {
       role: "user",
       content: trimmedMessage,
@@ -246,6 +251,29 @@ function LandingPage({ dark, setDark }) {
     setSendingMessage(true);
 
     try {
+      // Handle simple thank-you messages locally.
+      // No backend or OpenAI request is needed for these.
+      if (isThankYouMessage(trimmedMessage)) {
+        setMessages((previous) => [
+          ...previous,
+          {
+            role: "assistant",
+            content:
+              "You're very welcome! 😊 If you still have any questions, feel free to reach us through our Contact Us page or email us at happybounty9@gmail.com. We're always happy to help!",
+            source: "greeting",
+          },
+        ]);
+
+        return;
+      }
+
+      if (!API_URL) {
+        throw new Error(
+          "The support service is currently unavailable. Please email us at " +
+            SUPPORT_EMAIL
+        );
+      }
+
       const conversation = updatedMessages
         .filter((message) =>
           ["user", "assistant"].includes(message.role)
@@ -286,7 +314,8 @@ function LandingPage({ dark, setDark }) {
 
       const serverMessage =
         error.response?.data?.reply ||
-        error.response?.data?.error;
+        error.response?.data?.error ||
+        error.message;
 
       setChatError(
         serverMessage ||
@@ -315,6 +344,7 @@ function LandingPage({ dark, setDark }) {
   const getMessageLabel = (source) => {
     if (source === "free") return "Quick answer";
     if (source === "support") return "Support guidance";
+    if (source === "greeting") return "Happy to help";
     return "Help Center";
   };
 
@@ -661,13 +691,13 @@ function LandingPage({ dark, setDark }) {
       </footer>
 
       {/* HAPPY BOUNTY HELP CENTER */}
-      <div className="fixed bottom-5 right-4 z-[110] flex flex-col items-end gap-3 sm:bottom-7 sm:right-7">
+      <div className="fixed bottom-3 right-3 z-[110] flex flex-col items-end gap-3 sm:bottom-7 sm:right-7">
 
         {/* CHAT WINDOW */}
         {assistantOpen && (
           <div
             className={`
-              hb-chat-window flex w-[min(390px,calc(100vw-2rem))]
+              hb-chat-window flex w-[min(390px,calc(100vw-1.5rem))]
               flex-col overflow-hidden rounded-[24px] border shadow-2xl
               ${
                 dark
@@ -683,20 +713,20 @@ function LandingPage({ dark, setDark }) {
               <div className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full bg-[#00D6A0]/10 blur-3xl" />
 
               <div className="relative flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#00D6A0]/30 bg-[#00D6A0]/10 text-[#00D6A0]">
                     <FiMessageCircle className="h-5 w-5" />
 
                     <span className="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-[#0B1712] bg-[#00D6A0]" />
                   </div>
 
-                  <div>
-                    <h3 className="text-sm font-bold tracking-tight">
+                  <div className="min-w-0">
+                    <h3 className="truncate text-sm font-bold tracking-tight">
                       Happy Bounty Help Center
                     </h3>
 
                     <p className="mt-1 flex items-center gap-1.5 text-[10px] text-white/55">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
+                      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#00D6A0]" />
                       Your personal platform assistant
                     </p>
                   </div>
@@ -728,10 +758,10 @@ function LandingPage({ dark, setDark }) {
 
             {/* CHAT MESSAGES */}
             <div
-              className="hb-chat-messages flex min-h-[180px] flex-1 flex-col gap-4 overflow-y-auto px-4 py-4"
+              className="hb-chat-messages flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-4 py-4"
               aria-live="polite"
             >
-              <div className="mb-1 text-center">
+              <div className="mb-1 shrink-0 text-center">
                 <span
                   className={`rounded-full px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.13em] ${
                     dark
@@ -749,12 +779,12 @@ function LandingPage({ dark, setDark }) {
                 return (
                   <div
                     key={`${index}-${message.role}`}
-                    className={`flex w-full ${
+                    className={`flex w-full shrink-0 ${
                       isUser ? "justify-end" : "justify-start"
                     }`}
                   >
                     <div
-                      className={`max-w-[88%] rounded-2xl px-3.5 py-3 text-[12px] leading-[1.75] ${
+                      className={`max-w-[88%] break-words rounded-2xl px-3.5 py-3 text-[12px] leading-[1.75] ${
                         isUser
                           ? "rounded-br-md bg-[#00D6A0] text-[#06231B]"
                           : dark
@@ -763,7 +793,7 @@ function LandingPage({ dark, setDark }) {
                       }`}
                     >
                       {!isUser && (
-                        <div className="mb-1.5 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-[#00A87D]">
                           <FiMessageCircle className="h-3 w-3" />
                           Happy Bounty Support
 
@@ -780,29 +810,30 @@ function LandingPage({ dark, setDark }) {
                       </p>
 
                       {/* SUPPORT CONTACT ACTIONS */}
-                      {!isUser && message.source === "support" && (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          <a
-                            href={`mailto:${SUPPORT_EMAIL}`}
-                            className="inline-flex items-center gap-2 rounded-lg bg-[#00D6A0] px-3 py-2 text-[10px] font-bold text-[#06231B] transition hover:bg-[#00B98A]"
-                          >
-                            <FiMail className="h-3.5 w-3.5" />
-                            Email support
-                          </a>
+                      {!isUser &&
+                        ["support", "greeting"].includes(message.source) && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <a
+                              href={`mailto:${SUPPORT_EMAIL}`}
+                              className="inline-flex items-center gap-2 rounded-lg bg-[#00D6A0] px-3 py-2 text-[10px] font-bold text-[#06231B] transition hover:bg-[#00B98A]"
+                            >
+                              <FiMail className="h-3.5 w-3.5" />
+                              Email support
+                            </a>
 
-                          <Link
-                            to="/contact"
-                            onClick={() => setAssistantOpen(false)}
-                            className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00D6A0]/50 hover:text-[#00A87D] ${
-                              dark
-                                ? "border-white/10 text-white/70"
-                                : "border-black/10 text-gray-600"
-                            }`}
-                          >
-                            Contact Us
-                          </Link>
-                        </div>
-                      )}
+                            <Link
+                              to="/contact"
+                              onClick={() => setAssistantOpen(false)}
+                              className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-[10px] font-semibold transition hover:border-[#00D6A0]/50 hover:text-[#00A87D] ${
+                                dark
+                                  ? "border-white/10 text-white/70"
+                                  : "border-black/10 text-gray-600"
+                              }`}
+                            >
+                              Contact Us
+                            </Link>
+                          </div>
+                        )}
                     </div>
                   </div>
                 );
@@ -810,7 +841,7 @@ function LandingPage({ dark, setDark }) {
 
               {/* TYPING INDICATOR */}
               {sendingMessage && (
-                <div className="flex justify-start">
+                <div className="flex shrink-0 justify-start">
                   <div
                     className={`flex items-center gap-2 rounded-2xl rounded-bl-md border px-4 py-3 ${
                       dark
@@ -843,7 +874,7 @@ function LandingPage({ dark, setDark }) {
                   YOU CAN ASK ME
                 </p>
 
-                <div className="flex flex-wrap gap-2">
+                <div className="flex max-h-24 flex-wrap gap-2 overflow-y-auto">
                   {SUGGESTED_QUESTIONS.map((question) => (
                     <button
                       key={question}
@@ -889,18 +920,18 @@ function LandingPage({ dark, setDark }) {
               </div>
             )}
 
-            {/* CHAT INPUT */}
+            {/* CHAT INPUT - ALWAYS AT THE BOTTOM */}
             <form
               onSubmit={(event) => {
                 event.preventDefault();
                 sendMessage();
               }}
-              className={`shrink-0 border-t p-3 ${
+              className={`hb-chat-input shrink-0 border-t p-3 ${
                 dark ? "border-white/[0.07]" : "border-black/[0.07]"
               }`}
             >
               <div
-                className={`flex items-center gap-2 rounded-xl border p-1.5 transition focus-within:border-[#00D6A0]/60 ${
+                className={`flex min-w-0 items-center gap-2 rounded-xl border p-1.5 transition focus-within:border-[#00D6A0]/60 ${
                   dark
                     ? "border-white/10 bg-white/[0.035]"
                     : "border-black/[0.08] bg-[#F7F8F7]"
@@ -915,7 +946,7 @@ function LandingPage({ dark, setDark }) {
                   maxLength={2000}
                   disabled={sendingMessage}
                   aria-label="Type your support question"
-                  className={`min-w-0 flex-1 bg-transparent px-2 py-2 text-xs outline-none placeholder:text-gray-500 disabled:opacity-50 ${
+                  className={`min-w-0 w-full flex-1 bg-transparent px-2 py-2.5 text-xs outline-none placeholder:text-gray-500 disabled:opacity-50 ${
                     dark ? "text-white" : "text-gray-900"
                   }`}
                 />
@@ -924,7 +955,7 @@ function LandingPage({ dark, setDark }) {
                   type="submit"
                   disabled={!chatInput.trim() || sendingMessage}
                   aria-label="Send message"
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#00D6A0] text-[#06231B] transition-all hover:bg-[#00B98A] disabled:cursor-not-allowed disabled:opacity-35"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#00D6A0] text-[#06231B] transition-all hover:bg-[#00B98A] disabled:cursor-not-allowed disabled:opacity-35"
                 >
                   {sendingMessage ? (
                     <FiLoader className="h-4 w-4 animate-spin" />
@@ -1111,18 +1142,23 @@ function LandingPage({ dark, setDark }) {
         }
 
         /*
-          Keep the chat above the floating button while reserving
-          enough space at the top so it does not cover the navigation.
+          Chat panel uses the available viewport height.
+          The message list scrolls independently while the
+          input and send button remain anchored at the bottom.
         */
         .hb-chat-window {
+          display: flex;
+          flex-direction: column;
+          min-height: 0;
+          height: min(620px, calc(100dvh - 8rem));
+          max-height: calc(100dvh - 8rem);
           transform-origin: bottom right;
           animation: panelEnter 240ms cubic-bezier(.22, 1, .36, 1) both;
-          height: min(620px, calc(100dvh - 15rem));
-          max-height: min(620px, calc(100dvh - 15rem));
-          min-height: 300px;
         }
 
         .hb-chat-messages {
+          min-height: 0;
+          flex: 1 1 auto;
           overscroll-behavior: contain;
           scrollbar-width: thin;
           scrollbar-color: rgba(0, 168, 125, 0.35) transparent;
@@ -1135,6 +1171,13 @@ function LandingPage({ dark, setDark }) {
         .hb-chat-messages::-webkit-scrollbar-thumb {
           background: rgba(0, 168, 125, 0.35);
           border-radius: 20px;
+        }
+
+        .hb-chat-input {
+          position: relative;
+          z-index: 2;
+          flex-shrink: 0;
+          padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
         }
 
         .hb-typing-dot {
@@ -1265,17 +1308,27 @@ function LandingPage({ dark, setDark }) {
           }
 
           .hb-chat-window {
-            height: min(620px, calc(100dvh - 13rem));
-            max-height: min(620px, calc(100dvh - 13rem));
-            min-height: 280px;
+            width: min(420px, calc(100vw - 1.5rem));
+            height: min(620px, calc(100dvh - 6rem));
+            max-height: calc(100dvh - 6rem);
+            border-radius: 20px;
+          }
+
+          .hb-chat-messages {
+            padding-left: 0.85rem;
+            padding-right: 0.85rem;
+          }
+
+          .hb-chat-input {
+            padding: 0.65rem;
+            padding-bottom: max(0.65rem, env(safe-area-inset-bottom));
           }
         }
 
         @media (max-height: 560px) {
           .hb-chat-window {
-            height: calc(100dvh - 7rem);
-            max-height: calc(100dvh - 7rem);
-            min-height: 220px;
+            height: calc(100dvh - 5rem);
+            max-height: calc(100dvh - 5rem);
           }
         }
 
