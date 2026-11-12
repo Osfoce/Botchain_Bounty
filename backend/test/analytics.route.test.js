@@ -83,5 +83,8 @@ test("platform and creator analytics URLs are mounted and return analytics data"
     { headers: { Authorization: `Bearer ${token}` } },
   );
   assert.equal(creatorResponse.status, 200);
-  assert.ok((await creatorResponse.json()).overview);
+  const creatorAnalytics = await creatorResponse.json();
+  assert.ok(creatorAnalytics.overview);
+  assert.equal(creatorAnalytics.overview.totalRewardsClaimedUsd, "0");
+  assert.equal(creatorAnalytics.overview.rewardsClaimedUsdStatus, "complete");
 });

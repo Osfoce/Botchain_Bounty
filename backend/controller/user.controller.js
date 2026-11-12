@@ -13,7 +13,26 @@ const {
   serializeUser,
 } = require("../utils/serializers");
 const { getTotalEarnings } = require("../services/financialAmounts.service");
+const { getUsdEarnings } = require("../services/usdEarnings.service");
+const { getSafeErrorCode } = require("../utils/requestLogger");
 const { recordSecurityAudit } = require("../services/securityAudit.service");
+
+const getUsdEarningsForUser = async (req, user) => {
+  try {
+    return await getUsdEarnings({
+      rewards: user.claimedRewards || [],
+      legacyTotal: user.totalEarnings,
+    });
+  } catch (error) {
+    logRequestError(req, "user_usd_earnings_unavailable", error, "warn");
+    return {
+      status: "unavailable",
+      totalEarningsUsd: null,
+      breakdown: [],
+      errorCode: getSafeErrorCode(error, "USD_VALUATION_UNAVAILABLE"),
+    };
+  }
+};
 
 const getOrCreateUserProfile = async (req, res) => {
   const wallet = req.auth.walletAddress;
@@ -52,8 +71,18 @@ const getOrCreateUserProfile = async (req, res) => {
         Submission.countDocuments(submissionFilter),
       ]);
 
+    const [usdEarnings] = await Promise.all([getUsdEarningsForUser(req, user)]);
+
     res.status(200).json({
-      user: serializeUser(user),
+      user: {
+        ...serializeUser(user),
+        totalEarningsUsd: usdEarnings.totalEarningsUsd,
+        earningsUsdBreakdown: usdEarnings.breakdown,
+        earningsUsdStatus: usdEarnings.status,
+        ...(usdEarnings.errorCode
+          ? { earningsUsdErrorCode: usdEarnings.errorCode }
+          : {}),
+      },
       createdBounties: createdBounties.map((bounty) => serializeBounty(bounty)),
       submissions: submissions.map((submission) =>
         serializeSubmission(submission, { includeWork: true }),
@@ -99,44 +128,50 @@ const getUserDashboard = async (req, res) => {
     );
 
     const now = new Date();
-    const [bountyStatusRows, submissionStatusRows, enrollments, enrollmentTotal] =
-      await Promise.all([
-        Bounty.aggregate([
-          { $match: { creator: wallet } },
-          {
-            $project: {
-              status: {
-                $switch: {
-                  branches: [
-                    {
-                      case: { $eq: ["$lifecycleStatus", "completed"] },
-                      then: "completed",
-                    },
-                    {
-                      case: { $eq: ["$lifecycleStatus", "cancelled"] },
-                      then: "cancelled",
-                    },
-                    { case: { $gt: ["$startDate", now] }, then: "upcoming" },
-                    { case: { $gte: ["$deadline", now] }, then: "active" },
-                  ],
-                  default: "ended",
-                },
+    const [
+      bountyStatusRows,
+      submissionStatusRows,
+      enrollments,
+      enrollmentTotal,
+      usdEarnings,
+    ] = await Promise.all([
+      Bounty.aggregate([
+        { $match: { creator: wallet } },
+        {
+          $project: {
+            status: {
+              $switch: {
+                branches: [
+                  {
+                    case: { $eq: ["$lifecycleStatus", "completed"] },
+                    then: "completed",
+                  },
+                  {
+                    case: { $eq: ["$lifecycleStatus", "cancelled"] },
+                    then: "cancelled",
+                  },
+                  { case: { $gt: ["$startDate", now] }, then: "upcoming" },
+                  { case: { $gte: ["$deadline", now] }, then: "active" },
+                ],
+                default: "ended",
               },
             },
           },
-          { $group: { _id: "$status", count: { $sum: 1 } } },
-        ]),
-        Submission.aggregate([
-          { $match: { user: wallet } },
-          { $group: { _id: "$status", count: { $sum: 1 } } },
-        ]),
-        Enrollment.find({ user: wallet })
-          .sort({ enrolledAt: -1 })
-          .limit(100)
-          .select("bountyId")
-          .lean(),
-        Enrollment.countDocuments({ user: wallet }),
-      ]);
+        },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      Submission.aggregate([
+        { $match: { user: wallet } },
+        { $group: { _id: "$status", count: { $sum: 1 } } },
+      ]),
+      Enrollment.find({ user: wallet })
+        .sort({ enrolledAt: -1 })
+        .limit(100)
+        .select("bountyId")
+        .lean(),
+      Enrollment.countDocuments({ user: wallet }),
+      getUsdEarningsForUser(req, user),
+    ]);
 
     const bountyStats = {
       active: 0,
@@ -170,6 +205,12 @@ const getUserDashboard = async (req, res) => {
         walletAddress: wallet,
         reputationScore: user.reputationScore || 0,
         totalEarnings: getTotalEarnings(user),
+        totalEarningsUsd: usdEarnings.totalEarningsUsd,
+        earningsUsdBreakdown: usdEarnings.breakdown,
+        earningsUsdStatus: usdEarnings.status,
+        ...(usdEarnings.errorCode
+          ? { earningsUsdErrorCode: usdEarnings.errorCode }
+          : {}),
         tasksCompleted: user.stats?.tasksCompleted || 0,
       },
       bounties: bountyStats,
@@ -395,9 +436,7 @@ const getUserDataDeletionRequests = async (req, res) => {
     ]);
 
     return res.status(200).json({
-      requests: requests.map((request) =>
-        serializeUserDataRequest(request),
-      ),
+      requests: requests.map((request) => serializeUserDataRequest(request)),
       pagination: {
         page,
         limit,
@@ -471,7 +510,9 @@ const updateAdminUserDataDeletionRequest = async (req, res) => {
   const terminal = status === "completed" || status === "rejected";
 
   try {
-    const existing = await UserDataRequest.findById(id).select("_id status").lean();
+    const existing = await UserDataRequest.findById(id)
+      .select("_id status")
+      .lean();
     if (!existing) {
       return res.status(404).json({
         code: "NOT_FOUND",

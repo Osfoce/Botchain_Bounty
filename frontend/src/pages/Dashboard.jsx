@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccount } from "wagmi";
@@ -37,9 +36,7 @@ function Dashboard({ dark, setDark }) {
 
   // Show Admin only when the connected wallet is an admin wallet.
   const isAdmin =
-    isConnected &&
-    Boolean(address) &&
-    isConfiguredAdminWallet(address);
+    isConnected && Boolean(address) && isConfiguredAdminWallet(address);
 
   const [loading, setLoading] = useState(true);
   const [bounties, setBounties] = useState([]);
@@ -50,7 +47,8 @@ function Dashboard({ dark, setDark }) {
   const [stats, setStats] = useState({
     completed: 0,
     inProgress: 0,
-    earnings: 0,
+    earningsUsd: null,
+    earningsUsdStatus: "unavailable",
   });
 
   const [enrolledBountyIds, setEnrolledBountyIds] = useState([]);
@@ -144,7 +142,8 @@ function Dashboard({ dark, setDark }) {
       setStats({
         completed: data.user?.tasksCompleted || 0,
         inProgress: data.submissions?.pending || 0,
-        earnings: data.user?.totalEarnings || 0,
+        earningsUsd: data.user?.totalEarningsUsd ?? null,
+        earningsUsdStatus: data.user?.earningsUsdStatus || "unavailable",
       });
 
       setEnrolledBountyIds(data.enrolledBountyIds || []);
@@ -180,13 +179,7 @@ function Dashboard({ dark, setDark }) {
     if (isConnected && address && isAuthenticated) {
       loadDashboardStats();
     }
-  }, [
-    address,
-    isAuthenticated,
-    isConnected,
-    loadBounties,
-    loadDashboardStats,
-  ]);
+  }, [address, isAuthenticated, isConnected, loadBounties, loadDashboardStats]);
 
   useEffect(() => {
     loadDataDeletionRequest();
@@ -194,14 +187,26 @@ function Dashboard({ dark, setDark }) {
 
   const formatEarnings = (value) => {
     const num = Number(value) || 0;
-
-    return {
-      dollars: Math.floor(num).toLocaleString(),
-      cents: (num % 1).toFixed(2).split(".")[1] || "00",
-    };
+    // Avoid floating point rounding errors by working with integer cents
+    const totalCents = Math.round(num * 100);
+    const dollars = Math.floor(totalCents / 100).toLocaleString();
+    const cents = (totalCents % 100).toString().padStart(2, "0");
+    return { dollars, cents };
   };
 
-  const { dollars, cents } = formatEarnings(stats.earnings);
+  const { dollars, cents } = formatEarnings(stats.earningsUsd);
+  const earningsComponent =
+    stats.earningsUsdStatus === "complete" && stats.earningsUsd !== null ? (
+      `${dollars}.${cents}`
+    ) : (
+      <span className={panelMuted}>USD N/A</span>
+    );
+  const earningsDescription =
+    stats.earningsUsdStatus === "incomplete"
+      ? "USD value incomplete: some reward history is unattributed"
+      : stats.earningsUsdStatus === "unavailable"
+        ? "Current USD pricing is unavailable"
+        : "Estimated USD value at current prices";
 
   const handleFilterChange = (status) => {
     setFilter(status);
@@ -325,8 +330,8 @@ function Dashboard({ dark, setDark }) {
   const statItems = [
     {
       label: "Total earnings",
-      value: `${dollars}.${cents}`,
-      description: "Rewards collected",
+      value: earningsComponent,
+      description: earningsDescription,
       icon: FiDollarSign,
       index: "01",
       featured: true,
@@ -638,7 +643,9 @@ function Dashboard({ dark, setDark }) {
                   disabled={!isAuthenticated || dataExporting}
                   className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#00A87D] px-4 text-xs font-bold text-white transition hover:bg-[#008F6A] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  <FiDownload className={dataExporting ? "animate-pulse" : ""} />
+                  <FiDownload
+                    className={dataExporting ? "animate-pulse" : ""}
+                  />
                   {dataExporting ? "Preparing export..." : "Download JSON"}
                 </button>
                 {!isAuthenticated && (
@@ -679,7 +686,9 @@ function Dashboard({ dark, setDark }) {
                       </span>
                       <span className={`text-xs ${muted}`}>
                         Updated{" "}
-                        {new Date(dataDeletionRequest.updatedAt).toLocaleDateString()}
+                        {new Date(
+                          dataDeletionRequest.updatedAt,
+                        ).toLocaleDateString()}
                       </span>
                     </div>
                   ) : (

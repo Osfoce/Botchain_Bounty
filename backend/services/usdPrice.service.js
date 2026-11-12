@@ -44,7 +44,7 @@ const resolveAsset = ({ chainId, token, tokenDecimals }) => {
       type: "peg",
     };
   }
-  if (normalizedChainId === 677 && normalizedToken === "BOT") {
+  if ((normalizedChainId === 677 || normalizedChainId === 968) && normalizedToken === "BOT") {
     return {
       chainId: normalizedChainId,
       token: normalizedToken,
