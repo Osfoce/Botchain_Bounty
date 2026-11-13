@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAccount } from "wagmi";
 import axios from "axios";
@@ -120,6 +120,7 @@ function Dashboard({ dark, setDark }) {
   const [sendingMessage, setSendingMessage] = useState(false);
   const [chatError, setChatError] = useState("");
 
+  // FIX: useRef is now correctly imported from React.
   const messagesEndRef = useRef(null);
   const chatInputRef = useRef(null);
 
