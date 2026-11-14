@@ -920,137 +920,7 @@ function Dashboard({ dark, setDark }) {
             </div>
           </section>
 
-          {/* Privacy and data controls */}
-          <section className="mb-14">
-            <div className="mb-5">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#00A87D]">
-                PRIVACY & DATA
-              </p>
-
-              <h2 className="mt-2 text-xl font-black tracking-tight sm:text-2xl">
-                Your data controls
-              </h2>
-
-              <p className={`mt-2 max-w-2xl text-sm leading-6 ${muted}`}>
-                Export your account records or request a manual review of data
-                retention. Financial and blockchain records are preserved;
-                requests do not erase on-chain activity.
-              </p>
-            </div>
-
-            <div className="grid gap-4 lg:grid-cols-2">
-              <article className={`rounded-2xl border p-5 sm:p-6 ${surface}`}>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
-                    <FiDownload />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold">Download your data</h3>
-
-                    <p className={`mt-2 text-sm leading-6 ${muted}`}>
-                      Get a JSON export of your profile, bounties, submissions,
-                      enrollments, comments, rewards, and claim records.
-                      Collections are paginated automatically.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleDataExport}
-                  disabled={!isAuthenticated || dataExporting}
-                  className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#00A87D] px-4 text-xs font-bold text-white transition hover:bg-[#008F6A] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <FiDownload
-                    className={dataExporting ? "animate-pulse" : ""}
-                  />
-                  {dataExporting ? "Preparing export..." : "Download JSON"}
-                </button>
-
-                {!isAuthenticated && (
-                  <p className={`mt-3 text-xs ${muted}`}>
-                    Connect and sign in with your wallet to use data controls.
-                  </p>
-                )}
-              </article>
-
-              <article className={`rounded-2xl border p-5 sm:p-6 ${surface}`}>
-                <div className="flex items-start gap-4">
-                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
-                    <FiShield />
-                  </div>
-
-                  <div>
-                    <h3 className="font-bold">Data retention request</h3>
-
-                    <p className={`mt-2 text-sm leading-6 ${muted}`}>
-                      Submit a request for administrator review. This does not
-                      automatically delete records, and necessary financial,
-                      bounty, and blockchain history is retained.
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  className={`mt-4 rounded-xl border px-4 py-3 text-sm ${panelSurface}`}
-                  aria-live="polite"
-                >
-                  {dataRequestLoading ? (
-                    <span className={muted}>Checking request status...</span>
-                  ) : dataDeletionRequest ? (
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span>
-                        Status:{" "}
-                        <strong className="capitalize text-[#00A87D]">
-                          {dataDeletionRequest.status}
-                        </strong>
-                      </span>
-
-                      <span className={`text-xs ${muted}`}>
-                        Updated{" "}
-                        {new Date(
-                          dataDeletionRequest.updatedAt,
-                        ).toLocaleDateString()}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className={muted}>
-                      {isAuthenticated
-                        ? "No previous request found."
-                        : "Sign in to view your request status."}
-                    </span>
-                  )}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleDataDeletionRequest}
-                  disabled={
-                    !isAuthenticated ||
-                    dataRequestSubmitting ||
-                    dataRequestLoading ||
-                    ["pending", "reviewing"].includes(
-                      dataDeletionRequest?.status
-                    )
-                  }
-                  className={`mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                    dark
-                      ? "border-white/10 bg-white/[0.03] hover:border-[#00A87D]/50 hover:text-[#00A87D]"
-                      : "border-black/[0.08] bg-white hover:border-[#00A87D]/50 hover:text-[#008F6A]"
-                  }`}
-                >
-                  {dataRequestSubmitting
-                    ? "Submitting..."
-                    : ["pending", "reviewing"].includes(
-                          dataDeletionRequest?.status
-                        )
-                      ? "Request under review"
-                      : "Request data review"}
-                </button>
-              </article>
-            </div>
-          </section>
+     
 
           {/* Bounty discovery */}
           <section id="bounty-list" className="scroll-mt-24">
@@ -1334,46 +1204,137 @@ function Dashboard({ dark, setDark }) {
             )}
           </section>
 
-          {/* Contributor callout */}
-          <section className="mt-16">
-            <div className="relative overflow-hidden rounded-2xl bg-[#00A87D] p-6 text-white sm:p-8 lg:p-10">
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -right-12 -top-24 h-64 w-64 rounded-full border border-white/20 sm:h-80 sm:w-80"
-              />
+       {/* Privacy and data controls */}
+          {/* <section className="mb-14">
+            <div className="mb-5">
+              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#00A87D]">
+                PRIVACY & DATA
+              </p>
 
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute -right-2 -top-14 h-48 w-48 rounded-full border border-white/15 sm:h-64 sm:w-64"
-              />
+              <h2 className="mt-2 text-xl font-black tracking-tight sm:text-2xl">
+                Your data controls
+              </h2>
 
-              <div className="relative flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-                <div className="max-w-2xl">
-                  <div className="mb-4 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-white/75">
-                    <FiZap />
-                    BUILD SOMETHING VALUABLE
+              <p className={`mt-2 max-w-2xl text-sm leading-6 ${muted}`}>
+                Export your account records or request a manual review of data
+                retention. Financial and blockchain records are preserved;
+                requests do not erase on-chain activity.
+              </p>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <article className={`rounded-2xl border p-5 sm:p-6 ${surface}`}>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
+                    <FiDownload />
                   </div>
 
-                  <h2 className="text-2xl font-black tracking-tight sm:text-3xl">
-                    Have work that needs doing?
-                  </h2>
+                  <div>
+                    <h3 className="font-bold">Download your data</h3>
 
-                  <p className="mt-3 max-w-xl text-sm leading-6 text-white/80">
-                    Create a bounty, set a reward, and give contributors the
-                    opportunity to help bring your ideas to life.
-                  </p>
+                    <p className={`mt-2 text-sm leading-6 ${muted}`}>
+                      Get a JSON export of your profile, bounties, submissions,
+                      enrollments, comments, rewards, and claim records.
+                      Collections are paginated automatically.
+                    </p>
+                  </div>
                 </div>
 
-                <Link
-                  to="/create"
-                  className="group inline-flex min-h-12 shrink-0 items-center justify-center gap-3 self-start rounded-xl bg-[#071B14] px-5 text-sm font-bold text-white transition hover:-translate-y-0.5 hover:bg-[#0B2A20] md:self-center"
+                <button
+                  type="button"
+                  onClick={handleDataExport}
+                  disabled={!isAuthenticated || dataExporting}
+                  className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#00A87D] px-4 text-xs font-bold text-white transition hover:bg-[#008F6A] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Create a bounty
-                  <FiArrowRight className="transition-transform group-hover:translate-x-1" />
-                </Link>
-              </div>
+                  <FiDownload
+                    className={dataExporting ? "animate-pulse" : ""}
+                  />
+                  {dataExporting ? "Preparing export..." : "Download JSON"}
+                </button>
+
+                {!isAuthenticated && (
+                  <p className={`mt-3 text-xs ${muted}`}>
+                    Connect and sign in with your wallet to use data controls.
+                  </p>
+                )}
+              </article>
+
+              <article className={`rounded-2xl border p-5 sm:p-6 ${surface}`}>
+                <div className="flex items-start gap-4">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-lg text-[#00A87D]">
+                    <FiShield />
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold">Data retention request</h3>
+
+                    <p className={`mt-2 text-sm leading-6 ${muted}`}>
+                      Submit a request for administrator review. This does not
+                      automatically delete records, and necessary financial,
+                      bounty, and blockchain history is retained.
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={`mt-4 rounded-xl border px-4 py-3 text-sm ${panelSurface}`}
+                  aria-live="polite"
+                >
+                  {dataRequestLoading ? (
+                    <span className={muted}>Checking request status...</span>
+                  ) : dataDeletionRequest ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        Status:{" "}
+                        <strong className="capitalize text-[#00A87D]">
+                          {dataDeletionRequest.status}
+                        </strong>
+                      </span>
+
+                      <span className={`text-xs ${muted}`}>
+                        Updated{" "}
+                        {new Date(
+                          dataDeletionRequest.updatedAt,
+                        ).toLocaleDateString()}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className={muted}>
+                      {isAuthenticated
+                        ? "No previous request found."
+                        : "Sign in to view your request status."}
+                    </span>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDataDeletionRequest}
+                  disabled={
+                    !isAuthenticated ||
+                    dataRequestSubmitting ||
+                    dataRequestLoading ||
+                    ["pending", "reviewing"].includes(
+                      dataDeletionRequest?.status
+                    )
+                  }
+                  className={`mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl border px-4 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                    dark
+                      ? "border-white/10 bg-white/[0.03] hover:border-[#00A87D]/50 hover:text-[#00A87D]"
+                      : "border-black/[0.08] bg-white hover:border-[#00A87D]/50 hover:text-[#008F6A]"
+                  }`}
+                >
+                  {dataRequestSubmitting
+                    ? "Submitting..."
+                    : ["pending", "reviewing"].includes(
+                          dataDeletionRequest?.status
+                        )
+                      ? "Request under review"
+                      : "Request data review"}
+                </button>
+              </article>
             </div>
-          </section>
+          </section> */}
         </div>
       </main>
 
