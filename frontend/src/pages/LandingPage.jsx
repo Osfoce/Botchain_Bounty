@@ -66,9 +66,39 @@ const isThankYouMessage = (message) => {
   );
 };
 
+const readFeaturedBountyCache = (apiUrl) => {
+  try {
+    const cached = JSON.parse(
+      window.sessionStorage.getItem(`happy-bounty:featured:${apiUrl}`) || "null",
+    );
+    return Array.isArray(cached?.bounties) ? cached : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveFeaturedBountyCache = (apiUrl, bounties) => {
+  try {
+    window.sessionStorage.setItem(
+      `happy-bounty:featured:${apiUrl}`,
+      JSON.stringify({ bounties, savedAt: Date.now() }),
+    );
+  } catch {
+    // Featured bounties still load when browser storage is unavailable.
+  }
+};
+
 function LandingPage({ dark, setDark }) {
-  const [featuredBounties, setFeaturedBounties] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initialFeaturedCache] = useState(() =>
+    readFeaturedBountyCache(import.meta.env.VITE_API_URL),
+  );
+  const [featuredBounties, setFeaturedBounties] = useState(
+    initialFeaturedCache?.bounties || [],
+  );
+  const [loading, setLoading] = useState(!initialFeaturedCache);
+  const [refreshingFeatured, setRefreshingFeatured] = useState(false);
+  const [slowFeaturedLoad, setSlowFeaturedLoad] = useState(false);
+  const [featuredLoadMessage, setFeaturedLoadMessage] = useState("");
 
   const [stats, setStats] = useState({
     totalBounties: 0,
@@ -91,6 +121,16 @@ function LandingPage({ dark, setDark }) {
   const { handleNavigate } = useNav();
 
   const API_URL = import.meta.env.VITE_API_URL;
+
+  useEffect(() => {
+    if (!loading) {
+      setSlowFeaturedLoad(false);
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setSlowFeaturedLoad(true), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
 
   // Scroll-to-top visibility
   useEffect(() => {
@@ -169,6 +209,14 @@ function LandingPage({ dark, setDark }) {
   // Existing API endpoints and response fields are preserved.
   useEffect(() => {
     const fetchFeaturedBounties = async () => {
+      const cached = readFeaturedBountyCache(API_URL);
+      if (cached) {
+        setFeaturedBounties(cached.bounties);
+        setLoading(false);
+        setRefreshingFeatured(true);
+      }
+      setFeaturedLoadMessage("");
+
       try {
         const response = await axios.get(`${API_URL}/bounty/bounties`, {
           params: {
@@ -192,10 +240,17 @@ function LandingPage({ dark, setDark }) {
         }
 
         setFeaturedBounties(bounties);
+        saveFeaturedBountyCache(API_URL, bounties);
       } catch (err) {
         console.error("Error fetching featured bounties:", err);
+        setFeaturedLoadMessage(
+          cached
+            ? "Showing saved opportunities. We couldn't refresh them just now."
+            : "Featured opportunities couldn't be loaded right now.",
+        );
       } finally {
         setLoading(false);
+        setRefreshingFeatured(false);
       }
     };
 
@@ -486,10 +541,22 @@ function LandingPage({ dark, setDark }) {
           </Link>
         </div>
 
+        {(refreshingFeatured || featuredLoadMessage) && !loading && (
+          <div
+            role="status"
+            className={`relative z-10 mx-auto mt-5 max-w-7xl rounded-xl border px-4 py-3 text-sm ${surfaceClass}`}
+          >
+            {refreshingFeatured
+              ? "Updating featured opportunities. You can keep browsing while we check for changes."
+              : featuredLoadMessage}
+          </div>
+        )}
+
         {/* LOADING SKELETON */}
         {loading ? (
-          <div className="relative z-10 mx-auto grid max-w-7xl grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((item) => (
+          <>
+            <div className="relative z-10 mx-auto grid max-w-7xl grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
+              {[1, 2, 3].map((item) => (
               <div
                 key={item}
                 className={`skeleton-card relative h-[280px] overflow-hidden rounded-[24px] border p-5 ${surfaceClass}`}
@@ -547,9 +614,16 @@ function LandingPage({ dark, setDark }) {
                     }`}
                   />
                 </div>
-              </div>
-            ))}
-          </div>
+                </div>
+              ))}
+            </div>
+            {slowFeaturedLoad && (
+              <p className={`relative z-10 mx-auto mt-4 max-w-7xl text-center text-sm ${mutedText}`} role="status">
+                This is taking longer than usual. The server may be starting
+                after a period of inactivity; you can keep browsing.
+              </p>
+            )}
+          </>
         ) : featuredBounties.length === 0 ? (
           /* EMPTY STATE */
           <div
@@ -575,11 +649,15 @@ function LandingPage({ dark, setDark }) {
                 Your next opportunity
               </span>
 
-              <h3 className="text-xl font-bold">No featured bounties yet</h3>
+              <h3 className="text-xl font-bold">
+                {featuredLoadMessage
+                  ? "Featured opportunities are unavailable"
+                  : "No featured bounties yet"}
+              </h3>
 
               <p className={`mt-3 max-w-md text-sm leading-6 ${mutedText}`}>
-                There are no opportunities to display right now. Check back soon
-                to discover new tasks posted by the community.
+                {featuredLoadMessage ||
+                  "There are no opportunities to display right now. Check back soon to discover new tasks posted by the community."}
               </p>
 
               <Link

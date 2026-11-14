@@ -90,17 +90,58 @@ const isThankYouMessage = (message) => {
   return patterns.some((pattern) => pattern.test(normalized));
 };
 
+const getBountyPageCacheKey = (apiUrl, filter, page) =>
+  `happy-bounty:bounty-page:${apiUrl || "no-api"}:${filter}:${page}:6`;
+
+const readBountyPageCache = (apiUrl, filter, page) => {
+  try {
+    const raw = window.sessionStorage.getItem(
+      getBountyPageCacheKey(apiUrl, filter, page),
+    );
+    if (!raw) return null;
+
+    const cached = JSON.parse(raw);
+    if (!Array.isArray(cached.bounties)) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+};
+
+const saveBountyPageCache = (apiUrl, filter, page, data) => {
+  try {
+    window.sessionStorage.setItem(
+      getBountyPageCacheKey(apiUrl, filter, page),
+      JSON.stringify({ ...data, savedAt: Date.now() }),
+    );
+  } catch {
+    // The bounty list still works when browser storage is unavailable.
+  }
+};
+
 function Dashboard({ dark, setDark }) {
   const { address, isConnected } = useAccount();
   const { isAuthenticated } = useAuth();
+  const API_URL = import.meta.env.VITE_API_URL;
+  const bountyApi = `${API_URL}/bounty/bounties`;
+  const [initialBountyCache] = useState(() =>
+    readBountyPageCache(bountyApi, "all", 1),
+  );
 
   const isAdmin =
     isConnected && Boolean(address) && isConfiguredAdminWallet(address);
 
-  const [loading, setLoading] = useState(true);
-  const [bounties, setBounties] = useState([]);
+  const [loading, setLoading] = useState(!initialBountyCache);
+  const [refreshingBounties, setRefreshingBounties] = useState(false);
+  const [slowBountyLoad, setSlowBountyLoad] = useState(false);
+  const [bountyLoadMessage, setBountyLoadMessage] = useState("");
+  const [bounties, setBounties] = useState(
+    initialBountyCache?.bounties || [],
+  );
   const [filter, setFilter] = useState("all");
-  const [pagination, setPagination] = useState(null);
+  const [pagination, setPagination] = useState(
+    initialBountyCache?.pagination || null,
+  );
   const [currentPage, setCurrentPage] = useState(1);
 
   const [stats, setStats] = useState({
@@ -130,8 +171,6 @@ function Dashboard({ dark, setDark }) {
   const [dataRequestSubmitting, setDataRequestSubmitting] = useState(false);
   const [dataDeletionRequest, setDataDeletionRequest] = useState(null);
 
-  const API_URL = import.meta.env.VITE_API_URL;
-  const bountyApi = `${API_URL}/bounty/bounties`;
   const userInfoApi = `${API_URL}/user/details/${address}`;
 
   const surface = dark
@@ -184,7 +223,19 @@ function Dashboard({ dark, setDark }) {
 
   // Load bounties
   const loadBounties = useCallback(async () => {
-    setLoading(true);
+    const cachedPage = readBountyPageCache(bountyApi, filter, currentPage);
+    if (cachedPage) {
+      setBounties(cachedPage.bounties);
+      setPagination(cachedPage.pagination || null);
+      setLoading(false);
+      setRefreshingBounties(true);
+    } else {
+      setBounties([]);
+      setPagination(null);
+      setLoading(true);
+      setRefreshingBounties(false);
+    }
+    setBountyLoadMessage("");
 
     try {
       const response = await axios.get(bountyApi, {
@@ -197,13 +248,36 @@ function Dashboard({ dark, setDark }) {
 
       setBounties(response.data.bounties || []);
       setPagination(response.data.pagination);
+      saveBountyPageCache(bountyApi, filter, currentPage, {
+        bounties: response.data.bounties || [],
+        pagination: response.data.pagination || null,
+      });
     } catch (err) {
       console.error("Error loading bounties:", err);
-      showToast.error("Couldn't fetch bounties");
+      if (cachedPage) {
+        setBountyLoadMessage(
+          "Showing saved opportunities. We couldn't refresh them just now.",
+        );
+      } else {
+        setBountyLoadMessage(
+          "We couldn't load opportunities. Check your connection and try again.",
+        );
+      }
     } finally {
       setLoading(false);
+      setRefreshingBounties(false);
     }
   }, [bountyApi, currentPage, filter]);
+
+  useEffect(() => {
+    if (!loading) {
+      setSlowBountyLoad(false);
+      return undefined;
+    }
+
+    const timeout = window.setTimeout(() => setSlowBountyLoad(true), 8000);
+    return () => window.clearTimeout(timeout);
+  }, [loading]);
 
   // Load dashboard statistics
   const loadDashboardStats = useCallback(async () => {
@@ -969,14 +1043,16 @@ function Dashboard({ dark, setDark }) {
                 <button
                   type="button"
                   onClick={handleRefresh}
-                  disabled={loading}
+                  disabled={loading || refreshingBounties}
                   className={`inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-xs font-semibold transition hover:border-[#00A87D]/40 hover:text-[#00A87D] disabled:cursor-not-allowed disabled:opacity-50 ${
                     dark
                       ? "border-white/10 bg-white/[0.03]"
                       : "border-black/[0.08] bg-white"
                   }`}
                 >
-                  <FiRefreshCw className={loading ? "animate-spin" : ""} />
+                  <FiRefreshCw
+                    className={loading || refreshingBounties ? "animate-spin" : ""}
+                  />
                   Refresh
                 </button>
 
@@ -1024,6 +1100,8 @@ function Dashboard({ dark, setDark }) {
                 <span>
                   {loading
                     ? "Finding opportunities..."
+                    : refreshingBounties
+                      ? "Updating opportunities..."
                     : `${bounties.length} ${
                         bounties.length === 1 ? "bounty" : "bounties"
                       } on this page`}
@@ -1031,14 +1109,37 @@ function Dashboard({ dark, setDark }) {
               </div>
             </div>
 
+            {(refreshingBounties || bountyLoadMessage) && !loading && (
+              <div
+                role="status"
+                className={`mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-sm ${surface}`}
+              >
+                <span className={muted}>
+                  {refreshingBounties
+                    ? "Updating opportunities. You can keep browsing while we check for changes."
+                    : bountyLoadMessage}
+                </span>
+                {bountyLoadMessage && (
+                  <button
+                    type="button"
+                    onClick={loadBounties}
+                    className="shrink-0 font-semibold text-[#00A87D] hover:underline"
+                  >
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Bounty loading and results */}
             {loading ? (
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-                {[1, 2, 3, 4, 5, 6].map((item) => (
-                  <div
-                    key={item}
-                    className={`animate-pulse rounded-2xl border p-5 ${surface}`}
-                  >
+              <>
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  {[1, 2, 3, 4, 5, 6].map((item) => (
+                    <div
+                      key={item}
+                      className={`animate-pulse rounded-2xl border p-5 ${surface}`}
+                    >
                     <div className="flex items-center gap-3">
                       <div
                         className={`h-11 w-11 rounded-xl ${
@@ -1091,9 +1192,16 @@ function Dashboard({ dark, setDark }) {
                         dark ? "bg-white/[0.06]" : "bg-black/[0.05]"
                       }`}
                     />
-                  </div>
-                ))}
-              </div>
+                    </div>
+                  ))}
+                </div>
+                {slowBountyLoad && (
+                  <p className={`mt-4 text-center text-sm ${muted}`} role="status">
+                    This is taking longer than usual. The server may be starting
+                    after a period of inactivity; you can keep this page open.
+                  </p>
+                )}
+              </>
             ) : bounties.length > 0 ? (
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
                 {bounties.map((bounty) => (
@@ -1104,6 +1212,23 @@ function Dashboard({ dark, setDark }) {
                     enrolledBountyIds={enrolledBountyIds}
                   />
                 ))}
+              </div>
+            ) : bountyLoadMessage ? (
+              <div
+                role="alert"
+                className={`rounded-2xl border px-6 py-12 text-center ${surface}`}
+              >
+                <h3 className="text-lg font-bold">Opportunities are unavailable</h3>
+                <p className={`mx-auto mt-2 max-w-md text-sm leading-6 ${muted}`}>
+                  {bountyLoadMessage}
+                </p>
+                <button
+                  type="button"
+                  onClick={loadBounties}
+                  className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#00A87D] px-5 text-xs font-bold text-white transition hover:bg-[#008F6A]"
+                >
+                  <FiRefreshCw /> Try again
+                </button>
               </div>
             ) : (
               <div
