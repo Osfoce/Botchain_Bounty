@@ -997,10 +997,11 @@ const BountyDetail = () => {
           createdAt: new Date().toISOString(),
         };
         persistPendingDistribution(pendingRecord);
-        showToast.error(
+        showToast.info(
           error.transactionConfirmed
-            ? "The blockchain transaction succeeded, but synchronization is still required. Do not assign winners again; retry synchronization."
-            : "The transaction was submitted, but confirmation is still unknown. Do not assign winners again; check its status and retry synchronization when confirmed.",
+            ? "Winner assignment succeeded on-chain. The reward records still need to sync; do not submit the distribution again."
+            : "The transaction was submitted, but its confirmation is still unknown. Check its status before taking further action.",
+          6000,
           { id: toastId },
         );
       } else {
@@ -1030,8 +1031,9 @@ const BountyDetail = () => {
       await synchronizeRewardAssignment(pendingRecord);
     } catch (error) {
       console.error("Distribution synchronization failed:", error);
-      showToast.error(
-        `Blockchain transaction succeeded, but application records are still synchronizing. Retry sync for ${tx.hash}.`,
+      showToast.info(
+        `Distribution succeeded on-chain. Reward records still need to sync.`,
+        6000,
         { id: toastId },
       );
     } finally {
@@ -1046,8 +1048,8 @@ const BountyDetail = () => {
         "Sign in with your wallet before syncing rewards.",
       );
     setDistributing(true);
+    let record = pendingDistributionSync;
     try {
-      let record = pendingDistributionSync;
       if (!isValidDistributionSyncRecord(record)) {
         throw new Error("Pending distribution recovery data is invalid.");
       }
@@ -1082,11 +1084,21 @@ const BountyDetail = () => {
       await synchronizeRewardAssignment(record);
     } catch (error) {
       console.error("Could not retry distribution synchronization:", error);
-      showToast.error(
-        error.response?.data?.error ||
-          error.message ||
-          "Synchronization is still pending. You can safely retry.",
-      );
+      if (
+        record.status === "pending_confirmation" &&
+        !error.message?.includes("reverted on-chain")
+      ) {
+        showToast.info(
+          "No confirmed transaction receipt is available yet. Check again once the network has processed it.",
+          6000,
+        );
+      } else {
+        showToast.error(
+          error.response?.data?.error ||
+            error.message ||
+            "Reward records are still waiting to sync. You can safely retry.",
+        );
+      }
     } finally {
       setDistributing(false);
     }
@@ -1445,11 +1457,16 @@ const BountyDetail = () => {
               <h2 className="font-bold">
                 {pendingDistributionSync.status === "pending_confirmation"
                   ? "Winner assignment confirmation is pending"
-                  : "Distribution synchronization is pending"}
+                  : distributing
+                    ? "Distribution succeeded on-chain"
+                    : "Distribution succeeded on-chain; reward records need syncing"}
               </h2>
               <p className="mt-1 text-sm leading-6">
-                The saved transaction will be checked/synchronized without
-                submitting another winner-assignment transaction.
+                {pendingDistributionSync.status === "pending_confirmation"
+                  ? "The transaction outcome is not confirmed yet. Check its status before retrying anything."
+                  : distributing
+                    ? "The app is syncing reward records now. You do not need to submit the distribution again."
+                    : "Rewards were assigned on the blockchain, but the app has not finished recording them. Syncing will not submit another blockchain transaction."}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <a
@@ -1466,18 +1483,21 @@ const BountyDetail = () => {
                   {pendingDistributionSync.txHash}
                   <FiExternalLink size={13} />
                 </a>
-                <button
-                  type="button"
-                  onClick={retryDistributionSync}
-                  disabled={distributing}
-                  className={`${primaryButton} !px-4 !py-2.5`}
-                >
-                  {distributing
-                    ? "Checking..."
-                    : pendingDistributionSync.status === "pending_confirmation"
-                      ? "Check confirmation & retry synchronization"
-                      : "Retry synchronization"}
-                </button>
+                {(pendingDistributionSync.status === "pending_confirmation" ||
+                  !distributing) && (
+                  <button
+                    type="button"
+                    onClick={retryDistributionSync}
+                    disabled={distributing}
+                    className={`${primaryButton} !px-4 !py-2.5`}
+                  >
+                    {distributing
+                      ? "Checking..."
+                      : pendingDistributionSync.status === "pending_confirmation"
+                        ? "Check transaction status"
+                        : "Sync reward records"}
+                  </button>
+                )}
               </div>
             </section>
           )}

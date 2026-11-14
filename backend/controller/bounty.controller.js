@@ -8,7 +8,9 @@ const buildSortQuery = require("../utils/buildSortQuery");
 const { isAdminWallet } = require("../middleware/authorization");
 const chainSettings = require("../config/chains");
 const { CHAINS } = chainSettings;
-const { verifyBountyCreation } = require("../services/verifiedBountyCreation.service");
+const {
+  verifyBountyCreation,
+} = require("../services/verifiedBountyCreation.service");
 const {
   decimalToBaseUnits,
   sumBountyBudgets,
@@ -86,7 +88,8 @@ const createBounty = async (req, res) => {
       } catch {
         return res.status(400).json({
           code: "INVALID_REWARD_AMOUNT",
-          message: "Reward cannot be represented in the selected token's precision",
+          message:
+            "Reward cannot be represented in the selected token's precision",
         });
       }
     }
@@ -118,7 +121,8 @@ const createBounty = async (req, res) => {
       if (
         bountyContract != null &&
         (typeof bountyContract !== "string" ||
-          bountyContract.toLowerCase() !== chainConfig.bountyContract.toLowerCase())
+          bountyContract.toLowerCase() !==
+            chainConfig.bountyContract.toLowerCase())
       ) {
         return res.status(409).json({
           code: "CHAIN_CONFIGURATION_MISMATCH",
@@ -196,7 +200,8 @@ const createBounty = async (req, res) => {
       const existing = await Bounty.findOne({ txHash: verifiedLink.txHash });
       if (existing) {
         if (
-          existing.creator?.toLowerCase() !== req.auth.walletAddress.toLowerCase() ||
+          existing.creator?.toLowerCase() !==
+            req.auth.walletAddress.toLowerCase() ||
           Number(existing.network) !== chainId ||
           String(existing.blockchainId) !== String(verifiedLink.blockchainId)
         ) {
@@ -303,7 +308,8 @@ const getBounty = async (req, res) => {
     const isCreator =
       req.auth?.walletAddress &&
       bounty.creator?.toLowerCase() === req.auth.walletAddress;
-    const isAdmin = req.auth?.walletAddress && isAdminWallet(req.auth.walletAddress);
+    const isAdmin =
+      req.auth?.walletAddress && isAdminWallet(req.auth.walletAddress);
     if (bounty.archivedAt && !isCreator && !isAdmin) {
       return res.status(404).json({ message: "Bounty not found" });
     }
@@ -327,7 +333,9 @@ const getBounty = async (req, res) => {
       const privateSubmissions = await Submission.find({ bountyId: bounty._id })
         .sort({ submittedAt: -1 })
         .limit(100)
-        .select("_id bountyId bountyTitle user description projectLink image status submittedAt")
+        .select(
+          "_id bountyId bountyTitle user description projectLink image status submittedAt",
+        )
         .lean();
       submissions = privateSubmissions.map((submission) =>
         serializeSubmission(submission, { includeWork: true }),
@@ -370,10 +378,54 @@ const getBounties = async (req, res) => {
 
     const total = await Bounty.countDocuments(filter);
 
-    const bounties = await Bounty.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit);
+    const now = new Date();
+
+    const bounties = await Bounty.aggregate([
+      { $match: filter },
+      // Add a computed “status” field, identical to getBountyStatus logic
+      {
+        $addFields: {
+          status: {
+            $switch: {
+              branches: [
+                {
+                  case: { $eq: ["$lifecycleStatus", "completed"] },
+                  then: "completed",
+                },
+                {
+                  case: { $eq: ["$lifecycleStatus", "cancelled"] },
+                  then: "cancelled",
+                },
+                { case: { $gt: ["$startDate", now] }, then: "upcoming" },
+                { case: { $gte: ["$deadline", now] }, then: "active" },
+              ],
+              default: "ended",
+            },
+          },
+        },
+      },
+      // Map the textual status to a numeric order for sorting
+      {
+        $addFields: {
+          statusOrder: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$status", "active"] }, then: 0 },
+                { case: { $eq: ["$status", "ended"] }, then: 1 },
+                { case: { $eq: ["$status", "completed"] }, then: 2 },
+                { case: { $eq: ["$status", "cancelled"] }, then: 3 },
+              ],
+              default: 99,
+            },
+          },
+        },
+      },
+      // Status rank is always primary. A user-selected sort only orders
+      // bounties within the same status group.
+      { $sort: { statusOrder: 1, ...sort } },
+      { $skip: skip },
+      { $limit: limit },
+    ]);
 
     res.status(200).json({
       bounties: bounties.map((bounty) => serializeBounty(bounty)),
@@ -415,13 +467,19 @@ const updateBounty = async (req, res) => {
       });
     }
 
-    const allowedFields = new Set(["title", "description", "originLink", "deadline"]);
+    const allowedFields = new Set([
+      "title",
+      "description",
+      "originLink",
+      "deadline",
+    ]);
     const rejectedFields = Object.keys(req.body).filter(
       (field) => !allowedFields.has(field),
     );
     if (rejectedFields.length > 0) {
       return res.status(400).json({
-        message: "Only title, description, originLink, and deadline can be updated",
+        message:
+          "Only title, description, originLink, and deadline can be updated",
       });
     }
 
@@ -435,7 +493,9 @@ const updateBounty = async (req, res) => {
 
     if (updates.deadline !== undefined) {
       const nextDeadline = new Date(updates.deadline);
-      if (nextDeadline.getTime() <= new Date(existingBounty.deadline).getTime()) {
+      if (
+        nextDeadline.getTime() <= new Date(existingBounty.deadline).getTime()
+      ) {
         return res.status(400).json({
           code: "DEADLINE_MUST_BE_EXTENDED",
           message: "The deadline can only be extended",
