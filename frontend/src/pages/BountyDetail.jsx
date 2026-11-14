@@ -1193,10 +1193,22 @@ const BountyDetail = () => {
       return showToast.error("Please choose a valid deadline");
     }
 
+    const isCompleted =
+      String(bounty.status || "").toLowerCase() === "completed";
+
     const currentDeadlineDay = toLocalDateInput(currentDeadline);
     const deadlineChanged = editBountyForm.deadline !== currentDeadlineDay;
+    if (isCompleted && deadlineChanged) {
+      return showToast.error(
+        "The deadline cannot be changed because this bounty is completed.",
+      );
+    }
     const nextDeadline = new Date(`${editBountyForm.deadline}T00:00:00`);
-    if (deadlineChanged && nextDeadline.getTime() <= currentDeadline.getTime()) {
+    if (
+      !isCompleted &&
+      deadlineChanged &&
+      nextDeadline.getTime() <= currentDeadline.getTime()
+    ) {
       return showToast.error("The deadline can only be extended");
     }
 
@@ -1206,7 +1218,9 @@ const BountyDetail = () => {
         title: editBountyForm.title.trim(),
         description: editBountyForm.description.trim(),
       };
-      if (deadlineChanged) updates.deadline = nextDeadline.toISOString();
+      if (deadlineChanged && !isCompleted) {
+        updates.deadline = nextDeadline.toISOString();
+      }
       const { data } = await apiClient.patch(`/bounty/update/${id}`, updates);
       const updatedBounty = data.bounty || data;
       setBounty((previous) => ({ ...previous, ...updatedBounty }));
@@ -1977,18 +1991,23 @@ const BountyDetail = () => {
                         <FiUsers className="text-[#008a66] dark:text-[#00D6A0]" />
                         Participants
                         <span className="rounded-lg bg-[#f0f4ef] dark:bg-white/[0.05] px-2 py-1 text-xs font-semibold text-[#69736a] dark:text-white/60">
-                          {participantPagination?.total ?? bounty?.submissions?.count ?? 0}
+                          {participantPagination?.total ??
+                            bounty?.submissions?.count ??
+                            0}
                         </span>
                       </h2>
                       <p className="mt-2 text-sm text-[#778077] dark:text-white/50">
-                        Everyone who submitted work to this bounty. Your wallet is highlighted when you participated.
+                        Everyone who submitted work to this bounty. Your wallet
+                        is highlighted when you participated.
                       </p>
                     </div>
                     <div className="relative w-full sm:max-w-xs">
                       <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#899189]" />
                       <input
                         value={participantSearch}
-                        onChange={(event) => setParticipantSearch(event.target.value)}
+                        onChange={(event) =>
+                          setParticipantSearch(event.target.value)
+                        }
                         placeholder="Filter visible wallets"
                         className={`${inputClass} pl-9`}
                         aria-label="Search participants by wallet address"
@@ -1997,65 +2016,155 @@ const BountyDetail = () => {
                   </div>
 
                   <div className="mb-4 flex flex-wrap gap-2">
-                    {[{ value: "all", label: "Everyone" }, { value: "winners", label: "Winners" }, { value: "others", label: "Other participants" }].map((filter) => (
-                      <button key={filter.value} type="button" onClick={() => setParticipantFilter(filter.value)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${participantFilter === filter.value ? "bg-[#00D6A0] text-[#06271e]" : "border border-[#dfe3dc] dark:border-white/10 text-[#687269] dark:text-white/60 hover:border-[#00D6A0]"}`}>
+                    {[
+                      { value: "all", label: "Everyone" },
+                      { value: "winners", label: "Winners" },
+                      { value: "others", label: "Other participants" },
+                    ].map((filter) => (
+                      <button
+                        key={filter.value}
+                        type="button"
+                        onClick={() => setParticipantFilter(filter.value)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${participantFilter === filter.value ? "bg-[#00D6A0] text-[#06271e]" : "border border-[#dfe3dc] dark:border-white/10 text-[#687269] dark:text-white/60 hover:border-[#00D6A0]"}`}
+                      >
                         {filter.label}
                       </button>
                     ))}
                   </div>
 
                   {participantsLoading ? (
-                    <div className="py-8 text-center text-sm text-[#899189]">Loading participants…</div>
+                    <div className="py-8 text-center text-sm text-[#899189]">
+                      Loading participants…
+                    </div>
                   ) : participants.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-[#dfe3dc] dark:border-white/10 px-4 py-10 text-center">
                       <FiUsers className="mx-auto mb-2 text-2xl text-[#899189]" />
                       <p className="font-semibold">No participants yet</p>
-                      <p className="mt-1 text-sm text-[#899189]">Submitted entries will appear here.</p>
+                      <p className="mt-1 text-sm text-[#899189]">
+                        Submitted entries will appear here.
+                      </p>
                     </div>
                   ) : (
                     <div className="divide-y divide-[#e5e9e3] dark:divide-white/[0.08]">
-                      {participantRows.filter((person) => {
-                        const isWinner = winnerAddressesSet.has(person.walletAddress?.toLowerCase());
-                        const matchesSearch = person.walletAddress?.toLowerCase().includes(participantSearch.trim().toLowerCase());
-                        return matchesSearch && (participantFilter === "all" || (participantFilter === "winners" ? isWinner : !isWinner));
-                      }).map((person) => {
-                        const wallet = person.walletAddress?.toLowerCase();
-                        const isCurrent = Boolean(address && wallet === address.toLowerCase());
-                        const isWinner = winnerAddressesSet.has(wallet);
-                        return (
-                          <div key={wallet} className={`flex flex-wrap items-center justify-between gap-3 py-3 ${isCurrent ? "rounded-xl bg-[#00D6A0]/[0.06] px-3" : ""}`}>
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f4ef] dark:bg-white/[0.06] text-[#008a66] dark:text-[#00D6A0]"><FiUsers size={15} /></div>
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="font-mono text-sm font-semibold">{shortenAddress(person.walletAddress)}</span>
-                                  {isCurrent && <span className="rounded-full border border-[#00D6A0]/30 px-2 py-0.5 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">YOU</span>}
-                                  {isWinner && <span className="rounded-full bg-[#00D6A0]/10 px-2 py-0.5 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">WINNER</span>}
+                      {participantRows
+                        .filter((person) => {
+                          const isWinner = winnerAddressesSet.has(
+                            person.walletAddress?.toLowerCase(),
+                          );
+                          const matchesSearch = person.walletAddress
+                            ?.toLowerCase()
+                            .includes(participantSearch.trim().toLowerCase());
+                          return (
+                            matchesSearch &&
+                            (participantFilter === "all" ||
+                              (participantFilter === "winners"
+                                ? isWinner
+                                : !isWinner))
+                          );
+                        })
+                        .map((person) => {
+                          const wallet = person.walletAddress?.toLowerCase();
+                          const isCurrent = Boolean(
+                            address && wallet === address.toLowerCase(),
+                          );
+                          const isWinner = winnerAddressesSet.has(wallet);
+                          return (
+                            <div
+                              key={wallet}
+                              className={`flex flex-wrap items-center justify-between gap-3 py-3 ${isCurrent ? "rounded-xl bg-[#00D6A0]/[0.06] px-3" : ""}`}
+                            >
+                              <div className="flex min-w-0 items-center gap-3">
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f4ef] dark:bg-white/[0.06] text-[#008a66] dark:text-[#00D6A0]">
+                                  <FiUsers size={15} />
                                 </div>
-                                <p className="mt-1 text-xs text-[#899189]">Submitted {formatDateTime(person.submittedAt)}</p>
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono text-sm font-semibold">
+                                      {shortenAddress(person.walletAddress)}
+                                    </span>
+                                    {isCurrent && (
+                                      <span className="rounded-full border border-[#00D6A0]/30 px-2 py-0.5 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">
+                                        YOU
+                                      </span>
+                                    )}
+                                    {isWinner && (
+                                      <span className="rounded-full bg-[#00D6A0]/10 px-2 py-0.5 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">
+                                        WINNER
+                                      </span>
+                                    )}
+                                  </div>
+                                  <p className="mt-1 text-xs text-[#899189]">
+                                    Submitted{" "}
+                                    {formatDateTime(person.submittedAt)}
+                                  </p>
+                                </div>
                               </div>
+                              {isWinner && (
+                                <span className="text-xs font-semibold text-[#008a66] dark:text-[#00D6A0]">
+                                  Selected winner
+                                </span>
+                              )}
                             </div>
-                            {isWinner && <span className="text-xs font-semibold text-[#008a66] dark:text-[#00D6A0]">Selected winner</span>}
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
                     </div>
                   )}
 
-                  {!participantsLoading && participants.length > 0 && participantRows.filter((person) => {
-                    const isWinner = winnerAddressesSet.has(person.walletAddress?.toLowerCase());
-                    const matchesSearch = person.walletAddress?.toLowerCase().includes(participantSearch.trim().toLowerCase());
-                    return matchesSearch && (participantFilter === "all" || (participantFilter === "winners" ? isWinner : !isWinner));
-                  }).length === 0 && (
-                    <p className="rounded-xl bg-[#f8faf7] dark:bg-white/[0.03] px-4 py-6 text-center text-sm text-[#899189]">No participants match this search or filter.</p>
-                  )}
+                  {!participantsLoading &&
+                    participants.length > 0 &&
+                    participantRows.filter((person) => {
+                      const isWinner = winnerAddressesSet.has(
+                        person.walletAddress?.toLowerCase(),
+                      );
+                      const matchesSearch = person.walletAddress
+                        ?.toLowerCase()
+                        .includes(participantSearch.trim().toLowerCase());
+                      return (
+                        matchesSearch &&
+                        (participantFilter === "all" ||
+                          (participantFilter === "winners"
+                            ? isWinner
+                            : !isWinner))
+                      );
+                    }).length === 0 && (
+                      <p className="rounded-xl bg-[#f8faf7] dark:bg-white/[0.03] px-4 py-6 text-center text-sm text-[#899189]">
+                        No participants match this search or filter.
+                      </p>
+                    )}
 
                   {participantPagination && participantPagination.pages > 1 && (
                     <div className="mt-5 flex items-center justify-between border-t border-[#e5e9e3] dark:border-white/[0.08] pt-4">
-                      <span className="text-xs text-[#899189]">Page {participantPagination.page} of {participantPagination.pages}</span>
+                      <span className="text-xs text-[#899189]">
+                        Page {participantPagination.page} of{" "}
+                        {participantPagination.pages}
+                      </span>
                       <div className="flex gap-2">
-                        <button type="button" disabled={!participantPagination.hasPrev || participantsLoading} onClick={() => loadParticipants(id, participantPage - 1)} className={secondaryButton}>Previous</button>
-                        <button type="button" disabled={!participantPagination.hasNext || participantsLoading} onClick={() => loadParticipants(id, participantPage + 1)} className={secondaryButton}>Next</button>
+                        <button
+                          type="button"
+                          disabled={
+                            !participantPagination.hasPrev ||
+                            participantsLoading
+                          }
+                          onClick={() =>
+                            loadParticipants(id, participantPage - 1)
+                          }
+                          className={secondaryButton}
+                        >
+                          Previous
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            !participantPagination.hasNext ||
+                            participantsLoading
+                          }
+                          onClick={() =>
+                            loadParticipants(id, participantPage + 1)
+                          }
+                          className={secondaryButton}
+                        >
+                          Next
+                        </button>
                       </div>
                     </div>
                   )}
@@ -2063,7 +2172,8 @@ const BountyDetail = () => {
               </section>
 
               {winnersData?.isDistributed &&
-                (winnersData.winners?.length > 0 || winnersData.claimed?.length > 0) && (
+                (winnersData.winners?.length > 0 ||
+                  winnersData.claimed?.length > 0) && (
                   <section className={cardClass}>
                     <div className="p-5 sm:p-7">
                       <div className="mb-5 flex items-center gap-3">
@@ -2083,8 +2193,10 @@ const BountyDetail = () => {
                       </div>
 
                       <div className="divide-y divide-[#e5e9e3] dark:divide-white/[0.08]">
-                        {[...(winnersData.winners || []), ...(winnersData.claimed || [])]
-                          .map((winner, index) => {
+                        {[
+                          ...(winnersData.winners || []),
+                          ...(winnersData.claimed || []),
+                        ].map((winner, index) => {
                           const current =
                             address?.toLowerCase() ===
                             winner.address?.toLowerCase();
@@ -2602,7 +2714,10 @@ const BountyDetail = () => {
               </button>
             </div>
 
-            <form onSubmit={handleUpdateBounty} className="space-y-5 p-5 sm:p-6">
+            <form
+              onSubmit={handleUpdateBounty}
+              className="space-y-5 p-5 sm:p-6"
+            >
               <div>
                 <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   Bounty title
@@ -2649,6 +2764,9 @@ const BountyDetail = () => {
                   type="date"
                   required
                   min={toLocalDateInput(bounty.deadline)}
+                  disabled={
+                    String(bounty.status || "").toLowerCase() === "completed"
+                  }
                   value={editBountyForm.deadline}
                   onChange={(event) =>
                     setEditBountyForm((previous) => ({
@@ -2659,7 +2777,9 @@ const BountyDetail = () => {
                   className={inputClass}
                 />
                 <p className="mt-2 text-xs text-[#899189] dark:text-white/40">
-                  The start date cannot be changed. You may keep the current deadline or choose a later date.
+                  {String(bounty.status || "").toLowerCase() === "completed"
+                    ? "The deadline cannot be changed because this bounty is completed."
+                    : "The start date cannot be changed. You may keep the current deadline or choose a later date."}
                 </p>
               </div>
 
