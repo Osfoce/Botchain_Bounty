@@ -1,5 +1,5 @@
 const express = require("express");
-const { submit, getUserSubmission, getBountySubmissions } = require("../controller/submission.controller");
+const { submit, getUserSubmission, getBountySubmissions, getBountyParticipants } = require("../controller/submission.controller");
 const { upload } = require('../middleware/upload'); // Path to your multer setup
 const { requireAuth, requireSelf } = require("../middleware/auth");
 const { privateReadLimiter } = require("../middleware/privateReadLimiter");
@@ -15,6 +15,18 @@ const submissionLimiters = createPolicyLimiters({
 });
 
 // create routes
+// Public participant directory. Only wallet addresses and submission timestamps are exposed.
+router
+  .route("/bounty/:id/participants")
+  .get(
+    validateRequest({
+      params: requestSchemas.idParams,
+      query: requestSchemas.paginationQuery,
+    }),
+    privateReadLimiter,
+    getBountyParticipants,
+  );
+
 router
   .route("/bounty/submit")
   .post(

@@ -161,6 +161,10 @@ const bountySchema = new mongoose.Schema(
         message: "Deadline must be after start date",
       },
     },
+    deadlineExtendedFrom: {
+      type: Date,
+      default: null,
+    },
     originLink: {
       type: String,
       trim: true,

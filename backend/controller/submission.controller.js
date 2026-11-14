@@ -355,4 +355,49 @@ const getBountySubmissions = async (req, res) => {
   }
 };
 
-module.exports = { submit, getUserSubmission, getBountySubmissions };
+// GET /bounty/:id/participants
+// Public, privacy-preserving directory: never expose submission work here.
+const getBountyParticipants = async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id)) {
+    return res.status(400).json({ error: "Invalid bounty id" });
+  }
+
+  try {
+    const bounty = await Bounty.findById(id).select("_id archivedAt").lean();
+    if (!bounty || bounty.archivedAt) {
+      return res.status(404).json({ error: "Bounty not found" });
+    }
+
+    const { page, limit, skip } = paginate(req.query || {});
+    const [participants, total] = await Promise.all([
+      Submission.find({ bountyId: id })
+        .sort({ submittedAt: -1, _id: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select("user submittedAt")
+        .lean(),
+      Submission.countDocuments({ bountyId: id }),
+    ]);
+
+    return res.status(200).json({
+      participants: participants.map(({ user, submittedAt }) => ({
+        walletAddress: user,
+        submittedAt,
+      })),
+      pagination: {
+        page, limit, total, pages: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1,
+      },
+    });
+  } catch (err) {
+    logRequestError(req, "bounty_participant_list_failed", err);
+    if (err.status === 400) {
+      return res.status(400).json({ code: "INVALID_REQUEST", error: "Invalid pagination parameters." });
+    }
+    return res.status(500).json({ code: "INTERNAL_ERROR", error: "Failed to fetch participants" });
+  }
+};
+
+module.exports = { submit, getUserSubmission, getBountySubmissions, getBountyParticipants };

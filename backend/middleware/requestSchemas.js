@@ -174,6 +174,7 @@ const requestSchemas = {
       title: z.string().trim().min(1).max(160).optional(),
       description: z.string().trim().min(1).max(20000).optional(),
       originLink: httpUrl.optional(),
+      deadline: date.optional(),
     })
     .strict()
     .refine((value) => Object.keys(value).length > 0),

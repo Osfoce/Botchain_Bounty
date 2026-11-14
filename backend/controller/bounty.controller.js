@@ -415,29 +415,38 @@ const updateBounty = async (req, res) => {
       });
     }
 
-    const allowedFields = new Set(["title", "description", "originLink"]);
+    const allowedFields = new Set(["title", "description", "originLink", "deadline"]);
     const rejectedFields = Object.keys(req.body).filter(
       (field) => !allowedFields.has(field),
     );
     if (rejectedFields.length > 0) {
       return res.status(400).json({
-        message: "Only title, description, and originLink can be updated",
+        message: "Only title, description, originLink, and deadline can be updated",
       });
     }
 
     const updates = Object.fromEntries(
       Object.entries(req.body).filter(([field]) => allowedFields.has(field)),
     );
-    const bounty = await Bounty.findByIdAndUpdate(id, updates, {
-      new: true,
-      runValidators: true,
-    });
-
-    if (!bounty) {
-      return res.status(404).json({
-        message: "Bounty not found",
-      });
+    const existingBounty = await Bounty.findById(id);
+    if (!existingBounty) {
+      return res.status(404).json({ message: "Bounty not found" });
     }
+
+    if (updates.deadline !== undefined) {
+      const nextDeadline = new Date(updates.deadline);
+      if (nextDeadline.getTime() <= new Date(existingBounty.deadline).getTime()) {
+        return res.status(400).json({
+          code: "DEADLINE_MUST_BE_EXTENDED",
+          message: "The deadline can only be extended",
+        });
+      }
+      updates.deadline = nextDeadline;
+      updates.deadlineExtendedFrom = existingBounty.deadline;
+    }
+
+    existingBounty.set(updates);
+    const bounty = await existingBounty.save();
 
     await recordSecurityAudit({
       req,

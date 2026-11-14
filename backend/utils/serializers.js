@@ -21,6 +21,7 @@ const serializeBounty = (bounty, { submissionCount, submissions = [] } = {}) => 
   txHash: bounty.txHash ?? null,
   startDate: bounty.startDate,
   deadline: bounty.deadline,
+  deadlineExtendedFrom: bounty.deadlineExtendedFrom ?? null,
   originLink: bounty.originLink || "",
   network: bounty.network,
   reward:

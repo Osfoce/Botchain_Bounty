@@ -27,6 +27,7 @@ import {
   FiUploadCloud,
   FiSend,
   FiGlobe,
+  FiEdit2,
 } from "react-icons/fi";
 import NavBar from "../components/Layout/NavBar";
 import Footer from "../components/Layout/Footer";
@@ -55,6 +56,13 @@ const parseDate = (value) => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toLocalDateInput = (value) => {
+  const date = parseDate(value);
+  if (!date) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
 };
 
 const formatCountdownParts = (milliseconds) => {
@@ -146,11 +154,24 @@ const BountyDetail = () => {
   const [winnerAddresses, setWinnerAddresses] = useState([]);
   const [enrollmentStatus, setEnrollmentStatus] = useState("checking");
   const [allSubmissions, setAllSubmissions] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [participantsLoading, setParticipantsLoading] = useState(false);
+  const [participantPage, setParticipantPage] = useState(1);
+  const [participantPagination, setParticipantPagination] = useState(null);
+  const [participantSearch, setParticipantSearch] = useState("");
+  const [participantFilter, setParticipantFilter] = useState("all");
   const [selectedWinners, setSelectedWinners] = useState([]);
   const [showFullDescription, setShowFullDescription] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [showEditBountyModal, setShowEditBountyModal] = useState(false);
+  const [savingBountyEdits, setSavingBountyEdits] = useState(false);
+  const [editBountyForm, setEditBountyForm] = useState({
+    title: "",
+    description: "",
+    deadline: "",
+  });
 
   const API_URL = import.meta.env.VITE_API_URL;
   const fileInputRef = useRef(null);
@@ -365,6 +386,24 @@ const BountyDetail = () => {
     }
   };
 
+  const loadParticipants = async (bountyId, page = 1) => {
+    setParticipantsLoading(true);
+    try {
+      const { data } = await apiClient.get(`/bounty/${bountyId}/participants`, {
+        params: { page, limit: 20 },
+      });
+      setParticipants(data.participants || []);
+      setParticipantPagination(data.pagination || null);
+      setParticipantPage(page);
+    } catch (error) {
+      console.error("Error loading bounty participants:", error);
+      setParticipants([]);
+      setParticipantPagination(null);
+    } finally {
+      setParticipantsLoading(false);
+    }
+  };
+
   const loadWinnersData = async (bountyId) => {
     try {
       const { data } = await axios.get(`${API_URL}/bounty/${bountyId}/winners`);
@@ -463,6 +502,11 @@ const BountyDetail = () => {
       setOffChainClaimable("0");
       setHasUserClaimedOffChain(false);
       setAllSubmissions([]);
+      setParticipants([]);
+      setParticipantPage(1);
+      setParticipantPagination(null);
+      setParticipantSearch("");
+      setParticipantFilter("all");
       setSelectedWinners([]);
       setShowFullDescription(false);
 
@@ -502,6 +546,25 @@ const BountyDetail = () => {
 
         if (cancelled) return;
 
+        if (bountyData.deadlineExtendedFrom) {
+          const storage = getBrowserStorage();
+          const noticeKey = `happy-bounty:seen-deadline-extension:${id}`;
+          const extensionKey = new Date(
+            bountyData.deadlineExtendedFrom,
+          ).toISOString();
+          try {
+            if (storage?.getItem(noticeKey) !== extensionKey) {
+              showToast.info(
+                `The bounty deadline was extended to ${formatDateTime(bountyData.deadline)}.`,
+                6000,
+              );
+              storage?.setItem(noticeKey, extensionKey);
+            }
+          } catch (error) {
+            console.warn("Could not save deadline extension notice:", error);
+          }
+        }
+
         setBounty(bountyData);
         setAllSubmissions(bountyData.submissions?.items || []);
 
@@ -517,11 +580,11 @@ const BountyDetail = () => {
           } else {
             setEnrollmentStatus("not-enrolled");
           }
-          await loadWinnersData(id);
         } else {
           setEnrollmentStatus("not-enrolled");
         }
 
+        await Promise.all([loadWinnersData(id), loadParticipants(id, 1)]);
         await loadComments(id);
       } catch (error) {
         console.error(error);
@@ -1108,11 +1171,78 @@ const BountyDetail = () => {
     }
   };
 
+  const openEditBountyModal = () => {
+    setEditBountyForm({
+      title: bounty.title || "",
+      description: bounty.description || "",
+      deadline: toLocalDateInput(bounty.deadline),
+    });
+    setShowEditBountyModal(true);
+  };
+
+  const handleUpdateBounty = async (event) => {
+    event.preventDefault();
+    if (!editBountyForm.title.trim()) {
+      return showToast.error("Bounty title is required");
+    }
+    if (!editBountyForm.description.trim()) {
+      return showToast.error("Bounty description is required");
+    }
+    const currentDeadline = parseDate(bounty.deadline);
+    if (!currentDeadline || !editBountyForm.deadline) {
+      return showToast.error("Please choose a valid deadline");
+    }
+
+    const currentDeadlineDay = toLocalDateInput(currentDeadline);
+    const deadlineChanged = editBountyForm.deadline !== currentDeadlineDay;
+    const nextDeadline = new Date(`${editBountyForm.deadline}T00:00:00`);
+    if (deadlineChanged && nextDeadline.getTime() <= currentDeadline.getTime()) {
+      return showToast.error("The deadline can only be extended");
+    }
+
+    setSavingBountyEdits(true);
+    try {
+      const updates = {
+        title: editBountyForm.title.trim(),
+        description: editBountyForm.description.trim(),
+      };
+      if (deadlineChanged) updates.deadline = nextDeadline.toISOString();
+      const { data } = await apiClient.patch(`/bounty/update/${id}`, updates);
+      const updatedBounty = data.bounty || data;
+      setBounty((previous) => ({ ...previous, ...updatedBounty }));
+      setShowEditBountyModal(false);
+      showToast.success("Bounty details updated");
+    } catch (error) {
+      showToast.error(
+        error.response?.data?.message || "Failed to update bounty details",
+      );
+    } finally {
+      setSavingBountyEdits(false);
+    }
+  };
+
   const winnerAddressesSet = new Set(
     [...(winnersData?.winners || []), ...(winnersData?.claimed || [])]
       .map((winner) => winner.address?.toLowerCase())
       .filter(Boolean),
   );
+
+  // Keep the connected user's entry visible on the first page even when their
+  // submission is older than the current page window.
+  const participantRows = [...participants];
+  if (
+    participantPage === 1 &&
+    address &&
+    userSubmission?.user &&
+    !participantRows.some(
+      (person) => person.walletAddress?.toLowerCase() === address.toLowerCase(),
+    )
+  ) {
+    participantRows.unshift({
+      walletAddress: userSubmission.user,
+      submittedAt: userSubmission.submittedAt,
+    });
+  }
 
   const canClaim = () => {
     if (isCreator || hasUserClaimedOffChain) return false;
@@ -1357,6 +1487,15 @@ const BountyDetail = () => {
                     >
                       {displayStatus}
                     </span>
+                    {isCreator && (
+                      <button
+                        type="button"
+                        onClick={openEditBountyModal}
+                        className={`${secondaryButton} ml-auto !px-3 !py-2 text-xs`}
+                      >
+                        <FiEdit2 size={14} /> Edit bounty
+                      </button>
+                    )}
                   </div>
 
                   <h1 className="break-words text-3xl font-extrabold leading-tight tracking-tight sm:text-4xl lg:text-[2.65rem]">
@@ -1830,8 +1969,101 @@ const BountyDetail = () => {
                 </section>
               )}
 
+              <section className={cardClass}>
+                <div className="p-5 sm:p-7">
+                  <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <h2 className="flex items-center gap-2 text-xl font-bold">
+                        <FiUsers className="text-[#008a66] dark:text-[#00D6A0]" />
+                        Participants
+                        <span className="rounded-lg bg-[#f0f4ef] dark:bg-white/[0.05] px-2 py-1 text-xs font-semibold text-[#69736a] dark:text-white/60">
+                          {participantPagination?.total ?? bounty?.submissions?.count ?? 0}
+                        </span>
+                      </h2>
+                      <p className="mt-2 text-sm text-[#778077] dark:text-white/50">
+                        Everyone who submitted work to this bounty. Your wallet is highlighted when you participated.
+                      </p>
+                    </div>
+                    <div className="relative w-full sm:max-w-xs">
+                      <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[#899189]" />
+                      <input
+                        value={participantSearch}
+                        onChange={(event) => setParticipantSearch(event.target.value)}
+                        placeholder="Filter visible wallets"
+                        className={`${inputClass} pl-9`}
+                        aria-label="Search participants by wallet address"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-4 flex flex-wrap gap-2">
+                    {[{ value: "all", label: "Everyone" }, { value: "winners", label: "Winners" }, { value: "others", label: "Other participants" }].map((filter) => (
+                      <button key={filter.value} type="button" onClick={() => setParticipantFilter(filter.value)} className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${participantFilter === filter.value ? "bg-[#00D6A0] text-[#06271e]" : "border border-[#dfe3dc] dark:border-white/10 text-[#687269] dark:text-white/60 hover:border-[#00D6A0]"}`}>
+                        {filter.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {participantsLoading ? (
+                    <div className="py-8 text-center text-sm text-[#899189]">Loading participants…</div>
+                  ) : participants.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-[#dfe3dc] dark:border-white/10 px-4 py-10 text-center">
+                      <FiUsers className="mx-auto mb-2 text-2xl text-[#899189]" />
+                      <p className="font-semibold">No participants yet</p>
+                      <p className="mt-1 text-sm text-[#899189]">Submitted entries will appear here.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-[#e5e9e3] dark:divide-white/[0.08]">
+                      {participantRows.filter((person) => {
+                        const isWinner = winnerAddressesSet.has(person.walletAddress?.toLowerCase());
+                        const matchesSearch = person.walletAddress?.toLowerCase().includes(participantSearch.trim().toLowerCase());
+                        return matchesSearch && (participantFilter === "all" || (participantFilter === "winners" ? isWinner : !isWinner));
+                      }).map((person) => {
+                        const wallet = person.walletAddress?.toLowerCase();
+                        const isCurrent = Boolean(address && wallet === address.toLowerCase());
+                        const isWinner = winnerAddressesSet.has(wallet);
+                        return (
+                          <div key={wallet} className={`flex flex-wrap items-center justify-between gap-3 py-3 ${isCurrent ? "rounded-xl bg-[#00D6A0]/[0.06] px-3" : ""}`}>
+                            <div className="flex min-w-0 items-center gap-3">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0f4ef] dark:bg-white/[0.06] text-[#008a66] dark:text-[#00D6A0]"><FiUsers size={15} /></div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-mono text-sm font-semibold">{shortenAddress(person.walletAddress)}</span>
+                                  {isCurrent && <span className="rounded-full border border-[#00D6A0]/30 px-2 py-0.5 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">YOU</span>}
+                                  {isWinner && <span className="rounded-full bg-[#00D6A0]/10 px-2 py-0.5 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">WINNER</span>}
+                                </div>
+                                <p className="mt-1 text-xs text-[#899189]">Submitted {formatDateTime(person.submittedAt)}</p>
+                              </div>
+                            </div>
+                            {isWinner && <span className="text-xs font-semibold text-[#008a66] dark:text-[#00D6A0]">Selected winner</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {!participantsLoading && participants.length > 0 && participantRows.filter((person) => {
+                    const isWinner = winnerAddressesSet.has(person.walletAddress?.toLowerCase());
+                    const matchesSearch = person.walletAddress?.toLowerCase().includes(participantSearch.trim().toLowerCase());
+                    return matchesSearch && (participantFilter === "all" || (participantFilter === "winners" ? isWinner : !isWinner));
+                  }).length === 0 && (
+                    <p className="rounded-xl bg-[#f8faf7] dark:bg-white/[0.03] px-4 py-6 text-center text-sm text-[#899189]">No participants match this search or filter.</p>
+                  )}
+
+                  {participantPagination && participantPagination.pages > 1 && (
+                    <div className="mt-5 flex items-center justify-between border-t border-[#e5e9e3] dark:border-white/[0.08] pt-4">
+                      <span className="text-xs text-[#899189]">Page {participantPagination.page} of {participantPagination.pages}</span>
+                      <div className="flex gap-2">
+                        <button type="button" disabled={!participantPagination.hasPrev || participantsLoading} onClick={() => loadParticipants(id, participantPage - 1)} className={secondaryButton}>Previous</button>
+                        <button type="button" disabled={!participantPagination.hasNext || participantsLoading} onClick={() => loadParticipants(id, participantPage + 1)} className={secondaryButton}>Next</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
               {winnersData?.isDistributed &&
-                winnersData.winners?.length > 0 && (
+                (winnersData.winners?.length > 0 || winnersData.claimed?.length > 0) && (
                   <section className={cardClass}>
                     <div className="p-5 sm:p-7">
                       <div className="mb-5 flex items-center gap-3">
@@ -1851,7 +2083,8 @@ const BountyDetail = () => {
                       </div>
 
                       <div className="divide-y divide-[#e5e9e3] dark:divide-white/[0.08]">
-                        {winnersData.winners.map((winner, index) => {
+                        {[...(winnersData.winners || []), ...(winnersData.claimed || [])]
+                          .map((winner, index) => {
                           const current =
                             address?.toLowerCase() ===
                             winner.address?.toLowerCase();
@@ -2341,6 +2574,116 @@ const BountyDetail = () => {
           </div>
         </div>
       </main>
+
+      {showEditBountyModal && bounty && (
+        <div
+          className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
+          onClick={() => !savingBountyEdits && setShowEditBountyModal(false)}
+        >
+          <div
+            className="app-modal-panel max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-[#dfe5dd] dark:border-white/10 bg-white dark:bg-[#101310] shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-start justify-between border-b border-[#e5e9e3] dark:border-white/[0.08] p-5 sm:p-6">
+              <div>
+                <h2 className="text-xl font-extrabold">Edit bounty</h2>
+                <p className="mt-1 text-sm text-[#778077] dark:text-white/50">
+                  Update the title, description, or extend the deadline.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={savingBountyEdits}
+                onClick={() => setShowEditBountyModal(false)}
+                className={`${secondaryButton} !h-9 !w-9 !p-0`}
+                aria-label="Close edit bounty dialog"
+              >
+                <FiX size={17} />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateBounty} className="space-y-5 p-5 sm:p-6">
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                  Bounty title
+                </label>
+                <input
+                  type="text"
+                  maxLength={160}
+                  required
+                  value={editBountyForm.title}
+                  onChange={(event) =>
+                    setEditBountyForm((previous) => ({
+                      ...previous,
+                      title: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                  Description
+                </label>
+                <textarea
+                  maxLength={20000}
+                  required
+                  rows={6}
+                  value={editBountyForm.description}
+                  onChange={(event) =>
+                    setEditBountyForm((previous) => ({
+                      ...previous,
+                      description: event.target.value,
+                    }))
+                  }
+                  className={`${inputClass} resize-y`}
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                  Deadline
+                </label>
+                <input
+                  type="date"
+                  required
+                  min={toLocalDateInput(bounty.deadline)}
+                  value={editBountyForm.deadline}
+                  onChange={(event) =>
+                    setEditBountyForm((previous) => ({
+                      ...previous,
+                      deadline: event.target.value,
+                    }))
+                  }
+                  className={inputClass}
+                />
+                <p className="mt-2 text-xs text-[#899189] dark:text-white/40">
+                  The start date cannot be changed. You may keep the current deadline or choose a later date.
+                </p>
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={savingBountyEdits}
+                  onClick={() => setShowEditBountyModal(false)}
+                  className={`${secondaryButton} flex-1`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingBountyEdits}
+                  className={`${primaryButton} flex-1`}
+                >
+                  {savingBountyEdits ? "Saving..." : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showSubmitModal && (
         <div
