@@ -118,6 +118,7 @@ export const showToast = {
         primary: "#00D6A0",
         secondary: "#f9f8f3",
       },
+      ariaProps: { role: "status", "aria-live": "polite" },
       ...options,
     });
   },
@@ -133,6 +134,7 @@ export const showToast = {
         primary: "#c62828",
         secondary: "#f9f8f3",
       },
+      ariaProps: { role: "alert", "aria-live": "assertive" },
       ...options,
     });
   },
@@ -142,6 +144,7 @@ export const showToast = {
       position: POSITION,
       style: LOADING_STYLE,
       icon: <GreenSpinner />,
+      ariaProps: { role: "status", "aria-live": "polite" },
       ...options,
     });
   },
@@ -158,6 +161,7 @@ export const showToast = {
         primary: "#00A87D",
         secondary: "#f9f8f3",
       },
+      ariaProps: { role: "status", "aria-live": "polite" },
       ...options,
     });
   },

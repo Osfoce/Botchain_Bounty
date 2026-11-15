@@ -90,13 +90,13 @@ const isThankYouMessage = (message) => {
   return patterns.some((pattern) => pattern.test(normalized));
 };
 
-const getBountyPageCacheKey = (apiUrl, filter, page) =>
-  `happy-bounty:bounty-page:${apiUrl || "no-api"}:${filter}:${page}:6`;
+const getBountyPageCacheKey = (apiUrl, filter, page, sort, limit) =>
+  `happy-bounty:bounty-page:${apiUrl || "no-api"}:${filter}:${sort}:${page}:${limit}`;
 
-const readBountyPageCache = (apiUrl, filter, page) => {
+const readBountyPageCache = (apiUrl, filter, page, sort, limit) => {
   try {
     const raw = window.sessionStorage.getItem(
-      getBountyPageCacheKey(apiUrl, filter, page),
+      getBountyPageCacheKey(apiUrl, filter, page, sort, limit),
     );
     if (!raw) return null;
 
@@ -108,10 +108,10 @@ const readBountyPageCache = (apiUrl, filter, page) => {
   }
 };
 
-const saveBountyPageCache = (apiUrl, filter, page, data) => {
+const saveBountyPageCache = (apiUrl, filter, page, sort, limit, data) => {
   try {
     window.sessionStorage.setItem(
-      getBountyPageCacheKey(apiUrl, filter, page),
+      getBountyPageCacheKey(apiUrl, filter, page, sort, limit),
       JSON.stringify({ ...data, savedAt: Date.now() }),
     );
   } catch {
@@ -125,7 +125,7 @@ function Dashboard({ dark, setDark }) {
   const API_URL = import.meta.env.VITE_API_URL;
   const bountyApi = `${API_URL}/bounty/bounties`;
   const [initialBountyCache] = useState(() =>
-    readBountyPageCache(bountyApi, "all", 1),
+    readBountyPageCache(bountyApi, "all", 1, "newest", 6),
   );
 
   const isAdmin =
@@ -143,6 +143,8 @@ function Dashboard({ dark, setDark }) {
     initialBountyCache?.pagination || null,
   );
   const [currentPage, setCurrentPage] = useState(1);
+  const [bountySort, setBountySort] = useState("newest");
+  const [bountyPageSize, setBountyPageSize] = useState(6);
 
   const [stats, setStats] = useState({
     completed: 0,
@@ -223,7 +225,7 @@ function Dashboard({ dark, setDark }) {
 
   // Load bounties
   const loadBounties = useCallback(async () => {
-    const cachedPage = readBountyPageCache(bountyApi, filter, currentPage);
+    const cachedPage = readBountyPageCache(bountyApi, filter, currentPage, bountySort, bountyPageSize);
     if (cachedPage) {
       setBounties(cachedPage.bounties);
       setPagination(cachedPage.pagination || null);
@@ -241,14 +243,15 @@ function Dashboard({ dark, setDark }) {
       const response = await axios.get(bountyApi, {
         params: {
           page: currentPage,
-          limit: 6,
+          limit: bountyPageSize,
+          sort: bountySort,
           status: filter !== "all" ? filter : undefined,
         },
       });
 
       setBounties(response.data.bounties || []);
       setPagination(response.data.pagination);
-      saveBountyPageCache(bountyApi, filter, currentPage, {
+      saveBountyPageCache(bountyApi, filter, currentPage, bountySort, bountyPageSize, {
         bounties: response.data.bounties || [],
         pagination: response.data.pagination || null,
       });
@@ -267,7 +270,7 @@ function Dashboard({ dark, setDark }) {
       setLoading(false);
       setRefreshingBounties(false);
     }
-  }, [bountyApi, currentPage, filter]);
+  }, [bountyApi, bountyPageSize, bountySort, currentPage, filter]);
 
   useEffect(() => {
     if (!loading) {
@@ -536,6 +539,16 @@ function Dashboard({ dark, setDark }) {
 
   const handleFilterChange = (status) => {
     setFilter(status);
+    setCurrentPage(1);
+  };
+
+  const handleBountySortChange = (sort) => {
+    setBountySort(sort);
+    setCurrentPage(1);
+  };
+
+  const handleBountyPageSizeChange = (event) => {
+    setBountyPageSize(Number(event.target.value));
     setCurrentPage(1);
   };
 
@@ -1094,18 +1107,29 @@ function Dashboard({ dark, setDark }) {
                 })}
               </div>
 
-              <div className={`flex items-center gap-2 px-2 text-xs ${muted}`}>
+              <div className={`flex flex-wrap items-center gap-3 px-2 text-xs ${muted}`}>
                 <FiSearch className="shrink-0 text-[#00A87D]" />
-
-                <span>
+                <span role="status" aria-live="polite">
                   {loading
                     ? "Finding opportunities..."
                     : refreshingBounties
                       ? "Updating opportunities..."
-                    : `${bounties.length} ${
-                        bounties.length === 1 ? "bounty" : "bounties"
-                      } on this page`}
+                    : `${pagination?.total ?? bounties.length} opportunities · showing ${bounties.length ? (currentPage - 1) * bountyPageSize + 1 : 0}–${(currentPage - 1) * bountyPageSize + bounties.length}`}
                 </span>
+                <label className="flex items-center gap-2">
+                  <span>Sort</span>
+                  <select aria-label="Sort opportunities within each status" value={bountySort} onChange={(event) => handleBountySortChange(event.target.value)} className={`min-h-10 rounded-lg border px-2 text-xs ${dark ? "border-white/10 bg-[#111713] text-white" : "border-black/10 bg-white text-[#111311]"}`}>
+                    <option value="newest">Newest</option>
+                    <option value="reward">Highest reward</option>
+                    <option value="deadline">Soonest deadline</option>
+                  </select>
+                </label>
+                <label className="flex items-center gap-2">
+                  <span>Per page</span>
+                  <select aria-label="Opportunities per page" value={bountyPageSize} onChange={handleBountyPageSizeChange} className={`min-h-10 rounded-lg border px-2 text-xs ${dark ? "border-white/10 bg-[#111713] text-white" : "border-black/10 bg-white text-[#111311]"}`}>
+                    {[6, 12, 24, 48, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+                  </select>
+                </label>
               </div>
             </div>
 

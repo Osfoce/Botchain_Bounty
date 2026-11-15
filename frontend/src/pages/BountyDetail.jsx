@@ -1,5 +1,5 @@
-import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useEffect, useState, useRef, useCallback } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import apiClient from "../services/apiClient";
 import { useAuth } from "../hooks/useAuth";
@@ -28,6 +28,7 @@ import {
   FiSend,
   FiGlobe,
   FiEdit2,
+  FiCopy,
 } from "react-icons/fi";
 import NavBar from "../components/Layout/NavBar";
 import Footer from "../components/Layout/Footer";
@@ -110,9 +111,23 @@ const clearPendingClaimSync = (storage, key) => {
   }
 };
 
+const getSubmissionDraftKey = (bountyId, walletAddress) =>
+  `happy-bounty:submission-draft:${String(bountyId)}:${walletAddress.toLowerCase()}`;
+
+const fetchContributorJourney = async (walletAddress, bountyId) =>
+  Promise.allSettled([
+    apiClient.get(`/user/get-enrollment/${walletAddress}`, {
+      params: { bountyId },
+    }),
+    apiClient.get(`/bounty/user/submissions/${walletAddress}`, {
+      params: { bountyId },
+    }),
+  ]);
+
 const BountyDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const { address } = useAccount();
   const { isAuthenticated } = useAuth();
   const currentChainId = useChainId();
@@ -132,27 +147,38 @@ const BountyDetail = () => {
   const [bounty, setBounty] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEnrolling, setIsEnrolling] = useState(false);
-  const [isEnrolled, setIsEnrolled] = useState(false);
   const [isCreator, setIsCreator] = useState(false);
   const [hasUserSubmitted, setHasUserSubmitted] = useState(false);
   const [userSubmission, setUserSubmission] = useState(null);
   const [winnersData, setWinnersData] = useState(null);
   const [offChainClaimable, setOffChainClaimable] = useState("0");
   const [hasUserClaimedOffChain, setHasUserClaimedOffChain] = useState(false);
+  const [pendingClaimSync, setPendingClaimSync] = useState(null);
+  const [isClaiming, setIsClaiming] = useState(false);
+  const [isClaimSyncing, setIsClaimSyncing] = useState(false);
+  const [claimPhase, setClaimPhase] = useState("");
+  const [claimSyncError, setClaimSyncError] = useState("");
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState("");
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [showDistributeModal, setShowDistributeModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [distributing, setDistributing] = useState(false);
+  const [distributionPhase, setDistributionPhase] = useState("");
   const [pendingDistributionSync, setPendingDistributionSync] = useState(null);
+  const [isRefreshingReviewQueue, setIsRefreshingReviewQueue] = useState(false);
+  const [reviewQueueError, setReviewQueueError] = useState("");
   const [submissionImage, setSubmissionImage] = useState(null);
   const [submissionDescription, setSubmissionDescription] = useState("");
   const [submissionLink, setSubmissionLink] = useState("");
+  const [loadedSubmissionDraftKey, setLoadedSubmissionDraftKey] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const [imageSizeWarning, setImageSizeWarning] = useState("");
   const [winnerAddresses, setWinnerAddresses] = useState([]);
   const [enrollmentStatus, setEnrollmentStatus] = useState("checking");
+  const [submissionStatusError, setSubmissionStatusError] = useState(false);
+  const [isRefreshingContributorStatus, setIsRefreshingContributorStatus] = useState(false);
+  const [contributorStatusError, setContributorStatusError] = useState("");
   const [allSubmissions, setAllSubmissions] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [participantsLoading, setParticipantsLoading] = useState(false);
@@ -172,10 +198,104 @@ const BountyDetail = () => {
     description: "",
     deadline: "",
   });
+  const [editBountyErrors, setEditBountyErrors] = useState({});
+  const [createdBountyNotice, setCreatedBountyNotice] = useState(
+    () => location.state?.createdBounty || null,
+  );
+  const bountyLoaded = Boolean(bounty);
 
   const API_URL = import.meta.env.VITE_API_URL;
   const fileInputRef = useRef(null);
+  const editDialogRef = useRef(null);
+  const editTitleInputRef = useRef(null);
+  const editTriggerRef = useRef(null);
+  const savingBountyEditsRef = useRef(savingBountyEdits);
+  savingBountyEditsRef.current = savingBountyEdits;
   const pendingClaimSyncRef = useRef(null);
+  const claimActionRef = useRef(false);
+  const claimSyncInFlightRef = useRef(false);
+  const contributorStatusRefreshRef = useRef(null);
+  const reviewRefreshRef = useRef(0);
+  const submissionDraftKey = id && address ? getSubmissionDraftKey(id, address) : null;
+
+  useEffect(() => {
+    if (!showEditBountyModal) return undefined;
+    editTitleInputRef.current?.focus();
+    const onKeyDown = (event) => {
+      if (event.key === "Escape" && !savingBountyEditsRef.current) {
+        setShowEditBountyModal(false);
+        return;
+      }
+      if (event.key !== "Tab" || !editDialogRef.current) return;
+      const focusable = [...editDialogRef.current.querySelectorAll(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      )];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      editTriggerRef.current?.focus();
+    };
+  }, [showEditBountyModal]);
+
+  useEffect(() => {
+    setSubmissionDescription("");
+    setSubmissionLink("");
+    setSubmissionImage(null);
+    setImagePreview(null);
+    setImageSizeWarning("");
+    setLoadedSubmissionDraftKey(null);
+    if (!submissionDraftKey || hasUserSubmitted) return;
+    const storage = getBrowserStorage();
+    try {
+      const saved = JSON.parse(storage?.getItem(submissionDraftKey) || "null");
+      if (saved && typeof saved === "object") {
+        setSubmissionDescription(typeof saved.description === "string" ? saved.description : "");
+        setSubmissionLink(typeof saved.projectLink === "string" ? saved.projectLink : "");
+      }
+    } catch (error) {
+      console.warn("Could not restore submission draft:", error);
+    }
+    setLoadedSubmissionDraftKey(submissionDraftKey);
+  }, [submissionDraftKey, hasUserSubmitted]);
+
+  useEffect(() => {
+    if (!submissionDraftKey || loadedSubmissionDraftKey !== submissionDraftKey || hasUserSubmitted) return;
+    try {
+      getBrowserStorage()?.setItem(
+        submissionDraftKey,
+        JSON.stringify({ description: submissionDescription, projectLink: submissionLink }),
+      );
+    } catch (error) {
+      console.warn("Could not save submission draft:", error);
+    }
+  }, [submissionDraftKey, loadedSubmissionDraftKey, hasUserSubmitted, submissionDescription, submissionLink]);
+
+  useEffect(() => {
+    if (!location.state?.createdBounty) return;
+    setCreatedBountyNotice(location.state.createdBounty);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
+
+  const copyBountyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+      showToast.success("Bounty link copied.");
+    } catch (error) {
+      console.warn("Could not copy bounty link:", error);
+      showToast.error("Could not copy the link. Copy it from your browser address bar.");
+    }
+  };
 
   useEffect(() => {
     if (!bounty?.network || !id) return;
@@ -204,7 +324,7 @@ const BountyDetail = () => {
   const { data: onChainClaimable, refetch: refetchClaimable } =
     useClaimableReward(blockchainId, address, bountyChainId);
 
-  const { data: onChainClaimed } = useClaimedStatus(
+  const { data: onChainClaimed, refetch: refetchOnChainClaimed } = useClaimedStatus(
     blockchainId,
     address,
     bountyChainId,
@@ -354,38 +474,6 @@ const BountyDetail = () => {
       reader.readAsDataURL(file);
     });
 
-  const checkUserEnrollment = async (wallet, bountyId) => {
-    try {
-      const { data } = await apiClient.get(`/user/get-enrollment/${wallet}`, {
-        params: { bountyId },
-      });
-
-      return (data.enrollments || []).some(
-        (entry) => String(entry.bountyId) === String(bountyId),
-      );
-    } catch {
-      return false;
-    }
-  };
-
-  const checkUserSubmission = async (wallet, bountyId) => {
-    try {
-      const { data } = await apiClient.get(
-        `/bounty/user/submissions/${wallet}`,
-        { params: { bountyId } },
-      );
-
-      const existing = (data.submissions || []).find(
-        (submission) => String(submission.bountyId) === String(bountyId),
-      );
-
-      setHasUserSubmitted(Boolean(existing));
-      setUserSubmission(existing || null);
-    } catch (error) {
-      console.error("Error checking submission:", error);
-    }
-  };
-
   const loadParticipants = async (bountyId, page = 1) => {
     setParticipantsLoading(true);
     try {
@@ -404,7 +492,7 @@ const BountyDetail = () => {
     }
   };
 
-  const loadWinnersData = async (bountyId) => {
+  const loadWinnersData = useCallback(async (bountyId) => {
     try {
       const { data } = await axios.get(`${API_URL}/bounty/${bountyId}/winners`);
 
@@ -419,60 +507,211 @@ const BountyDetail = () => {
         setOffChainClaimable(claimable.claimableFormatted || "0");
         setHasUserClaimedOffChain(Boolean(claimed.hasClaimed));
       }
+      return true;
     } catch (error) {
       console.error("Error loading winners:", error);
+      return false;
     }
-  };
+  }, [API_URL, address]);
+
+  const refreshCreatorReview = useCallback(async (force = false) => {
+    if (!id || (reviewRefreshRef.current && !force)) return false;
+    const requestId = reviewRefreshRef.current + 1;
+    reviewRefreshRef.current = requestId;
+    setIsRefreshingReviewQueue(true);
+    const [bountyResult, winnersResult] = await Promise.allSettled([
+      apiClient.get(`/bounty/${id}`),
+      loadWinnersData(id),
+    ]);
+
+    if (reviewRefreshRef.current !== requestId) return false;
+
+    const bountyLoaded = bountyResult.status === "fulfilled";
+    if (bountyLoaded) {
+      const updated = bountyResult.value.data.bounty || bountyResult.value.data;
+      setBounty((previous) => ({ ...previous, ...updated }));
+      setAllSubmissions(updated.submissions?.items || []);
+    }
+    const winnersLoaded = winnersResult.status === "fulfilled" && winnersResult.value;
+    const failed = !bountyLoaded || !winnersLoaded;
+    setReviewQueueError(failed ? "Some review or reward information could not be refreshed. Try again." : "");
+    setIsRefreshingReviewQueue(false);
+    reviewRefreshRef.current = 0;
+    return !failed;
+  }, [id, loadWinnersData]);
+
+  const refreshRewardStatus = useCallback(async () => {
+    if (!id) return;
+    await Promise.allSettled([
+      loadWinnersData(id),
+      refetchClaimable(),
+      refetchOnChainClaimed(),
+    ]);
+  }, [id, loadWinnersData, refetchClaimable, refetchOnChainClaimed]);
+
+  const syncClaimRecord = useCallback(async (record, { automatic = false } = {}) => {
+    if (!record || !address || !isAuthenticated || claimSyncInFlightRef.current) return false;
+    claimSyncInFlightRef.current = true;
+    setIsClaimSyncing(true);
+    setClaimSyncError("");
+
+    const storage = getBrowserStorage();
+    const storageKey = getPendingClaimSyncKey(record.bountyId, record.walletAddress);
+    let currentRecord = { ...record, status: record.status || "pending_sync" };
+
+    try {
+      if (currentRecord.status === "pending_confirmation") {
+        setClaimPhase("Checking transaction confirmation");
+        const chain = supportedChains.find(
+          (supportedChain) => supportedChain.id === Number(currentRecord.chainId),
+        );
+        if (!chain) throw new Error("The claim network is unavailable. Select its supported network and check again.");
+
+        let receipt;
+        try {
+          const client = createPublicClient({
+            chain,
+            transport: http(chain.rpcUrls.default.http[0]),
+          });
+          receipt = await client.getTransactionReceipt({ hash: currentRecord.txHash });
+        } catch (error) {
+          if (error.name === "TransactionReceiptNotFoundError" || error.name === "TimeoutError") {
+            setClaimSyncError("The network has not confirmed this claim yet. Check again shortly; this will not submit another transaction.");
+            return false;
+          }
+          throw error;
+        }
+
+        if (receipt.status !== "success") {
+          clearPendingClaimSync(storage, storageKey);
+          setPendingClaimSync(null);
+          pendingClaimSyncRef.current = null;
+          setClaimSyncError("The claim transaction reverted on-chain. No reward was claimed.");
+          showToast.error("The claim transaction reverted on-chain.");
+          return false;
+        }
+
+        currentRecord = { ...currentRecord, status: "pending_sync" };
+        try {
+          storage?.setItem(storageKey, JSON.stringify(currentRecord));
+        } catch (error) {
+          console.warn("Could not update claim recovery status:", error);
+        }
+        setPendingClaimSync(currentRecord);
+      }
+
+      setClaimPhase("Updating your account");
+      await retryUntilVerified(
+        () => apiClient.post(`/bounty/${currentRecord.bountyId}/claim`, { txHash: currentRecord.txHash }),
+        { maxAttempts: automatic ? 3 : 6, intervalMs: 2000 },
+      );
+
+      clearPendingClaimSync(storage, storageKey);
+      pendingClaimSyncRef.current = null;
+      setPendingClaimSync(null);
+      setClaimSyncError("");
+      await refreshRewardStatus();
+      if (!automatic) showToast.success("Reward claimed and synchronized successfully.");
+      return true;
+    } catch (error) {
+      console.warn("Claim synchronization is still pending:", error);
+      if ([401, 403].includes(error.response?.status)) {
+        pendingClaimSyncRef.current = null;
+      }
+      setClaimSyncError(
+        [401, 403].includes(error.response?.status)
+          ? "Sign in with the wallet that claimed this reward, then retry synchronization."
+          : currentRecord.status === "pending_confirmation"
+            ? "The claim transaction has not been confirmed yet. Check again shortly; this will not submit another transaction."
+            : "Your claim is confirmed on-chain, but your account is still waiting to update. Retry safely with the same transaction.",
+      );
+      return false;
+    } finally {
+      setIsClaimSyncing(false);
+      setClaimPhase("");
+      claimSyncInFlightRef.current = false;
+    }
+  }, [address, isAuthenticated, refreshRewardStatus]);
+
+  const refreshContributorStatus = useCallback(async () => {
+    if (!address || !isAuthenticated || !id) return;
+    const requestKey = `${String(id)}:${address.toLowerCase()}`;
+    if (contributorStatusRefreshRef.current === requestKey) return;
+    contributorStatusRefreshRef.current = requestKey;
+    setIsRefreshingContributorStatus(true);
+    const [enrollmentResult, submissionResult] = await fetchContributorJourney(address, id);
+    if (contributorStatusRefreshRef.current !== requestKey) return;
+
+    if (enrollmentResult.status === "fulfilled") {
+      const enrolled = (enrollmentResult.value.data?.enrollments || []).some(
+        (entry) => String(entry.bountyId) === String(id),
+      );
+      setEnrollmentStatus(enrolled ? "enrolled" : "not-enrolled");
+    } else {
+      setEnrollmentStatus((previous) => previous === "checking" ? "unavailable" : previous);
+    }
+
+    if (submissionResult.status === "fulfilled") {
+      const existing = (submissionResult.value.data?.submissions || []).find(
+        (submission) => String(submission.bountyId) === String(id),
+      );
+      setHasUserSubmitted(Boolean(existing));
+      setUserSubmission(existing || null);
+      setSubmissionStatusError(false);
+      if (existing) {
+        try {
+          getBrowserStorage()?.removeItem(getSubmissionDraftKey(id, address));
+        } catch (error) {
+          console.warn("Could not clear an already-submitted draft:", error);
+        }
+      }
+    } else {
+      setSubmissionStatusError(true);
+    }
+
+    setContributorStatusError(
+      enrollmentResult.status === "rejected" || submissionResult.status === "rejected"
+        ? "Your participation status could not be refreshed. Retry to check for updates."
+        : "",
+    );
+    setIsRefreshingContributorStatus(false);
+    contributorStatusRefreshRef.current = null;
+  }, [address, id, isAuthenticated]);
 
   useEffect(() => {
     if (!id || !address || !isAuthenticated) return;
     const storage = getBrowserStorage();
-    if (!storage) return;
-
     const key = getPendingClaimSyncKey(id, address);
     if (pendingClaimSyncRef.current === key) return;
-    let record;
+
+    let savedRecord;
     try {
-      record = JSON.parse(readPendingClaimSync(storage, key) || "null");
+      savedRecord = JSON.parse(readPendingClaimSync(storage, key) || "null");
     } catch (error) {
       console.error("Could not read pending claim synchronization:", error);
+      setClaimSyncError("Saved claim recovery information could not be read. Refresh the page and try again.");
       return;
     }
+    if (!savedRecord) return;
+
+    const record = {
+      ...savedRecord,
+      status: savedRecord.status || "pending_sync",
+      chainId: Number(savedRecord.chainId || bountyChainId || 0),
+    };
     if (
-      !record ||
       record.bountyId !== String(id) ||
       record.walletAddress !== address.toLowerCase() ||
       !/^0x[a-fA-F0-9]{64}$/.test(record.txHash || "")
     ) {
+      setClaimSyncError("Saved claim recovery information is invalid. Do not submit another claim until it is checked.");
       return;
     }
 
     pendingClaimSyncRef.current = key;
-    let cancelled = false;
-    retryUntilVerified(() =>
-      apiClient.post(`/bounty/${id}/claim`, { txHash: record.txHash }),
-    )
-      .then(async () => {
-        if (cancelled) return;
-        clearPendingClaimSync(storage, key);
-        await loadWinnersData(id);
-        await refetchClaimable();
-      })
-      .catch((error) => {
-        if (error.code !== "TRANSACTION_SYNC_PENDING") {
-          if ([401, 403].includes(error.response?.status)) {
-            pendingClaimSyncRef.current = null;
-          } else {
-            clearPendingClaimSync(storage, key);
-          }
-        }
-        console.warn("Pending claim synchronization is not complete:", error);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id, address, isAuthenticated]);
+    setPendingClaimSync(record);
+    syncClaimRecord(record, { automatic: true });
+  }, [id, address, isAuthenticated, bountyChainId, syncClaimRecord]);
 
   const loadComments = async (bountyId) => {
     try {
@@ -495,6 +734,9 @@ const BountyDetail = () => {
 
       setLoading(true);
       setEnrollmentStatus("checking");
+      setContributorStatusError("");
+      setSubmissionStatusError(false);
+      setReviewQueueError("");
       setIsCreator(false);
       setHasUserSubmitted(false);
       setUserSubmission(null);
@@ -570,16 +812,7 @@ const BountyDetail = () => {
 
         if (address) {
           setIsCreator(Boolean(bountyData.submissions?.isCreatorView));
-
-          if (isAuthenticated) {
-            const enrolled = await checkUserEnrollment(address, id);
-            if (!cancelled)
-              setEnrollmentStatus(enrolled ? "enrolled" : "not-enrolled");
-
-            await checkUserSubmission(address, id);
-          } else {
-            setEnrollmentStatus("not-enrolled");
-          }
+          if (!isAuthenticated) setEnrollmentStatus("unavailable");
         } else {
           setEnrollmentStatus("not-enrolled");
         }
@@ -605,6 +838,50 @@ const BountyDetail = () => {
     };
   }, [id, address, isAuthenticated]);
 
+  useEffect(() => {
+    if (!bounty || !address || !isAuthenticated || isCreator) return undefined;
+    let cancelled = false;
+    const refreshIfVisible = () => {
+      if (!cancelled && document.visibilityState === "visible") {
+        refreshContributorStatus();
+      }
+    };
+    refreshIfVisible();
+    window.addEventListener("focus", refreshIfVisible);
+    const interval = window.setInterval(refreshIfVisible, 60_000);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshIfVisible);
+      window.clearInterval(interval);
+    };
+  }, [bounty, address, isAuthenticated, isCreator, refreshContributorStatus]);
+
+  useEffect(() => {
+    if (!bountyLoaded || !isCreator) return undefined;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") refreshCreatorReview();
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    const interval = window.setInterval(refreshIfVisible, 60_000);
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      window.clearInterval(interval);
+    };
+  }, [bountyLoaded, isCreator, refreshCreatorReview]);
+
+  useEffect(() => {
+    if (!bountyLoaded || isCreator) return undefined;
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") refreshRewardStatus();
+    };
+    window.addEventListener("focus", refreshIfVisible);
+    const interval = window.setInterval(refreshIfVisible, 60_000);
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      window.clearInterval(interval);
+    };
+  }, [bountyLoaded, isCreator, refreshRewardStatus]);
+
   const submissionLinkError = isValidUrl(submissionLink);
 
   const handleEnroll = async () => {
@@ -625,22 +902,23 @@ const BountyDetail = () => {
         id: toastId,
       });
 
-      setIsEnrolled(true);
       setEnrollmentStatus("enrolled");
+      setContributorStatusError("");
     } catch (error) {
       const alreadyEnrolled =
         error.response?.status === 400 &&
         error.response.data?.error?.toLowerCase().includes("already");
 
       if (alreadyEnrolled) {
-        setIsEnrolled(true);
         setEnrollmentStatus("enrolled");
 
         showToast.success("You're already enrolled", {
           id: toastId,
         });
       } else {
-        showToast.error(error.response?.data?.error || "Enrollment failed", {
+        setContributorStatusError("Enrollment could not be confirmed. Retry enrollment or refresh your status.");
+        await refreshContributorStatus();
+        showToast.error(error.response?.data?.error || "Enrollment could not be confirmed. You can safely retry.", {
           id: toastId,
         });
       }
@@ -658,6 +936,7 @@ const BountyDetail = () => {
       setImageSizeWarning("Please select a JPEG, PNG, or WebP image.");
       setSubmissionImage(null);
       setImagePreview(null);
+      event.target.value = "";
       return;
     }
 
@@ -684,6 +963,11 @@ const BountyDetail = () => {
     setSubmissionLink("");
     setImagePreview(null);
     setImageSizeWarning("");
+    try {
+      if (submissionDraftKey) getBrowserStorage()?.removeItem(submissionDraftKey);
+    } catch (error) {
+      console.warn("Could not clear submission draft:", error);
+    }
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
@@ -739,12 +1023,31 @@ const BountyDetail = () => {
         status: "pending",
         submittedAt: new Date().toISOString(),
       });
+      setSubmissionStatusError(false);
+      setContributorStatusError("");
 
       setShowSubmitModal(false);
       resetSubmissionForm();
     } catch (error) {
+      const alreadySubmitted = error.response?.status === 400 &&
+        typeof error.response?.data?.error === "string" &&
+        error.response.data.error.toLowerCase().includes("already submitted");
+      if (alreadySubmitted) {
+        await refreshContributorStatus();
+        setShowSubmitModal(false);
+        resetSubmissionForm();
+        showToast.info("A submission already exists for this bounty. Its latest status is shown on the page.", { id: toastId });
+        return;
+      }
+      const submitErrorMessage = error.response?.status === 409
+        ? "This bounty is no longer accepting submissions. Your saved description and proof link remain on this device."
+        : error.response?.data?.code === "ENROLLMENT_REQUIRED"
+          ? "Enroll in this bounty before submitting. Your saved description and proof link are still here."
+          : error.response?.status === 401
+            ? "Your sign-in expired. Sign in again, then retry; your saved description and proof link remain here."
+            : error.response?.data?.error || "Submission failed. Your saved description and link are still here so you can retry.";
       showToast.error(
-        error.response?.data?.error || "Failed to submit your work",
+        submitErrorMessage,
         { id: toastId },
       );
     } finally {
@@ -753,6 +1056,7 @@ const BountyDetail = () => {
   };
 
   const handleClaimReward = async () => {
+    if (claimActionRef.current || claimSyncInFlightRef.current) return;
     if (!address) return showToast.error("Please connect your wallet");
     if (!isAuthenticated)
       return showToast.error(
@@ -760,6 +1064,26 @@ const BountyDetail = () => {
       );
     if (blockchainId === null)
       return showToast.error("This bounty is not on-chain");
+
+    if (pendingClaimSync) {
+      await syncClaimRecord(pendingClaimSync);
+      return;
+    }
+
+    const storage = getBrowserStorage();
+    const pendingKey = getPendingClaimSyncKey(id, address);
+    const savedPending = readPendingClaimSync(storage, pendingKey);
+    if (savedPending) {
+      try {
+        const record = JSON.parse(savedPending);
+        setPendingClaimSync(record);
+        await syncClaimRecord(record);
+      } catch (error) {
+        console.error("Saved claim recovery information is invalid:", error);
+        setClaimSyncError("Saved claim recovery information is invalid. Do not submit another claim until it is checked.");
+      }
+      return;
+    }
 
     if (Number(currentChainId) !== Number(bounty.network)) {
       try {
@@ -773,27 +1097,6 @@ const BountyDetail = () => {
       return;
     }
 
-    const storage = getBrowserStorage();
-    const pendingKey = getPendingClaimSyncKey(id, address);
-    const pendingClaim = readPendingClaimSync(storage, pendingKey);
-    if (pendingClaim) {
-      try {
-        const record = JSON.parse(pendingClaim);
-        await retryUntilVerified(() =>
-          apiClient.post(`/bounty/${id}/claim`, { txHash: record.txHash }),
-        );
-        clearPendingClaimSync(storage, pendingKey);
-        showToast.success("Reward claimed and synchronized successfully.");
-        await loadWinnersData(id);
-        await refetchClaimable();
-      } catch (error) {
-        showToast.error(
-          error.message || "Claim synchronization is still pending.",
-        );
-      }
-      return;
-    }
-
     if (!onChainClaimable || onChainClaimable === 0n) {
       return showToast.error("No reward available");
     }
@@ -802,48 +1105,78 @@ const BountyDetail = () => {
       return showToast.error("This reward has already been claimed");
     }
 
+    claimActionRef.current = true;
+    setIsClaiming(true);
+    setClaimSyncError("");
+    setClaimPhase("Confirm in wallet");
+
+    const persistClaimRecord = (record) => {
+      setPendingClaimSync(record);
+      pendingClaimSyncRef.current = pendingKey;
+      try {
+        storage?.setItem(pendingKey, JSON.stringify(record));
+        return Boolean(storage);
+      } catch (error) {
+        console.error("Could not persist pending claim synchronization:", error);
+        return false;
+      }
+    };
+
+    let submittedHash = null;
     try {
-      const { hash } = await claimReward(blockchainId);
-      if (storage) {
-        try {
-          storage.setItem(
-            pendingKey,
-            JSON.stringify({
-              bountyId: String(id),
-              walletAddress: address.toLowerCase(),
-              txHash: hash,
-            }),
-          );
-        } catch (error) {
-          console.error(
-            "Could not persist pending claim synchronization:",
-            error,
-          );
-          showToast.error(
-            "Claim transaction succeeded, but browser recovery storage is unavailable.",
-          );
-        }
+      const { hash } = await claimReward(blockchainId, {
+        onSubmitted: () => setClaimPhase("Waiting for chain confirmation"),
+      });
+      submittedHash = hash;
+      const record = {
+        bountyId: String(id),
+        walletAddress: address.toLowerCase(),
+        txHash: hash,
+        chainId: Number(bounty.network),
+        status: "pending_sync",
+      };
+      const stored = persistClaimRecord(record);
+      if (!stored) {
+        setClaimSyncError("The claim is confirmed, but this browser cannot save recovery data. Keep this page open while account synchronization finishes.");
+      }
+      await syncClaimRecord(record);
+    } catch (error) {
+      if (error.transactionStatus === "reverted") {
+        showToast.error("The claim transaction reverted on-chain. No reward was claimed.");
+        return;
+      }
+      const txHash = error.transactionHash || submittedHash;
+      if (txHash) {
+        const record = {
+          bountyId: String(id),
+          walletAddress: address.toLowerCase(),
+          txHash,
+          chainId: Number(bounty.network),
+          status: error.transactionConfirmed ? "pending_sync" : "pending_confirmation",
+        };
+        const stored = persistClaimRecord(record);
+        setClaimSyncError(
+          error.transactionConfirmed
+            ? "The claim is confirmed on-chain, but your account still needs to sync. Retry with the same transaction."
+            : "The transaction was submitted, but its confirmation is unknown. Check its status before doing anything else.",
+        );
+        showToast.info(
+          stored
+            ? error.transactionConfirmed
+              ? "Reward claim succeeded on-chain. Account synchronization is still pending."
+              : "Claim transaction confirmation is unknown. Check its status before retrying."
+            : "Claim transaction was submitted, but recovery data could not be saved in this browser.",
+          6000,
+        );
       } else {
         showToast.error(
-          "Claim transaction succeeded, but browser recovery storage is unavailable.",
+          error.response?.data?.error || error.shortMessage || error.message || "Claim failed",
         );
       }
-      await retryUntilVerified(() =>
-        apiClient.post(`/bounty/${id}/claim`, { txHash: hash }),
-      );
-      clearPendingClaimSync(storage, pendingKey);
-
-      showToast.success("Reward claimed successfully!");
-
-      await loadWinnersData(id);
-      await refetchClaimable();
-    } catch (error) {
-      showToast.error(
-        error.response?.data?.error ||
-          error.shortMessage ||
-          error.message ||
-          "Claim failed",
-      );
+    } finally {
+      claimActionRef.current = false;
+      setIsClaiming(false);
+      setClaimPhase("");
     }
   };
 
@@ -897,21 +1230,26 @@ const BountyDetail = () => {
     setPendingDistributionSync(null);
     setSelectedWinners([]);
     setShowDistributeModal(false);
-    await loadWinnersData(record.bountyId);
+    await refreshCreatorReview(true);
     showToast.success("Rewards distributed and synchronized successfully.");
   };
 
   const executeRewardAssignment = async (valid) => {
+    const options = {
+      onSubmitted: () => setDistributionPhase("Confirming on-chain"),
+    };
     if (valid.length === 1) {
-      return assignSingleWinner(blockchainId, valid[0]);
+      return assignSingleWinner(blockchainId, valid[0], options);
     }
 
     const percentages =
       bounty.payoutType === "MULTI_PERCENTAGE" ? bounty.percentages : [];
-    return assignMultipleWinners(blockchainId, valid, percentages);
+    return assignMultipleWinners(blockchainId, valid, percentages, options);
   };
 
   const handleDistributeReward = async () => {
+    if (!canDistribute()) return showToast.info(getDistributionBlockReason());
+    if (!hasEnoughSelections()) return showToast.info(getDistributionBlockReason());
     if (!isAuthenticated)
       return showToast.error(
         "Sign in with your wallet before distributing rewards.",
@@ -921,6 +1259,7 @@ const BountyDetail = () => {
 
     if (
       !valid.length ||
+      valid.length !== (bounty.payoutType === "SINGLE" ? 1 : Number(bounty.winnersAllowed)) ||
       valid.some((value) => !/^0x[a-fA-F0-9]{40}$/.test(value)) ||
       new Set(valid.map((value) => value.toLowerCase())).size !== valid.length
     ) {
@@ -970,11 +1309,13 @@ const BountyDetail = () => {
     }
 
     setDistributing(true);
+    setDistributionPhase("Confirm in wallet");
 
     const toastId = showToast.loading("Assigning winners on-chain...");
     let tx;
     try {
       tx = await executeRewardAssignment(valid);
+      setDistributionPhase("Recording reward claims");
     } catch (error) {
       const txHash = error.transactionHash;
       if (txHash && error.transactionStatus === "reverted") {
@@ -1013,6 +1354,7 @@ const BountyDetail = () => {
         );
       }
       setDistributing(false);
+      setDistributionPhase("");
       return;
     }
 
@@ -1038,6 +1380,7 @@ const BountyDetail = () => {
       );
     } finally {
       setDistributing(false);
+      setDistributionPhase("");
     }
   };
 
@@ -1047,8 +1390,9 @@ const BountyDetail = () => {
       return showToast.error(
         "Sign in with your wallet before syncing rewards.",
       );
-    setDistributing(true);
     let record = pendingDistributionSync;
+    setDistributing(true);
+    setDistributionPhase(record.status === "pending_confirmation" ? "Checking transaction confirmation" : "Recording reward claims");
     try {
       if (!isValidDistributionSyncRecord(record)) {
         throw new Error("Pending distribution recovery data is invalid.");
@@ -1101,6 +1445,7 @@ const BountyDetail = () => {
       }
     } finally {
       setDistributing(false);
+      setDistributionPhase("");
     }
   };
 
@@ -1142,21 +1487,19 @@ const BountyDetail = () => {
   const isSelected = (addr) =>
     selectedWinners.some((item) => item.address === addr?.toLowerCase());
 
+  const requiredWinnerCount =
+    bounty?.payoutType === "SINGLE" ? 1 : Number(bounty?.winnersAllowed) || 1;
+
   const hasEnoughSelections = () =>
-    selectedWinners.length === 0 ||
-    selectedWinners.length ===
-      (bounty?.payoutType === "SINGLE" ? 1 : bounty?.winnersAllowed);
+    selectedWinners.length === requiredWinnerCount;
 
   const openDistributeModal = () => {
-    if (selectedWinners.length) {
-      setWinnerAddresses(selectedWinners.map((item) => item.address));
-    } else {
-      const count =
-        bounty?.payoutType === "SINGLE" ? 1 : bounty?.winnersAllowed || 1;
-
-      setWinnerAddresses(Array(count).fill(""));
+    if (!hasEnoughSelections()) {
+      const remaining = Math.max(0, requiredWinnerCount - selectedWinners.length);
+      showToast.info(`Select ${remaining} more submission${remaining === 1 ? "" : "s"} before reviewing distribution.`);
+      return;
     }
-
+    setWinnerAddresses(selectedWinners.map((item) => item.address));
     setShowDistributeModal(true);
   };
 
@@ -1184,6 +1527,8 @@ const BountyDetail = () => {
   };
 
   const openEditBountyModal = () => {
+    editTriggerRef.current = document.activeElement;
+    setEditBountyErrors({});
     setEditBountyForm({
       title: bounty.title || "",
       description: bounty.description || "",
@@ -1194,15 +1539,20 @@ const BountyDetail = () => {
 
   const handleUpdateBounty = async (event) => {
     event.preventDefault();
+    const errors = {};
     if (!editBountyForm.title.trim()) {
-      return showToast.error("Bounty title is required");
+      errors.title = "Enter a bounty title.";
     }
     if (!editBountyForm.description.trim()) {
-      return showToast.error("Bounty description is required");
+      errors.description = "Enter a bounty description.";
     }
     const currentDeadline = parseDate(bounty.deadline);
     if (!currentDeadline || !editBountyForm.deadline) {
-      return showToast.error("Please choose a valid deadline");
+      errors.deadline = "Choose a valid deadline.";
+    }
+    if (Object.keys(errors).length) {
+      setEditBountyErrors(errors);
+      return;
     }
 
     const isCompleted =
@@ -1211,9 +1561,7 @@ const BountyDetail = () => {
     const currentDeadlineDay = toLocalDateInput(currentDeadline);
     const deadlineChanged = editBountyForm.deadline !== currentDeadlineDay;
     if (isCompleted && deadlineChanged) {
-      return showToast.error(
-        "The deadline cannot be changed because this bounty is completed.",
-      );
+      errors.deadline = "The deadline cannot be changed because this bounty is completed.";
     }
     const nextDeadline = new Date(`${editBountyForm.deadline}T00:00:00`);
     if (
@@ -1221,9 +1569,14 @@ const BountyDetail = () => {
       deadlineChanged &&
       nextDeadline.getTime() <= currentDeadline.getTime()
     ) {
-      return showToast.error("The deadline can only be extended");
+      errors.deadline = "Choose a later date. The deadline can only be extended.";
+    }
+    if (Object.keys(errors).length) {
+      setEditBountyErrors(errors);
+      return;
     }
 
+    setEditBountyErrors({});
     setSavingBountyEdits(true);
     try {
       const updates = {
@@ -1236,6 +1589,11 @@ const BountyDetail = () => {
       const { data } = await apiClient.patch(`/bounty/update/${id}`, updates);
       const updatedBounty = data.bounty || data;
       setBounty((previous) => ({ ...previous, ...updatedBounty }));
+      setEditBountyForm({
+        title: updatedBounty.title || editBountyForm.title.trim(),
+        description: updatedBounty.description || editBountyForm.description.trim(),
+        deadline: toLocalDateInput(updatedBounty.deadline || bounty.deadline),
+      });
       setShowEditBountyModal(false);
       showToast.success("Bounty details updated");
     } catch (error) {
@@ -1252,6 +1610,17 @@ const BountyDetail = () => {
       .map((winner) => winner.address?.toLowerCase())
       .filter(Boolean),
   );
+  const pendingReviewCount = allSubmissions.filter(
+    (submission) => (submission.status || "pending") === "pending",
+  ).length;
+  const reviewSubmissions = isCreator
+    ? [...allSubmissions].sort((first, second) => {
+        const firstPending = (first.status || "pending") === "pending";
+        const secondPending = (second.status || "pending") === "pending";
+        if (firstPending !== secondPending) return firstPending ? -1 : 1;
+        return new Date(second.submittedAt || 0) - new Date(first.submittedAt || 0);
+      })
+    : allSubmissions;
 
   // Keep the connected user's entry visible on the first page even when their
   // submission is older than the current page window.
@@ -1283,13 +1652,29 @@ const BountyDetail = () => {
   };
 
   const canDistribute = () => {
-    if (!isCreator || !bounty?.deadline || winnersData?.isDistributed) {
+    if (!isCreator || !bounty?.deadline || winnersData?.isDistributed || pendingDistributionSync) {
       return false;
     }
 
     const deadline = parseDate(bounty.deadline);
 
-    return Boolean(deadline && deadline.getTime() < currentTime);
+    return Boolean(deadline && deadline.getTime() <= currentTime);
+  };
+
+  const getDistributionBlockReason = () => {
+    if (winnersData?.isDistributed) return "Rewards have already been distributed.";
+    if (pendingDistributionSync) return "A previous distribution is still being confirmed or synchronized. Resolve it above before starting another.";
+    const deadline = parseDate(bounty?.deadline);
+    if (!deadline || deadline.getTime() > currentTime) {
+      return `You can review and select submissions now. Distribution opens after the deadline${bounty?.deadline ? ` on ${formatDate(bounty.deadline)}` : ""}.`;
+    }
+    if (!hasEnoughSelections()) {
+      const remaining = Math.max(0, requiredWinnerCount - selectedWinners.length);
+      return allSubmissions.length === 0
+        ? "There are no submissions to review yet."
+        : `Select ${remaining} more submission${remaining === 1 ? "" : "s"} to complete the ${requiredWinnerCount}-winner payout.`;
+    }
+    return "All winners are selected. Review the recipients and payout amounts before confirming.";
   };
 
   const displayClaimable = () => {
@@ -1424,6 +1809,34 @@ const BountyDetail = () => {
         ? "Time remaining"
         : "Bounty schedule";
 
+  const contributorJourneyLabel = !address
+    ? "Not started"
+    : hasUserSubmitted
+      ? userSubmission?.status === "accepted"
+        ? "Selected"
+        : userSubmission?.status === "rejected"
+          ? "Not selected"
+          : "Under review"
+      : enrollmentStatus === "checking"
+        ? "Checking your status"
+        : enrollmentStatus === "unavailable"
+          ? "Status unavailable"
+          : enrollmentStatus === "enrolled"
+            ? "Enrolled"
+            : "Not started";
+
+  const contributorJourneyDescription = contributorJourneyLabel === "Not started"
+    ? "Start task records your participation in the app. It does not send a blockchain transaction or ask for another wallet signature."
+    : contributorJourneyLabel === "Enrolled"
+      ? "You are enrolled. Complete the task, then submit your description and proof link before the deadline."
+      : contributorJourneyLabel === "Under review"
+        ? "Your submission is with the creator for review. This page checks for status changes when you return and about once a minute while it is visible."
+        : contributorJourneyLabel === "Selected"
+          ? "The creator selected your submission. Check the reward section below for distribution and claim status."
+          : contributorJourneyLabel === "Not selected"
+            ? "The creator reviewed your submission and did not select it for a reward."
+            : "Refresh your participation status to see whether you are enrolled or have a submission on file.";
+
   const displayDate =
     displayStatus === "upcoming" ? bounty.startDate : bounty.deadline;
 
@@ -1435,6 +1848,27 @@ const BountyDetail = () => {
         <div className="pointer-events-none absolute inset-x-0 top-0 -z-0 h-80 bg-gradient-to-b from-[#00D6A0]/[0.07] via-transparent to-transparent" />
 
         <div className="relative z-10 mx-auto max-w-6xl">
+          {createdBountyNotice && (
+            <div className="mb-6 flex flex-col gap-4 rounded-2xl border border-[#00D6A0]/30 bg-[#00D6A0]/[0.07] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-bold text-[#00A87D]">Your bounty is published</p>
+                <p className="mt-1 text-sm text-gray-500 dark:text-white/60">
+                  {createdBountyNotice.title || bounty?.title || "It is now available to contributors."} Share its link to invite people to participate.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={copyBountyLink} className="inline-flex items-center gap-2 rounded-xl bg-[#00D6A0] px-4 py-2.5 text-sm font-bold text-[#07120D] transition hover:bg-[#32E5B8]">
+                  <FiCopy size={15} /> Copy bounty link
+                </button>
+                <button type="button" onClick={() => navigate("/dashboard")} className="rounded-xl border border-[#00A87D]/30 px-4 py-2.5 text-sm font-semibold text-[#008A66] transition hover:bg-[#00D6A0]/10">
+                  Back to dashboard
+                </button>
+                <button type="button" aria-label="Dismiss published bounty notice" onClick={() => setCreatedBountyNotice(null)} className="rounded-xl px-3 py-2.5 text-gray-500 hover:bg-black/5 dark:text-white/60 dark:hover:bg-white/5">
+                  <FiX size={17} />
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mb-7 flex items-center justify-between gap-3">
             <button
               onClick={handleGoBack}
@@ -1502,6 +1936,58 @@ const BountyDetail = () => {
             </section>
           )}
 
+          {(isClaiming || pendingClaimSync) && (
+            <section
+              className="mb-6 rounded-2xl border border-sky-400/40 bg-sky-50 p-4 text-sky-950 dark:bg-sky-500/10 dark:text-sky-100"
+              aria-live="polite"
+            >
+              <h2 className="font-bold">
+                {pendingClaimSync?.status === "pending_confirmation"
+                  ? "Claim transaction confirmation is pending"
+                  : isClaiming
+                    ? claimPhase || "Claim in progress"
+                    : "Reward claimed on-chain; your account still needs syncing"}
+              </h2>
+              <p className="mt-1 text-sm leading-6">
+                {pendingClaimSync?.status === "pending_confirmation"
+                  ? "The transaction outcome is not known yet. Check its status before trying again."
+                  : isClaiming
+                    ? "Follow the wallet prompt and wait for the blockchain confirmation."
+                    : "Your reward is already claimed on the blockchain. Retrying updates your app account with the same transaction and will not send another claim."}
+              </p>
+              {(pendingClaimSync || claimSyncError) && (
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {pendingClaimSync?.txHash && (
+                    <a
+                      href={getExplorerUrl(pendingClaimSync.chainId || bounty.network, pendingClaimSync.txHash) || undefined}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 break-all font-mono text-xs underline"
+                    >
+                      {pendingClaimSync.txHash}
+                      <FiExternalLink size={13} />
+                    </a>
+                  )}
+                  {claimSyncError && <p className="basis-full text-sm">{claimSyncError}</p>}
+                  {pendingClaimSync && (
+                    <button
+                      type="button"
+                      onClick={() => syncClaimRecord(pendingClaimSync)}
+                      disabled={isClaimSyncing}
+                      className={`${primaryButton} !px-4 !py-2.5`}
+                    >
+                      {isClaimSyncing
+                        ? claimPhase || "Checking..."
+                        : pendingClaimSync.status === "pending_confirmation"
+                          ? "Check transaction status"
+                          : "Retry account sync"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </section>
+          )}
+
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_310px]">
             <div className="min-w-0 space-y-6">
               <section className={cardClass}>
@@ -1525,6 +2011,7 @@ const BountyDetail = () => {
                       <button
                         type="button"
                         onClick={openEditBountyModal}
+                        aria-label="Edit bounty title, description, or deadline"
                         className={`${secondaryButton} ml-auto !px-3 !py-2 text-xs`}
                       >
                         <FiEdit2 size={14} /> Edit bounty
@@ -1639,6 +2126,16 @@ const BountyDetail = () => {
                       <p className="mt-3 text-2xl font-bold">
                         {formatDate(displayDate)}
                       </p>
+
+                      {bounty.deadlineExtendedFrom && (
+                        <details className="mt-3 rounded-xl border border-amber-400/30 bg-amber-50/70 px-3 py-2 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100">
+                          <summary className="cursor-pointer list-none text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500">
+                            <span className="mr-2 rounded-full bg-amber-200/70 px-2 py-1 uppercase tracking-wide dark:bg-amber-400/20">Deadline extended</span>
+                            <span>Now {formatDateTime(bounty.deadline)}</span>
+                          </summary>
+                          <p className="mt-2 text-xs leading-5">Previous deadline: {formatDateTime(bounty.deadlineExtendedFrom)}</p>
+                        </details>
+                      )}
 
                       <p className="mt-1 text-xs text-[#778077] dark:text-white/45">
                         {countdownHeading} · Your local time
@@ -1826,6 +2323,26 @@ const BountyDetail = () => {
                     </div>
                   </div>
 
+                  {!isCreator && address && (
+                    <section className="mt-6 rounded-2xl border border-[#dfe5dd] bg-[#f8faf7] p-4 dark:border-white/10 dark:bg-white/[0.025]" aria-live="polite">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#899189] dark:text-white/40">Your participation</p>
+                          <h3 className="mt-1 text-base font-bold">{contributorJourneyLabel}</h3>
+                          <p className="mt-1 max-w-2xl text-xs leading-5 text-[#727c73] dark:text-white/55">{contributorJourneyDescription}</p>
+                        </div>
+                        <button type="button" onClick={() => refreshContributorStatus()} disabled={isRefreshingContributorStatus} className={`${secondaryButton} !px-3 !py-2`}>
+                          {isRefreshingContributorStatus ? "Checking…" : "Refresh status"}
+                        </button>
+                      </div>
+                      {contributorStatusError && (
+                        <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] px-3 py-2 text-xs text-amber-700 dark:text-amber-200" role="status">
+                          {contributorStatusError}
+                        </p>
+                      )}
+                    </section>
+                  )}
+
                   <div className="mt-7 flex flex-col gap-3 border-t border-[#e5e9e3] dark:border-white/[0.08] pt-6 sm:flex-row sm:flex-wrap">
                     {!address && displayStatus === "active" && (
                       <p className="w-full rounded-xl border border-[#dfe5dd] dark:border-white/10 bg-[#f7f9f6] dark:bg-white/[0.03] px-4 py-3 text-sm text-[#6d776e] dark:text-white/55">
@@ -1837,22 +2354,40 @@ const BountyDetail = () => {
                       <>
                         {enrollmentStatus === "checking" && (
                           <div className="rounded-xl border border-[#dfe5dd] dark:border-white/10 px-4 py-3 text-sm text-[#7a837a] dark:text-white/50">
-                            Checking enrollment...
+                            Checking your participation status…
+                          </div>
+                        )}
+
+                        {enrollmentStatus === "unavailable" && (
+                          <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                            We could not confirm your enrollment. Refresh your status before starting the task.
                           </div>
                         )}
 
                         {enrollmentStatus === "not-enrolled" && (
-                          <button
-                            onClick={handleEnroll}
-                            disabled={isEnrolling}
-                            className={`${primaryButton} w-full sm:w-auto`}
-                          >
-                            <FiZap size={16} />
-                            {isEnrolling ? "Enrolling..." : "Start task"}
-                          </button>
+                          <div className="flex flex-col items-start gap-2">
+                            <button
+                              onClick={handleEnroll}
+                              disabled={isEnrolling}
+                              className={`${primaryButton} w-full sm:w-auto`}
+                            >
+                              <FiZap size={16} />
+                              {isEnrolling ? "Recording enrollment…" : "Start task"}
+                            </button>
+                            <p className="text-xs text-[#727c73] dark:text-white/50">This records your participation in the app; it is not an on-chain transaction.</p>
+                          </div>
                         )}
 
-                        {enrollmentStatus === "enrolled" &&
+                        {enrollmentStatus === "enrolled" && submissionStatusError && (
+                          <div className="flex flex-col items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/[0.06] px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+                            Could not check whether you have already submitted. Refresh your status before submitting again.
+                            <button type="button" onClick={() => refreshContributorStatus()} disabled={isRefreshingContributorStatus} className="font-semibold underline">
+                              {isRefreshingContributorStatus ? "Checking…" : "Check submission status"}
+                            </button>
+                          </div>
+                        )}
+
+                        {enrollmentStatus === "enrolled" && !submissionStatusError &&
                           !hasUserSubmitted && (
                             <button
                               onClick={() => setShowSubmitModal(true)}
@@ -1863,7 +2398,7 @@ const BountyDetail = () => {
                             </button>
                           )}
 
-                        {enrollmentStatus === "enrolled" &&
+                        {enrollmentStatus === "enrolled" && !submissionStatusError &&
                           hasUserSubmitted && (
                             <span className="inline-flex items-center justify-center gap-2 rounded-xl border border-[#00D6A0]/25 bg-[#00D6A0]/10 px-4 py-3 text-sm font-semibold text-[#008a66] dark:text-[#00D6A0]">
                               <FiCheckCircle />
@@ -1876,12 +2411,14 @@ const BountyDetail = () => {
                     {canClaim() && (
                       <button
                         onClick={handleClaimReward}
-                        disabled={isContractPending || isContractConfirming}
+                        disabled={isClaiming || isClaimSyncing || Boolean(pendingClaimSync) || isContractPending || isContractConfirming}
                         className={`${primaryButton} w-full sm:w-auto`}
                       >
                         <FiAward size={16} />
 
-                        {isContractPending
+                        {isClaiming
+                          ? claimPhase || "Claiming..."
+                          : isContractPending
                           ? "Confirm in wallet..."
                           : isContractConfirming
                             ? "Confirming..."
@@ -1893,12 +2430,13 @@ const BountyDetail = () => {
                       <button
                         onClick={openDistributeModal}
                         disabled={!hasEnoughSelections()}
+                        title={!hasEnoughSelections() ? getDistributionBlockReason() : undefined}
                         className={`${primaryButton} w-full sm:w-auto`}
                       >
                         <FiUsers />
-                        Distribute rewards
-                        {selectedWinners.length > 0 &&
-                          ` (${selectedWinners.length})`}
+                        {hasEnoughSelections()
+                          ? "Review distribution"
+                          : `Select ${Math.max(0, requiredWinnerCount - selectedWinners.length)} more winner${requiredWinnerCount - selectedWinners.length === 1 ? "" : "s"}`}
                       </button>
                     )}
                   </div>
@@ -1916,13 +2454,7 @@ const BountyDetail = () => {
                         </p>
 
                         <p className="mt-1 text-xs leading-5 text-[#727c73] dark:text-white/50">
-                          {deadlinePassed
-                            ? "The deadline has passed. Review the submissions below and select your winners to distribute the reward."
-                            : `Winner selection unlocks after the deadline${
-                                bounty.deadline
-                                  ? ` on ${formatDate(bounty.deadline)}`
-                                  : ""
-                              }.`}
+                          {getDistributionBlockReason()}
                         </p>
                       </div>
                     </div>
@@ -1948,12 +2480,16 @@ const BountyDetail = () => {
 
                       <span className="rounded-full border border-[#dfe5dd] dark:border-white/10 px-3 py-1.5 text-xs font-semibold">
                         {userSubmission.status === "accepted"
-                          ? "Accepted"
+                          ? "Selected"
                           : userSubmission.status === "rejected"
                             ? "Not selected"
-                            : "Pending review"}
+                            : "Under review"}
                       </span>
                     </div>
+
+                    <p className="mb-4 text-xs leading-5 text-[#727c73] dark:text-white/50">
+                      Submitted {userSubmission.submittedAt ? `on ${formatDateTime(userSubmission.submittedAt)}` : "successfully"}. Each contributor can submit once per bounty; editing or resubmitting is not currently available.
+                    </p>
 
                     <div className="rounded-xl border border-[#dfe5df] bg-white p-4 dark:border-white/10 dark:bg-black/10">
                       <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.15em] text-[#008a66] dark:text-[#00D6A0]">
@@ -2281,7 +2817,7 @@ const BountyDetail = () => {
                   </section>
                 )}
 
-              {allSubmissions.length > 0 && (
+              {(allSubmissions.length > 0 || isCreator) && (
                 <section className={cardClass}>
                   <div className="p-5 sm:p-7">
                     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2296,21 +2832,33 @@ const BountyDetail = () => {
 
                         <p className="mt-2 text-sm text-[#778077] dark:text-white/50">
                           {isCreator
-                            ? "Review submitted work and choose your winners."
+                            ? `${pendingReviewCount} submission${pendingReviewCount === 1 ? "" : "s"} awaiting review. Review the task requirements and proof before selecting winners.`
                             : "Work submitted by bounty participants."}
                         </p>
                       </div>
 
-                      {isCreator && selectedWinners.length > 0 && (
-                        <span className="w-fit rounded-full border border-[#00D6A0]/25 bg-[#00D6A0]/10 px-3 py-1.5 text-xs font-bold text-[#008a66] dark:text-[#00D6A0]">
-                          {selectedWinners.length} /{" "}
-                          {bounty.payoutType === "SINGLE"
-                            ? 1
-                            : bounty.winnersAllowed}{" "}
-                          selected
-                        </span>
+                      {isCreator && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="w-fit rounded-full border border-[#00D6A0]/25 bg-[#00D6A0]/10 px-3 py-1.5 text-xs font-bold text-[#008a66] dark:text-[#00D6A0]">
+                            {selectedWinners.length} / {requiredWinnerCount} winners selected
+                          </span>
+                          <button type="button" onClick={() => refreshCreatorReview()} disabled={isRefreshingReviewQueue} className={`${secondaryButton} !px-3 !py-2 text-xs`}>
+                            {isRefreshingReviewQueue ? "Refreshing…" : "Refresh reviews"}
+                          </button>
+                        </div>
                       )}
                     </div>
+
+                    {isCreator && (
+                      <div className="mb-5 rounded-xl border border-[#dfe5dd] bg-[#f8faf7] p-4 text-xs leading-5 text-[#727c73] dark:border-white/10 dark:bg-white/[0.025] dark:text-white/55">
+                        <p>Use the bounty requirements above and each contributor’s proof to review submissions. Selections can be changed until you confirm distribution.</p>
+                        {reviewQueueError && <p className="mt-2 text-amber-700 dark:text-amber-200" role="status">{reviewQueueError}</p>}
+                        <details className="mt-2">
+                          <summary className="cursor-pointer font-semibold text-[#008a66] dark:text-[#00D6A0]">View full evaluation requirements</summary>
+                          <p className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap">{bounty.description || "No additional requirements were provided."}</p>
+                        </details>
+                      </div>
+                    )}
 
                     {isCreator &&
                       selectedWinners.length > 0 &&
@@ -2340,8 +2888,14 @@ const BountyDetail = () => {
                         </div>
                       )}
 
+                    {allSubmissions.length === 0 && (
+                      <p className="rounded-xl border border-dashed border-[#dfe5dd] px-4 py-8 text-center text-sm text-[#899189] dark:border-white/10">
+                        No submissions have been received yet. Once contributors submit their work, you can review it here.
+                      </p>
+                    )}
+
                     <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-                      {allSubmissions.map((submission) => {
+                      {reviewSubmissions.map((submission) => {
                         const selected =
                           isCreator && isSelected(submission.user);
 
@@ -2387,6 +2941,15 @@ const BountyDetail = () => {
                               {selected && (
                                 <span className="rounded-full bg-[#00D6A0]/10 px-2 py-1 text-[10px] font-bold text-[#008a66] dark:text-[#00D6A0]">
                                   #{selectionIndex + 1}
+                                </span>
+                              )}
+                              {isCreator && (
+                                <span className="rounded-full border border-[#dfe5dd] px-2 py-1 text-[10px] font-semibold text-[#69736a] dark:border-white/10 dark:text-white/55">
+                                  {submission.status === "accepted"
+                                    ? "Selected"
+                                    : submission.status === "rejected"
+                                      ? "Not selected"
+                                      : "Pending review"}
                                 </span>
                               )}
                             </div>
@@ -2497,10 +3060,12 @@ const BountyDetail = () => {
                         {canDistribute() && (
                           <button
                             onClick={openDistributeModal}
+                            disabled={!hasEnoughSelections()}
+                            title={!hasEnoughSelections() ? getDistributionBlockReason() : undefined}
                             className={primaryButton}
                           >
                             <FiAward />
-                            Continue to distribution
+                            {hasEnoughSelections() ? "Review distribution" : `Select ${Math.max(0, requiredWinnerCount - selectedWinners.length)} more winner${requiredWinnerCount - selectedWinners.length === 1 ? "" : "s"}`}
                           </button>
                         )}
                       </div>
@@ -2714,11 +3279,15 @@ const BountyDetail = () => {
         >
           <div
             className="app-modal-panel max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-[#dfe5dd] dark:border-white/10 bg-white dark:bg-[#101310] shadow-2xl"
+          ref={editDialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-bounty-title"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="flex items-start justify-between border-b border-[#e5e9e3] dark:border-white/[0.08] p-5 sm:p-6">
               <div>
-                <h2 className="text-xl font-extrabold">Edit bounty</h2>
+                <h2 id="edit-bounty-title" className="text-xl font-extrabold">Edit bounty</h2>
                 <p className="mt-1 text-sm text-[#778077] dark:text-white/50">
                   Update the title, description, or extend the deadline.
                 </p>
@@ -2739,11 +3308,13 @@ const BountyDetail = () => {
               className="space-y-5 p-5 sm:p-6"
             >
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                <label htmlFor="edit-bounty-title-input" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   Bounty title
                 </label>
                 <input
                   type="text"
+                  id="edit-bounty-title-input"
+                  ref={editTitleInputRef}
                   maxLength={160}
                   required
                   value={editBountyForm.title}
@@ -2754,15 +3325,19 @@ const BountyDetail = () => {
                     }))
                   }
                   className={inputClass}
+                  aria-invalid={Boolean(editBountyErrors.title)}
+                  aria-describedby={editBountyErrors.title ? "edit-bounty-title-error" : undefined}
                 />
+                {editBountyErrors.title && <p id="edit-bounty-title-error" className="mt-1 text-sm text-red-600" role="alert">{editBountyErrors.title}</p>}
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                <label htmlFor="edit-bounty-description" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   Description
                 </label>
                 <textarea
                   maxLength={20000}
+                  id="edit-bounty-description"
                   required
                   rows={6}
                   value={editBountyForm.description}
@@ -2773,15 +3348,19 @@ const BountyDetail = () => {
                     }))
                   }
                   className={`${inputClass} resize-y`}
+                  aria-invalid={Boolean(editBountyErrors.description)}
+                  aria-describedby={editBountyErrors.description ? "edit-bounty-description-error" : undefined}
                 />
+                {editBountyErrors.description && <p id="edit-bounty-description-error" className="mt-1 text-sm text-red-600" role="alert">{editBountyErrors.description}</p>}
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                <label htmlFor="edit-bounty-deadline" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   Deadline
                 </label>
                 <input
                   type="date"
+                  id="edit-bounty-deadline"
                   required
                   min={toLocalDateInput(bounty.deadline)}
                   disabled={
@@ -2795,8 +3374,11 @@ const BountyDetail = () => {
                     }))
                   }
                   className={inputClass}
+                  aria-invalid={Boolean(editBountyErrors.deadline)}
+                  aria-describedby={editBountyErrors.deadline ? "edit-bounty-deadline-error" : "edit-bounty-deadline-help"}
                 />
-                <p className="mt-2 text-xs text-[#899189] dark:text-white/40">
+                {editBountyErrors.deadline && <p id="edit-bounty-deadline-error" className="mt-1 text-sm text-red-600" role="alert">{editBountyErrors.deadline}</p>}
+                <p id="edit-bounty-deadline-help" className="mt-2 text-xs text-[#899189] dark:text-white/40">
                   {String(bounty.status || "").toLowerCase() === "completed"
                     ? "The deadline cannot be changed because this bounty is completed."
                     : "The start date cannot be changed. You may keep the current deadline or choose a later date."}
@@ -2829,8 +3411,8 @@ const BountyDetail = () => {
         <div
           className="app-modal-overlay fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm"
           onClick={() => {
+            if (submitting) return;
             setShowSubmitModal(false);
-            resetSubmissionForm();
           }}
         >
           <div
@@ -2844,15 +3426,31 @@ const BountyDetail = () => {
                 <p className="mt-1 text-sm text-[#778077] dark:text-white/50">
                   Share your completed task and proof.
                 </p>
+                <p className="mt-2 text-xs text-[#899189] dark:text-white/40">
+                  Your description and proof link are saved on this device. The optional image must be selected again if you leave this page.
+                </p>
+                {bounty && (
+                  <div className="mt-3 rounded-xl border border-[#dfe5dd] bg-[#f8faf7] p-3 text-xs dark:border-white/10 dark:bg-white/[0.025]">
+                    <p className="font-semibold">{bounty.title}</p>
+                    <p className="mt-1 text-[#727c73] dark:text-white/50">
+                      Reward: {formatAmount(bounty.reward)} {token} · Deadline: {formatDateTime(bounty.deadline)} · {networkName} · {bounty.winnersAllowed || 1} winner{Number(bounty.winnersAllowed || 1) === 1 ? "" : "s"}
+                    </p>
+                    <details className="mt-2">
+                      <summary className="cursor-pointer font-semibold text-[#008a66] dark:text-[#00D6A0]">Review task requirements</summary>
+                      <p className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap leading-5 text-[#727c73] dark:text-white/55">{bounty.description}</p>
+                    </details>
+                  </div>
+                )}
               </div>
 
               <button
                 type="button"
                 aria-label="Close modal"
                 onClick={() => {
+                  if (submitting) return;
                   setShowSubmitModal(false);
-                  resetSubmissionForm();
                 }}
+                disabled={submitting}
                 className={`${secondaryButton} !h-9 !w-9 !p-0`}
               >
                 <FiX size={17} />
@@ -2924,11 +3522,12 @@ const BountyDetail = () => {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                <label htmlFor="submission-description" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   What did you complete?
                 </label>
 
                 <textarea
+                  id="submission-description"
                   value={submissionDescription}
                   onChange={(event) =>
                     setSubmissionDescription(event.target.value)
@@ -2946,11 +3545,12 @@ const BountyDetail = () => {
               </div>
 
               <div>
-                <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
+                <label htmlFor="submission-proof-link" className="mb-2 block text-xs font-bold uppercase tracking-wider text-[#737c74] dark:text-white/50">
                   Proof link
                 </label>
 
                 <input
+                  id="submission-proof-link"
                   type="url"
                   value={submissionLink}
                   onChange={(event) => setSubmissionLink(event.target.value)}
@@ -2970,20 +3570,24 @@ const BountyDetail = () => {
                 )}
               </div>
 
-              <button
-                type="submit"
-                disabled={submitting || Boolean(imageSizeWarning)}
-                className={`${primaryButton} w-full`}
-              >
-                {submitting ? (
-                  "Submitting..."
-                ) : (
-                  <>
-                    <FiSend size={16} />
-                    Submit for review
-                  </>
-                )}
-              </button>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => {
+                    resetSubmissionForm();
+                    setShowSubmitModal(false);
+                  }}
+                  className={`${secondaryButton} flex-1`}
+                >Discard draft</button>
+                <button
+                  type="submit"
+                  disabled={submitting || Boolean(imageSizeWarning)}
+                  className={`${primaryButton} flex-1`}
+                >
+                  {submitting ? "Submitting your work…" : <><FiSend size={16} /> Submit for review</>}
+                </button>
+              </div>
             </form>
           </div>
         </div>
@@ -3003,7 +3607,7 @@ const BountyDetail = () => {
                 <h2 className="text-xl font-extrabold">Distribute rewards</h2>
 
                 <p className="mt-1 text-sm text-[#778077] dark:text-white/50">
-                  Confirm the selected winner addresses.
+                  Final review of the selected contributors and their payouts.
                 </p>
               </div>
 
@@ -3032,6 +3636,26 @@ const BountyDetail = () => {
                 <p className="mt-1 text-2xl font-extrabold text-[#008a66] dark:text-[#00D6A0]">
                   {formatAmount(bounty.reward)} {token}
                 </p>
+                <div className="mt-3 grid gap-2 border-t border-[#00D6A0]/15 pt-3 text-xs text-[#727c73] dark:text-white/55 sm:grid-cols-2">
+                  <p>Network: <span className="font-semibold text-[#171b18] dark:text-white">{networkName}</span></p>
+                  <p>Winners: <span className="font-semibold text-[#171b18] dark:text-white">{winnerAddresses.length} of {requiredWinnerCount}</span></p>
+                  <p className="sm:col-span-2">Payout: <span className="font-semibold text-[#171b18] dark:text-white">{bounty.payoutType === "SINGLE" ? "Single winner receives the full reward" : bounty.payoutType === "MULTI_EQUAL" ? `Equal split across ${requiredWinnerCount} winners` : `Custom split: ${bounty.percentages?.join("% / ")}%`}</span></p>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-xl border border-[#dfe5dd] bg-[#f8faf7] px-4 py-3 text-xs dark:border-white/10 dark:bg-white/[0.025]" role="status" aria-live="polite">
+                <p className="font-bold">{distributionPhase || "Ready to confirm"}</p>
+                <p className="mt-1 text-[#727c73] dark:text-white/50">
+                  {distributionPhase === "Confirm in wallet"
+                    ? "Approve the winner assignment in your wallet."
+                    : distributionPhase === "Confirming on-chain"
+                      ? "The transaction was submitted. Waiting for its on-chain confirmation."
+                      : distributionPhase === "Recording reward claims"
+                        ? "The chain confirmed the distribution. The app is recording each reward claim."
+                        : distributionPhase === "Checking transaction confirmation"
+                          ? "Checking the existing transaction before retrying app synchronization."
+                          : "Check each recipient and amount. You can change selected submissions before confirming."}
+                </p>
               </div>
 
               <div className="mt-5 space-y-4">
@@ -3055,14 +3679,7 @@ const BountyDetail = () => {
                       <input
                         type="text"
                         value={addr}
-                        onChange={(event) =>
-                          setWinnerAddresses((previous) =>
-                            previous.map((value, itemIndex) =>
-                              itemIndex === index ? event.target.value : value,
-                            ),
-                          )
-                        }
-                        placeholder="0x..."
+                        readOnly
                         className={inputClass}
                       />
 
@@ -3091,7 +3708,7 @@ const BountyDetail = () => {
                   className={`${primaryButton} flex-1`}
                 >
                   {distributing || isContractPending || isContractConfirming ? (
-                    "Processing..."
+                    distributionPhase || (isContractPending ? "Confirm in wallet" : isContractConfirming ? "Confirming on-chain" : "Recording reward claims")
                   ) : (
                     <>
                       <FiShield size={16} />

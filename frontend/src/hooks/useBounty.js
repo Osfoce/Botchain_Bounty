@@ -66,7 +66,11 @@ export const useBounty = () => {
   /*                     CORE TRANSACTION EXECUTOR                      */
   /* ------------------------------------------------------------------ */
   const executeTx = async (prepareFn, params, options = {}) => {
-    const { successMessage = "Transaction successful", eventName } = options;
+    const {
+      successMessage = "Transaction successful",
+      eventName,
+      onSubmitted,
+    } = options;
 
     if (!account) {
       showToast.error("Please connect your wallet");
@@ -105,14 +109,12 @@ export const useBounty = () => {
       setTxHash(hash);
       setIsPending(false);
       setIsConfirming(true);
+      onSubmitted?.(hash);
 
       showToast.loading("Transaction sent. Waiting for confirmation...", {
         id: hash,
       });
 
-      setIsConfirming(false); // block mined
-
-      // ...........
       // Wait for receipt using public client
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
 
@@ -125,6 +127,7 @@ export const useBounty = () => {
         throw error;
       }
       transactionConfirmed = true;
+      setIsConfirming(false);
 
       // Success showToast
       showToast.success(successMessage, { id: hash });
@@ -372,46 +375,50 @@ export const useBounty = () => {
   /*                        WRITE ACTIONS                               */
   /* ------------------------------------------------------------------ */
 
-  const createBounty = async (bountyData) => {
+  const createBounty = async (bountyData, options = {}) => {
     return executeTx(
       prepareCreateBountyTx,
       { bountyData },
       {
         successMessage: "Bounty created!",
         eventName: "BountyCreated",
+        onSubmitted: options.onSubmitted,
       },
     );
   };
 
-  const claimReward = async (bountyId) => {
+  const claimReward = async (bountyId, options = {}) => {
     return executeTx(
       prepareClaimTx,
       { bountyId },
       {
         successMessage: "Reward claimed!",
         eventName: "RewardClaimed",
+        onSubmitted: options.onSubmitted,
       },
     );
   };
 
-  const assignSingleWinner = async (bountyId, winner) => {
+  const assignSingleWinner = async (bountyId, winner, options = {}) => {
     return executeTx(
       prepareAssignSingleWinnerTx,
       { bountyId, winner },
       {
         successMessage: "Winner assigned!",
         eventName: "RewardsAssigned",
+        onSubmitted: options.onSubmitted,
       },
     );
   };
 
-  const assignMultipleWinners = async (bountyId, winners, percentages) => {
+  const assignMultipleWinners = async (bountyId, winners, percentages, options = {}) => {
     return executeTx(
       prepareAssignMultipleWinnersTx,
       { bountyId, winners, percentages },
       {
         successMessage: "Winners assigned!",
         eventName: "RewardsAssigned",
+        onSubmitted: options.onSubmitted,
       },
     );
   };
