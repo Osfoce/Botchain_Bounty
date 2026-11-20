@@ -63,6 +63,25 @@ const STEPS = [
 
 const getPendingCreateKey = (walletAddress) =>
   `happy-bounty:pending-create:${walletAddress.toLowerCase()}`;
+const getCreateDraftKey = (walletAddress) =>
+  `happy-bounty:create-draft:${walletAddress.toLowerCase()}`;
+
+const EMPTY_BOUNTY = {
+  title: "",
+  description: "",
+  category: "",
+  network: supportedChains[0]?.id ?? "",
+  tags: [],
+  startDate: "",
+  deadline: "",
+  originLink: "",
+  reward: "",
+  token: "",
+  winnersAllowed: 1,
+  payoutType: "SINGLE",
+  percentages: [],
+  rewardType: "self-fund",
+};
 
 const clearPendingCreate = (key) => {
   try {
@@ -106,23 +125,87 @@ function Create() {
   const [showPercentModal, setShowPercentModal] = useState(false);
   const [showInfoMenu, setShowInfoMenu] = useState(false);
   const [isSavingBounty, setIsSavingBounty] = useState(false);
+  const [bountyData, setBountyData] = useState(EMPTY_BOUNTY);
+  const [validationErrors, setValidationErrors] = useState({});
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftWallet, setDraftWallet] = useState(null);
+  const [draftNotice, setDraftNotice] = useState(false);
+  const [pendingCreate, setPendingCreate] = useState(null);
+  const [transactionPhase, setTransactionPhase] = useState("");
 
-  const [bountyData, setBountyData] = useState({
-    title: "",
-    description: "",
-    category: "",
-    network: supportedChains[0]?.id ?? "",
-    tags: [],
-    startDate: "",
-    deadline: "",
-    originLink: "",
-    reward: "",
-    token: "",
-    winnersAllowed: 1,
-    payoutType: "SINGLE",
-    percentages: [],
-    rewardType: "self-fund",
-  });
+  useEffect(() => {
+    if (!address) {
+      setDraftReady(false);
+      setDraftWallet(null);
+      setPendingCreate(null);
+      return;
+    }
+    setDraftReady(false);
+    setBountyData(EMPTY_BOUNTY);
+    setCurrentStep(1);
+    setMultipleWinner(false);
+    setWinnerCount(2);
+    setSelectedPayoutType("MULTI_EQUAL");
+    setPercentageArray([]);
+    setValidationErrors({});
+    setDraftNotice(false);
+
+    let restoredDraft = null;
+    let restoredPending = null;
+    try {
+      restoredDraft = localStorage.getItem(getCreateDraftKey(address));
+      restoredPending = sessionStorage.getItem(getPendingCreateKey(address));
+    } catch (error) {
+      console.warn("Could not load saved bounty data:", error);
+    }
+
+    if (restoredDraft) {
+      try {
+        const saved = JSON.parse(restoredDraft);
+        if (saved?.bountyData && typeof saved.bountyData === "object") {
+          setBountyData({ ...EMPTY_BOUNTY, ...saved.bountyData });
+          setCurrentStep(Math.min(totalSteps, Math.max(1, Number(saved.step) || 1)));
+          setMultipleWinner(Boolean(saved.multipleWinner));
+          setWinnerCount(Number(saved.winnerCount) || 2);
+          setSelectedPayoutType(saved.selectedPayoutType || "MULTI_EQUAL");
+          setPercentageArray(Array.isArray(saved.percentageArray) ? saved.percentageArray : []);
+          setDraftNotice(true);
+        }
+      } catch (error) {
+        console.warn("Saved bounty draft could not be restored:", error);
+      }
+    }
+    if (restoredPending) {
+      try {
+        setPendingCreate(JSON.parse(restoredPending));
+      } catch (error) {
+        console.warn("Saved bounty transaction recovery data is invalid:", error);
+      }
+    } else {
+      setPendingCreate(null);
+    }
+    setDraftReady(true);
+    setDraftWallet(address.toLowerCase());
+  }, [address, totalSteps]);
+
+  useEffect(() => {
+    if (!address || !draftReady || draftWallet !== address.toLowerCase()) return;
+    try {
+      localStorage.setItem(
+        getCreateDraftKey(address),
+        JSON.stringify({
+          bountyData,
+          step: currentStep,
+          multipleWinner,
+          winnerCount,
+          selectedPayoutType,
+          percentageArray,
+        }),
+      );
+    } catch (error) {
+      console.warn("Could not save bounty draft:", error);
+    }
+  }, [address, draftReady, draftWallet, bountyData, currentStep, multipleWinner, winnerCount, selectedPayoutType, percentageArray]);
 
   useEffect(() => {
     const observer = new MutationObserver(() => {
@@ -159,9 +242,9 @@ function Create() {
   };
 
   const availableTokens = useMemo(() => {
-    if (!currentChainId) return [];
-    return listTokensForChain(currentChainId);
-  }, [currentChainId]);
+    if (!bountyData.network) return [];
+    return listTokensForChain(Number(bountyData.network));
+  }, [bountyData.network]);
 
   const selectedChain = supportedChains.find(
     (chain) => chain.id === Number(bountyData.network),
@@ -241,58 +324,40 @@ function Create() {
   };
 
   const validateStep = (step) => {
+    const errors = {};
     if (step === 1) {
-      if (!bountyData.network) {
-        showToast.error("Please select a network.");
-        return false;
-      }
-
-      if (!bountyData.category) {
-        showToast.error("Please select a category.");
-        return false;
-      }
+      if (!bountyData.network) errors.network = "Choose a blockchain network.";
+      if (!bountyData.category) errors.category = "Choose a bounty category.";
     }
 
     if (step === 2) {
       if (bountyData.title.trim().length < 5) {
-        showToast.error("Title must be at least 5 characters.");
-        return false;
+        errors.title = "Enter a title with at least 5 characters.";
       }
 
       if (bountyData.description.trim().length < 20) {
-        showToast.error("Description must be at least 20 characters.");
-        return false;
+        errors.description = "Describe the task in at least 20 characters.";
       }
 
       if (!bountyData.tags.length) {
-        showToast.error("Please select at least one tag.");
-        return false;
+        errors.tags = "Select at least one tag.";
       }
 
-      if (!bountyData.startDate || !bountyData.deadline) {
-        showToast.error("Please select start and end dates.");
-        return false;
+      if (!bountyData.startDate) errors.startDate = "Choose a start date.";
+      if (!bountyData.deadline) errors.deadline = "Choose an end date.";
+
+      if (bountyData.startDate && bountyData.deadline) {
+        const start = new Date(`${bountyData.startDate}T00:00:00`);
+        const end = new Date(`${bountyData.deadline}T00:00:00`);
+
+        if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+          errors.deadline = "Enter valid start and end dates.";
+        } else if (end.getTime() - start.getTime() < 86400000) {
+          errors.deadline = "End date must be at least one day after the start date.";
+        }
       }
 
-      const start = new Date(`${bountyData.startDate}T00:00:00`);
-      const end = new Date(`${bountyData.deadline}T00:00:00`);
-
-      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-        showToast.error("Please enter valid dates.");
-        return false;
-      }
-
-      if (end.getTime() - start.getTime() < 86400000) {
-        showToast.error(
-          "End date must be at least one day after the start date.",
-        );
-        return false;
-      }
-
-      if (originLinkError) {
-        showToast.error(originLinkError);
-        return false;
-      }
+      if (originLinkError) errors.originLink = originLinkError;
     }
 
     if (step === 3) {
@@ -307,8 +372,7 @@ function Create() {
         !Number.isFinite(rewardAmount) ||
         rewardAmount <= 0
       ) {
-        showToast.error("Please enter a valid reward amount.");
-        return false;
+        errors.reward = "Enter a valid reward amount greater than zero.";
       }
 
       // Minimum reward per network (USDC on Arc, BOT on BOT Chain)
@@ -319,15 +383,11 @@ function Create() {
             ? 0.1
             : 0;
       if (Number(bountyData.reward) < minReward) {
-        showToast.error(
-          `Reward must be at least ${minReward} ${selectedNativeSymbol}.`,
-        );
-        return false;
+        errors.reward = `Reward must be at least ${minReward} ${selectedNativeSymbol}.`;
       }
 
       if (!bountyData.token) {
-        showToast.error("Please select a reward token.");
-        return false;
+        errors.token = "Choose a reward token.";
       }
 
       if (multipleWinner && selectedPayoutType === "MULTI_PERCENTAGE") {
@@ -343,13 +403,22 @@ function Create() {
           percentageArray.reduce((sum, percentage) => sum + percentage, 0) !==
             100
         ) {
-          showToast.error("Use 2–5 positive percentages that add up to 100.");
-          return false;
+          errors.payout = "Use 2–5 positive percentages that add up to 100.";
         }
       }
     }
 
-    return true;
+    setValidationErrors((previous) => {
+      const next = { ...previous };
+      const fieldsByStep = {
+        1: ["network", "category"],
+        2: ["title", "description", "tags", "startDate", "deadline", "originLink"],
+        3: ["reward", "token", "payout"],
+      };
+      fieldsByStep[step]?.forEach((field) => delete next[field]);
+      return { ...next, ...errors };
+    });
+    return Object.keys(errors).length === 0;
   };
 
   const nextStep = () => {
@@ -357,6 +426,16 @@ function Create() {
       setCurrentStep((prev) => prev + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
+  };
+
+  const updateField = (fieldName, value) => {
+    updateBountyData(fieldName, value);
+    setValidationErrors((previous) => {
+      if (!previous[fieldName]) return previous;
+      const next = { ...previous };
+      delete next[fieldName];
+      return next;
+    });
   };
 
   const prevStep = () => {
@@ -367,6 +446,11 @@ function Create() {
   };
 
   const toggleTag = (tag) => {
+    setValidationErrors((previous) => {
+      const next = { ...previous };
+      delete next.tags;
+      return next;
+    });
     setBountyData((prev) => {
       if (prev.tags.includes(tag)) {
         return {
@@ -405,6 +489,7 @@ function Create() {
       ...prev,
       tags: [...prev.tags, tag],
     }));
+    setValidationErrors((previous) => ({ ...previous, tags: undefined }));
 
     setCustomTag("");
   };
@@ -414,6 +499,7 @@ function Create() {
       ...prev,
       tags: prev.tags.filter((item) => item !== tag),
     }));
+    setValidationErrors((previous) => ({ ...previous, tags: undefined }));
   };
 
   const handleEqualSplitConfirm = () => {
@@ -504,80 +590,116 @@ function Create() {
       })()
     : localToday;
 
+  const publishAndOpenBounty = (response, pendingKey) => {
+    const created = response?.data?.bounty;
+    const bountyId = created?._id || created?.id;
+    if (!bountyId) {
+      throw new Error("Bounty was saved, but its page could not be opened.");
+    }
+    clearPendingCreate(pendingKey);
+    setPendingCreate(null);
+    setDraftReady(false);
+    try {
+      localStorage.removeItem(getCreateDraftKey(address));
+    } catch (error) {
+      console.warn("Could not clear published bounty draft:", error);
+    }
+    showToast.success("Bounty published successfully!");
+    navigate(`/bounty/${bountyId}`, {
+      state: { createdBounty: { id: String(bountyId), title: created.title || bountyData.title } },
+    });
+  };
+
+  const resumePendingCreate = async () => {
+    if (!address || !isAuthenticated) {
+      showToast.error("Sign in with the wallet that created this bounty to resume verification.");
+      return;
+    }
+    const pendingKey = getPendingCreateKey(address);
+    let saved = pendingCreate;
+    try {
+      saved = JSON.parse(sessionStorage.getItem(pendingKey) || "null") || saved;
+    } catch (error) {
+      console.warn("Using in-memory bounty recovery data:", error);
+    }
+    let payload = saved?.payload;
+    if (!payload && saved?.txHash && saved?.backendData && saved?.chainId) {
+      setTransactionPhase("Waiting for chain confirmation");
+      if (currentChainId !== Number(saved.chainId)) {
+        try {
+          await switchChainAsync({ chainId: Number(saved.chainId) });
+        } catch (error) {
+          setTransactionPhase("");
+          showToast.error("Switch to the bounty network in your wallet to check its transaction.");
+          return;
+        }
+      }
+      const blockchainId = await fetchBountyIdFromTx(saved.txHash);
+      if (blockchainId != null) {
+        payload = {
+          ...saved.backendData,
+          blockchainId,
+          txHash: saved.txHash,
+          isOnChain: true,
+          bountyContract: getBountyContract(saved.chainId),
+        };
+        try {
+          sessionStorage.setItem(pendingKey, JSON.stringify({ ...saved, payload }));
+          setPendingCreate({ ...saved, payload });
+        } catch (error) {
+          console.warn("Could not save resolved bounty recovery data:", error);
+        }
+      }
+    }
+    if (!payload) {
+      setTransactionPhase("");
+      showToast.error("Bounty recovery data is unavailable in this tab.");
+      return;
+    }
+    setIsSavingBounty(true);
+    setTransactionPhase("Saving bounty details");
+    try {
+      const response = await retryUntilVerified(() =>
+        apiClient.post("/bounty/create", payload),
+      );
+      if (response.status !== 201) throw new Error("Bounty verification is still pending.");
+      publishAndOpenBounty(response, pendingKey);
+    } catch (error) {
+      console.error("Pending bounty verification failed:", error);
+      showToast.error(
+        error.response?.data?.message || error.response?.data?.error ||
+          "The chain transaction succeeded. Bounty details are still waiting to sync; retry when ready.",
+      );
+    } finally {
+      setIsSavingBounty(false);
+      setTransactionPhase("");
+    }
+  };
+
   const handleFinalSubmit = async () => {
     if (!isConnected || !address) {
       showToast.error("Please connect your wallet.");
       return;
     }
     const pendingKey = getPendingCreateKey(address);
-    let pendingCreate;
+    let rawPendingCreate = null;
     try {
-      pendingCreate = sessionStorage.getItem(pendingKey);
+      rawPendingCreate = sessionStorage.getItem(pendingKey);
     } catch (error) {
       console.error("Could not read pending bounty verification:", error);
-      showToast.error("Could not access saved transaction recovery data.");
-      return;
+      if (!pendingCreate) {
+        showToast.error("Could not access saved transaction recovery data.");
+        return;
+      }
     }
-    if (pendingCreate) {
-      if (!isAuthenticated) {
-        showToast.error(
-          "Sign in with your wallet to resume bounty verification.",
-        );
-        return;
-      }
-      let payload;
-      try {
-        payload = JSON.parse(pendingCreate)?.payload;
-      } catch (error) {
-        console.error("Saved bounty verification data is invalid:", error);
-        clearPendingCreate(pendingKey);
-        showToast.error("Saved transaction recovery data is invalid.");
-        return;
-      }
-      if (!payload || typeof payload !== "object") {
-        clearPendingCreate(pendingKey);
-        showToast.error("Saved transaction recovery data is incomplete.");
-        return;
-      }
-
-      setIsSavingBounty(true);
-      try {
-        const response = await retryUntilVerified(() =>
-          apiClient.post("/bounty/create", payload),
-        );
-        if (response.status !== 201) {
-          throw new Error("Bounty verification did not complete.");
-        }
-        clearPendingCreate(pendingKey);
-        showToast.success("Bounty created and saved successfully!");
-        navigate("/dashboard");
-      } catch (error) {
-        console.error("Pending bounty verification failed:", error);
-        if (
-          error.response?.status >= 400 &&
-          error.response.status < 500 &&
-          ![401, 403].includes(error.response.status) &&
-          error.response?.data?.retryable !== true
-        ) {
-          clearPendingCreate(pendingKey);
-        }
-        showToast.error(
-          error.response?.data?.message ||
-            error.response?.data?.error ||
-            error.message ||
-            "Bounty verification is still pending.",
-        );
-      } finally {
-        setIsSavingBounty(false);
-      }
+    if (rawPendingCreate || pendingCreate) {
+      await resumePendingCreate();
       return;
     }
 
-    if (!validateStep(1) || !validateStep(2) || !validateStep(3)) {
-      if (!validateStep(1)) setCurrentStep(1);
-      else if (!validateStep(2)) setCurrentStep(2);
-      else setCurrentStep(3);
-
+    const stepValidity = [1, 2, 3].map((step) => validateStep(step));
+    if (stepValidity.includes(false)) {
+      setCurrentStep(stepValidity.findIndex((valid) => !valid) + 1);
       return;
     }
 
@@ -642,12 +764,15 @@ function Create() {
     };
 
     try {
+      setTransactionPhase("Confirm in wallet");
       const { eventData, hash } = await createBounty({
         reward: Number(bountyData.reward),
         token: bountyData.token,
         winnersAllowed: finalWinnersAllowed,
         payoutType: finalPayoutType,
         percentages: finalPercentages,
+      }, {
+        onSubmitted: () => setTransactionPhase("Waiting for chain confirmation"),
       });
 
       let blockchainId =
@@ -662,8 +787,15 @@ function Create() {
         blockchainId === undefined ||
         !Number.isFinite(Number(blockchainId))
       ) {
+        const unresolvedRecovery = { txHash: hash, backendData, chainId: selectedChainId };
+        try {
+          sessionStorage.setItem(pendingKey, JSON.stringify(unresolvedRecovery));
+        } catch (storageError) {
+          console.error("Could not persist bounty recovery data:", storageError);
+        }
+        setPendingCreate(unresolvedRecovery);
         showToast.error(
-          "The transaction succeeded, but the bounty ID could not be read. Check the block explorer or contact support.",
+          "The transaction succeeded, but the bounty ID is not available yet. Use the recovery panel to check again; no second transaction is needed.",
         );
         return;
       }
@@ -696,28 +828,20 @@ function Create() {
           "Transaction succeeded, but recovery data could not be saved in this tab.",
         );
       }
+      setPendingCreate({ payload, txHash: hash });
 
       setIsSavingBounty(true);
+      setTransactionPhase("Saving bounty details");
       const response = await retryUntilVerified(() =>
         apiClient.post("/bounty/create", payload),
       );
       if (response.status === 201) {
-        clearPendingCreate(pendingKey);
-        showToast.success("Bounty created and saved successfully!");
-        navigate("/dashboard");
+        publishAndOpenBounty(response, pendingKey);
       } else {
         throw new Error("The bounty was created on-chain, but saving failed.");
       }
     } catch (error) {
       console.error("Bounty creation failed:", error);
-      if (
-        error.response?.status >= 400 &&
-        error.response.status < 500 &&
-        ![401, 403].includes(error.response.status) &&
-        error.response?.data?.retryable !== true
-      ) {
-        clearPendingCreate(pendingKey);
-      }
       showToast.error(
         error.response?.data?.message ||
           error.response?.data?.error ||
@@ -726,6 +850,7 @@ function Create() {
       );
     } finally {
       setIsSavingBounty(false);
+      setTransactionPhase("");
     }
   };
 
@@ -764,6 +889,11 @@ function Create() {
   const smallLabel = `mb-2 block text-xs font-bold uppercase tracking-[0.13em] ${label}`;
 
   const dateInputClass = inputClass;
+  const fieldError = (name) => validationErrors[name] ? (
+    <p id={`${name}-error`} role="alert" className="mt-2 text-xs text-red-500">
+      {validationErrors[name]}
+    </p>
+  ) : null;
 
   return (
     <div
@@ -826,6 +956,31 @@ function Create() {
               </div>
             </div>
           </div>
+
+          {draftNotice && (
+            <div className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${card}`}>
+              <div>
+                <p className="text-sm font-semibold">Your bounty draft was restored</p>
+                <p className={`mt-1 text-xs ${muted}`}>Your saved details are ready for you to continue.</p>
+              </div>
+              <button type="button" onClick={() => setDraftNotice(false)} className={secondaryButton}>Continue draft</button>
+            </div>
+          )}
+
+          {pendingCreate && (
+            <div role="status" className={`mb-5 rounded-2xl border border-amber-500/30 bg-amber-500/[0.06] p-5`}>
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold">Transaction confirmed; bounty details still need syncing</p>
+                  <p className={`mt-1 text-xs leading-5 ${muted}`}>Your on-chain bounty was created. Retry saves its details to the app using the same transaction; it will not submit another wallet transaction.</p>
+                  {pendingCreate.txHash && <p className={`mt-2 break-all font-mono text-[11px] ${muted}`}>Transaction: {pendingCreate.txHash}</p>}
+                </div>
+                <button type="button" onClick={resumePendingCreate} disabled={isProcessing} className={primaryButton}>
+                  {isSavingBounty ? "Syncing bounty details…" : "Retry app sync"}
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Progress */}
           <div className={`mb-7 rounded-2xl border p-4 sm:p-6 ${card}`}>
@@ -962,6 +1117,7 @@ function Create() {
                         <select
                           value={bountyData.network}
                           onChange={handleChainChange}
+                          aria-label="Blockchain network"
                           className={inputClass}
                         >
                           {supportedChains.map((chain) => (
@@ -975,6 +1131,7 @@ function Create() {
                           Selected network:{" "}
                           {selectedChain?.name || "Not selected"}
                         </p>
+                        {fieldError("network")}
                       </div>
 
                       <div>
@@ -982,7 +1139,7 @@ function Create() {
                         <select
                           value={bountyData.category}
                           onChange={(event) => {
-                            updateBountyData("category", event.target.value);
+                            updateField("category", event.target.value);
                             updateBountyData("tags", []);
                             setCustomTag("");
                           }}
@@ -999,6 +1156,7 @@ function Create() {
                             </optgroup>
                           ))}
                         </select>
+                        {fieldError("category")}
                       </div>
 
                       <div className={panel}>
@@ -1046,11 +1204,15 @@ function Create() {
                           value={bountyData.title}
                           maxLength={120}
                           onChange={(event) =>
-                            updateBountyData("title", event.target.value)
+                            updateField("title", event.target.value)
                           }
                           className={inputClass}
+                          aria-label="Bounty title"
+                          aria-invalid={Boolean(validationErrors.title)}
+                          aria-describedby={validationErrors.title ? "title-error" : undefined}
                           placeholder="e.g. Build a DeFi analytics dashboard"
                         />
+                        {fieldError("title")}
                         <div className={`mt-1.5 text-right text-xs ${muted}`}>
                           {bountyData.title.length}/120
                         </div>
@@ -1062,11 +1224,15 @@ function Create() {
                           value={bountyData.description}
                           maxLength={5000}
                           onChange={(event) =>
-                            updateBountyData("description", event.target.value)
+                            updateField("description", event.target.value)
                           }
                           className={`${inputClass} min-h-44 resize-y leading-6`}
+                          aria-label="Bounty description"
+                          aria-invalid={Boolean(validationErrors.description)}
+                          aria-describedby={validationErrors.description ? "description-error" : undefined}
                           placeholder="Describe the task, requirements, expected deliverables, and how the submission will be evaluated."
                         />
+                        {fieldError("description")}
                         <div
                           className={`mt-1.5 flex justify-between text-xs ${muted}`}
                         >
@@ -1178,6 +1344,7 @@ function Create() {
                             )}
                           </>
                         )}
+                        {fieldError("tags")}
                       </div>
 
                       <div className="grid gap-5 sm:grid-cols-2">
@@ -1200,9 +1367,19 @@ function Create() {
                                     ? ""
                                     : prev.deadline,
                               }));
+                              setValidationErrors((prev) => {
+                                const next = { ...prev };
+                                delete next.startDate;
+                                if (value && bountyData.deadline <= value) delete next.deadline;
+                                return next;
+                              });
                             }}
                             className={dateInputClass}
+                            aria-label="Bounty start date"
+                            aria-invalid={Boolean(validationErrors.startDate)}
+                            aria-describedby={validationErrors.startDate ? "startDate-error" : undefined}
                           />
+                          {fieldError("startDate")}
                         </div>
 
                         <div>
@@ -1215,10 +1392,14 @@ function Create() {
                             value={bountyData.deadline}
                             min={minDeadline}
                             onChange={(event) =>
-                              updateBountyData("deadline", event.target.value)
+                              updateField("deadline", event.target.value)
                             }
                             className={dateInputClass}
+                            aria-label="Bounty deadline"
+                            aria-invalid={Boolean(validationErrors.deadline)}
+                            aria-describedby={validationErrors.deadline ? "deadline-error" : undefined}
                           />
+                          {fieldError("deadline")}
                           <p className={`mt-1.5 text-xs ${muted}`}>
                             At least one day after the start date.
                           </p>
@@ -1236,7 +1417,7 @@ function Create() {
                             type="url"
                             value={bountyData.originLink}
                             onChange={(event) =>
-                              updateBountyData("originLink", event.target.value)
+                              updateField("originLink", event.target.value)
                             }
                             className={`${inputClass} pl-10 ${
                               originLinkError
@@ -1246,9 +1427,9 @@ function Create() {
                             placeholder="https://github.com/your-project"
                           />
                         </div>
-                        {originLinkError && (
+                        {validationErrors.originLink && (
                           <p className="mt-2 text-xs text-red-500">
-                            {originLinkError}
+                            {validationErrors.originLink}
                           </p>
                         )}
                         <p className={`mt-1.5 text-xs ${muted}`}>
@@ -1301,9 +1482,10 @@ function Create() {
                         <select
                           value={bountyData.token}
                           onChange={(event) =>
-                            updateBountyData("token", event.target.value)
+                            updateField("token", event.target.value)
                           }
                           className={inputClass}
+                          aria-label="Reward token"
                         >
                           {availableTokens.length === 0 ? (
                             <option value="">
@@ -1318,6 +1500,7 @@ function Create() {
                             ))
                           )}
                         </select>
+                        {fieldError("token")}
                         <p className={`mt-2 text-xs ${muted}`}>
                           Available tokens are based on your connected wallet
                           network.
@@ -1338,7 +1521,7 @@ function Create() {
                               // if (raw !== "" && !/^\d*\.?\d*$/.test(raw)) return;
                               // Allow digits and at most one decimal point.
                               if (!/^\d*\.?\d*$/.test(raw)) return;
-                              updateBountyData(
+                              updateField(
                                 "reward",
                                 raw,
                                 // === "" ? 0 : Number(raw),
@@ -1346,11 +1529,15 @@ function Create() {
                             }}
                             placeholder="0.00"
                             className="w-full bg-transparent py-3 text-lg font-semibold outline-none"
+                            aria-label="Reward amount"
+                            aria-invalid={Boolean(validationErrors.reward)}
+                            aria-describedby={validationErrors.reward ? "reward-error" : undefined}
                           />
                           <span className="rounded-lg bg-[#00D6A0]/10 px-3 py-2 text-sm font-bold text-[#00D6A0]">
                             {bountyData.token || "TOKEN"}
                           </span>
                         </div>
+                        {fieldError("reward")}
                       </div>
 
                       <div className={`rounded-2xl border p-5 ${divider}`}>
@@ -1486,6 +1673,7 @@ function Create() {
                               )}
                           </div>
                         )}
+                        {fieldError("payout")}
                       </div>
 
                       <div>
@@ -1603,6 +1791,37 @@ function Create() {
                       </div>
                     </div>
 
+                    <div className={`mb-5 rounded-2xl border p-4 ${panel}`}>
+                      <p className="text-sm font-bold">Ready to publish?</p>
+                      <div className="mt-3 space-y-2 text-xs">
+                        <p className={isConnected && address ? "text-[#00A87D]" : "text-amber-500"}>
+                          {isConnected && address ? "✓ Wallet connected" : "Connect your wallet to continue"}
+                        </p>
+                        <p className={isAuthenticated ? "text-[#00A87D]" : "text-amber-500"}>
+                          {isAuthenticated ? "✓ Wallet signed in" : "Sign in with your wallet before publishing"}
+                        </p>
+                        <p className={currentChainId === Number(bountyData.network) ? "text-[#00A87D]" : "text-amber-500"}>
+                          {currentChainId === Number(bountyData.network)
+                            ? `✓ Wallet is on ${selectedChain?.name || "the selected network"}`
+                            : `Switch your wallet to ${selectedChain?.name || "the selected network"} before publishing`}
+                        </p>
+                        {!availableTokens.length && <p className="text-amber-500">No reward tokens are available on the connected network.</p>}
+                      </div>
+                      {currentChainId !== Number(bountyData.network) && selectedChain && (
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            try {
+                              await switchChainAsync({ chainId: Number(bountyData.network) });
+                            } catch {
+                              showToast.error("Network switch was not completed. Switch it in your wallet and try again.");
+                            }
+                          }}
+                          className={`${secondaryButton} mt-3`}
+                        >Switch network</button>
+                      )}
+                    </div>
+
                     <div
                       className={`overflow-hidden rounded-2xl border ${divider}`}
                     >
@@ -1689,7 +1908,8 @@ function Create() {
                       <p className={`text-xs leading-5 ${muted}`}>
                         Creating this bounty requires wallet confirmation and an
                         on-chain transaction. Verify the network, token, reward,
-                        and service fee before approving it.
+                        and service fee before approving it. Dates are shown in
+                        your local time zone.
                       </p>
                     </div>
                   </div>
@@ -1735,8 +1955,12 @@ function Create() {
                         <>
                           <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#07120D]/30 border-t-[#07120D]" />
                           {isSavingBounty
-                            ? "Verifying transaction..."
-                            : "Processing transaction..."}
+                            ? transactionPhase || "Saving bounty details"
+                            : isContractPending
+                              ? "Confirm in wallet"
+                              : isConfirming
+                                ? "Waiting for chain confirmation"
+                                : transactionPhase || "Preparing transaction"}
                         </>
                       ) : (
                         <>
