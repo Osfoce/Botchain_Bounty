@@ -133,6 +133,7 @@ const getUserDashboard = async (req, res) => {
       submissionStatusRows,
       enrollments,
       enrollmentTotal,
+      assignedRewards,
       usdEarnings,
     ] = await Promise.all([
       Bounty.aggregate([
@@ -170,6 +171,10 @@ const getUserDashboard = async (req, res) => {
         .select("bountyId")
         .lean(),
       Enrollment.countDocuments({ user: wallet }),
+      Reward.find({ winnerAddress: wallet.toLowerCase(), status: "assigned" })
+        .sort({ assignedAt: 1 })
+        .select("bountyId bountyTitle amountFormatted token chainId assignedAt")
+        .lean(),
       getUsdEarningsForUser(req, user),
     ]);
 
@@ -216,6 +221,14 @@ const getUserDashboard = async (req, res) => {
       bounties: bountyStats,
       submissions: submissionStats,
       enrolledBountyIds: enrollments.map((e) => String(e.bountyId)),
+      unclaimedRewards: assignedRewards.map((reward) => ({
+        bountyId: String(reward.bountyId),
+        bountyTitle: reward.bountyTitle,
+        amountFormatted: reward.amountFormatted || null,
+        token: reward.token,
+        chainId: Number(reward.chainId),
+        assignedAt: reward.assignedAt,
+      })),
       enrollmentPagination: {
         limit: 100,
         total: enrollmentTotal,

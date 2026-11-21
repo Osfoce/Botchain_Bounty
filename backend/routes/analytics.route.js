@@ -4,6 +4,7 @@ const {
   getWalletAnalytics,
 } = require("../controller/analytics.controller");
 const { requireAuth, requireSelf } = require("../middleware/auth");
+const { requireAdmin } = require("../middleware/authorization");
 const { privateReadLimiter } = require("../middleware/privateReadLimiter");
 const { requestSchemas, validateRequest } = require("../middleware/requestSchemas");
 
@@ -14,7 +15,21 @@ router.use((_req, res, next) => {
   next();
 });
 
-router.get("/analytics/platform", getPlatformAnalytics);
+router.get(
+  "/analytics/platform",
+  requireAuth,
+  requireAdmin,
+  privateReadLimiter,
+  getPlatformAnalytics,
+);
+router.get(
+  "/analytics/me/:wallet",
+  validateRequest({ params: requestSchemas.analyticsWalletParams }),
+  requireAuth,
+  privateReadLimiter,
+  requireSelf,
+  getWalletAnalytics,
+);
 router.get(
   "/analytics/:role/:wallet",
   validateRequest({ params: requestSchemas.analyticsParams }),

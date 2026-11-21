@@ -11,6 +11,7 @@ import {
   FiActivity,
   FiArrowRight,
   FiArrowUp,
+  FiAward,
   FiCheckCircle,
   FiChevronLeft,
   FiChevronRight,
@@ -34,6 +35,34 @@ import Footer from "../components/Layout/Footer";
 import BountyCard from "../components/Bounty/BountyCard";
 
 const SUPPORT_EMAIL = "happybounty9@gmail.com";
+
+const getSeenRewardPromptKey = (walletAddress) =>
+  `happy-bounty:seen-reward-prompts:${walletAddress.toLowerCase()}`;
+
+const readSeenRewardPrompts = (walletAddress) => {
+  if (!walletAddress) return [];
+  try {
+    const saved = window.sessionStorage.getItem(
+      getSeenRewardPromptKey(walletAddress),
+    );
+    const parsed = saved ? JSON.parse(saved) : [];
+    return Array.isArray(parsed) ? parsed.map(String) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveSeenRewardPrompts = (walletAddress, bountyIds) => {
+  if (!walletAddress) return;
+  try {
+    window.sessionStorage.setItem(
+      getSeenRewardPromptKey(walletAddress),
+      JSON.stringify(bountyIds),
+    );
+  } catch {
+    // The reward queue still works for this dashboard visit without storage.
+  }
+};
 
 const INITIAL_MESSAGE = {
   role: "assistant",
@@ -122,6 +151,8 @@ const saveBountyPageCache = (apiUrl, filter, page, sort, limit, data) => {
 function Dashboard({ dark, setDark }) {
   const { address, isConnected } = useAccount();
   const { isAuthenticated } = useAuth();
+  const currentWalletRef = useRef(address?.toLowerCase() || "");
+  currentWalletRef.current = address?.toLowerCase() || "";
   const API_URL = import.meta.env.VITE_API_URL;
   const bountyApi = `${API_URL}/bounty/bounties`;
   const [initialBountyCache] = useState(() =>
@@ -154,6 +185,8 @@ function Dashboard({ dark, setDark }) {
   });
 
   const [enrolledBountyIds, setEnrolledBountyIds] = useState([]);
+  const [claimableRewards, setClaimableRewards] = useState([]);
+  const [seenRewardPromptIds, setSeenRewardPromptIds] = useState([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // Help Center state
@@ -285,9 +318,11 @@ function Dashboard({ dark, setDark }) {
   // Load dashboard statistics
   const loadDashboardStats = useCallback(async () => {
     if (!isConnected || !address || !isAuthenticated) return;
+    const addressAtRequest = address.toLowerCase();
 
     try {
       const { data } = await apiClient.get(userInfoApi);
+      if (currentWalletRef.current !== addressAtRequest) return;
 
       setStats({
         completed: data.user?.tasksCompleted || 0,
@@ -297,11 +332,56 @@ function Dashboard({ dark, setDark }) {
       });
 
       setEnrolledBountyIds(data.enrolledBountyIds || []);
+
+      const assignedRewards = Array.isArray(data.unclaimedRewards)
+        ? data.unclaimedRewards
+        : [];
+      const rewardChecks = await Promise.allSettled(
+        assignedRewards.map(async (reward) => {
+          const { data: claimableData } = await apiClient.get(
+            `/bounty/${reward.bountyId}/claimable/${address}`,
+          );
+          const claimableAmount = BigInt(String(claimableData.claimable || "0"));
+          return claimableAmount > 0n
+            ? {
+                ...reward,
+                amountFormatted:
+                  claimableData.claimableFormatted || reward.amountFormatted,
+              }
+            : null;
+        }),
+      );
+      if (currentWalletRef.current !== addressAtRequest) return;
+
+      const confirmedRewards = rewardChecks
+        .filter((result) => result.status === "fulfilled" && result.value)
+        .map((result) => result.value);
+      setClaimableRewards(confirmedRewards);
+
+      const activeBountyIds = new Set(
+        assignedRewards.map((reward) => String(reward.bountyId)),
+      );
+      const nextSeenIds = readSeenRewardPrompts(address).filter((bountyId) =>
+        activeBountyIds.has(bountyId),
+      );
+      setSeenRewardPromptIds(nextSeenIds);
+      saveSeenRewardPrompts(address, nextSeenIds);
     } catch (err) {
       console.error("Error loading userInfo:", err);
       showToast.error("Couldn't fetch user info");
     }
-  }, [address, isAuthenticated, isConnected, userInfoApi]);
+  }, [address, currentWalletRef, isAuthenticated, isConnected, userInfoApi]);
+
+  useEffect(() => {
+    if (!isConnected || !address || !isAuthenticated) {
+      if (address) saveSeenRewardPrompts(address, []);
+      setClaimableRewards([]);
+      setSeenRewardPromptIds([]);
+      return;
+    }
+
+    setSeenRewardPromptIds(readSeenRewardPrompts(address));
+  }, [address, isAuthenticated, isConnected]);
 
   // Load data deletion request
   const loadDataDeletionRequest = useCallback(async () => {
@@ -536,6 +616,19 @@ function Dashboard({ dark, setDark }) {
       : stats.earningsUsdStatus === "unavailable"
         ? "Current USD pricing is unavailable"
         : "Estimated USD value at current prices";
+
+  const nextClaimableReward = claimableRewards.find(
+    (reward) => !seenRewardPromptIds.includes(String(reward.bountyId)),
+  );
+
+  const handleRewardPromptClick = (reward) => {
+    if (!address) return;
+    const nextSeenIds = Array.from(
+      new Set([...seenRewardPromptIds, String(reward.bountyId)]),
+    );
+    setSeenRewardPromptIds(nextSeenIds);
+    saveSeenRewardPrompts(address, nextSeenIds);
+  };
 
   const handleFilterChange = (status) => {
     setFilter(status);
@@ -1489,6 +1582,39 @@ function Dashboard({ dark, setDark }) {
 
       <Footer dark={dark} />
 
+      {isConnected && isAuthenticated && nextClaimableReward && (
+        <Link
+          key={nextClaimableReward.bountyId}
+          to={`/bounty/${nextClaimableReward.bountyId}`}
+          onClick={() => handleRewardPromptClick(nextClaimableReward)}
+          aria-label={`Open ${nextClaimableReward.bountyTitle} to claim your reward`}
+          className={`claim-reward-prompt-enter fixed bottom-24 right-4 z-[105] block w-[calc(100vw-2rem)] max-w-[360px] rounded-2xl border p-4 shadow-[0_18px_55px_rgba(0,0,0,0.24)] sm:right-7 ${
+            dark
+              ? "border-[#00D6A0]/30 bg-[#101512] text-white"
+              : "border-[#00A87D]/25 bg-white text-[#111311]"
+          }`}
+        >
+          <div className="flex items-start gap-3">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#00A87D]/10 text-[#00A87D]">
+              <FiAward className="text-xl" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#008F6A] dark:text-[#00D6A0]">
+                You won a bounty
+              </span>
+              <span className="mt-1 block truncate text-sm font-bold">
+                {nextClaimableReward.bountyTitle || "Your reward is ready"}
+              </span>
+              <span className={`mt-1 block text-xs ${panelMuted}`}>
+                {nextClaimableReward.amountFormatted || "Reward"}{" "}
+                {nextClaimableReward.token || ""} · Click to claim
+              </span>
+            </span>
+            <FiArrowRight className="mt-1 shrink-0 text-[#00A87D]" />
+          </div>
+        </Link>
+      )}
+
       {/* HAPPY BOUNTY HELP CENTER */}
       {assistantOpen && (
         <section
@@ -1849,6 +1975,21 @@ function Dashboard({ dark, setDark }) {
       )}
 
       <style>{`
+        @keyframes claimRewardPromptSlideIn {
+          from {
+            opacity: 0;
+            transform: translate3d(0, 24px, 0);
+          }
+          to {
+            opacity: 1;
+            transform: translate3d(0, 0, 0);
+          }
+        }
+
+        .claim-reward-prompt-enter {
+          animation: claimRewardPromptSlideIn 360ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        }
+
         @keyframes dashboardFadeIn {
           from {
             opacity: 0;
