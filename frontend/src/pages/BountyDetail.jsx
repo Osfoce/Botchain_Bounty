@@ -2201,15 +2201,18 @@ const BountyDetail = () => {
                       </p>
 
                       {bounty.deadlineExtendedFrom && (
-                        <details className="mt-3 rounded-xl border border-amber-400/30 bg-amber-50/70 px-3 py-6 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100">
-                          <summary className="cursor-pointer list-none text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500">
-                            <span className="mr-2 rounded-full bg-amber-200/70 px-2 py-1 uppercase tracking-wide dark:bg-amber-400/20">Deadline extended</span>
-                            <span>Now {formatDateTime(bounty.deadline)}</span>
-                          </summary>
-                          <p className="mt-2 text-xs leading-5">Previous deadline: {formatDateTime(bounty.deadlineExtendedFrom)}</p>
-                        </details>
-                      )}
-
+  <details className="mt-3 rounded-xl border border-amber-400/30 bg-amber-50/70 px-3 py-4 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100">
+    <summary className="flex flex-wrap items-center gap-2 cursor-pointer list-none text-xs font-bold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500">
+      <span className="rounded-full bg-amber-200/70 px-2 py-1 uppercase tracking-wide dark:bg-amber-400/20">
+        Deadline extended
+      </span>
+      <span>Now {formatDateTime(bounty.deadline)}</span>
+      <span className="font-normal opacity-80">
+        (Previous: {formatDateTime(bounty.deadlineExtendedFrom)})
+      </span>
+    </summary>
+  </details>
+)}
                       <p className="mt-1 text-xs text-[#778077] dark:text-white/45">
                         {countdownHeading} · Your local time
                       </p>
