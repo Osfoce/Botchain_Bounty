@@ -15,6 +15,7 @@ const Bounty = require("../modules/bounty.module");
 const Enrollment = require("../modules/enrollment.module");
 const Submission = require("../modules/submission.module");
 const User = require("../modules/user.module");
+const Reward = require("../modules/reward.module");
 const {
   getOrCreateUserProfile,
   getUserDashboard,
@@ -341,6 +342,7 @@ test("dashboard history returns aggregates and caps enrollment identifiers", asy
     submissionAggregate: Submission.aggregate,
     enrollmentFind: Enrollment.find,
     enrollmentCountDocuments: Enrollment.countDocuments,
+    rewardFind: Reward.find,
   };
   User.findOneAndUpdate = async () => ({
     walletAddress: participant,
@@ -361,12 +363,14 @@ test("dashboard history returns aggregates and caps enrollment identifiers", asy
       bountyId: `bounty-${index}`,
     })));
   Enrollment.countDocuments = async () => 125;
+  Reward.find = () => makeQuery([]);
   t.after(() => {
     User.findOneAndUpdate = originals.userFindOneAndUpdate;
     Bounty.aggregate = originals.bountyAggregate;
     Submission.aggregate = originals.submissionAggregate;
     Enrollment.find = originals.enrollmentFind;
     Enrollment.countDocuments = originals.enrollmentCountDocuments;
+    Reward.find = originals.rewardFind;
   });
 
   const res = response();
@@ -381,6 +385,7 @@ test("dashboard history returns aggregates and caps enrollment identifiers", asy
   assert.equal(res.body.user.totalEarningsUsd, null);
   assert.equal(res.body.user.earningsUsdStatus, "incomplete");
   assert.equal(res.body.enrolledBountyIds.length, 100);
+  assert.deepEqual(res.body.unclaimedRewards, []);
   assert.deepEqual(res.body.enrollmentPagination, {
     limit: 100,
     total: 125,
