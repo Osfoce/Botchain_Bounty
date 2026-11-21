@@ -1256,7 +1256,7 @@ const BountyDetail = () => {
     }
   };
 
-  const synchronizeRewardAssignment = async (record) => {
+  const synchronizeRewardAssignment = async (record, { toastId } = {}) => {
     let data;
     try {
       ({ data } = await retryUntilVerified(() =>
@@ -1287,7 +1287,10 @@ const BountyDetail = () => {
     setSelectedWinners([]);
     setShowDistributeModal(false);
     await refreshCreatorReview(true);
-    showToast.success("Rewards distributed and synchronized successfully.");
+    showToast.success(
+      "Rewards distributed and synchronized successfully.",
+      toastId ? { id: toastId } : undefined,
+    );
   };
 
   const executeRewardAssignment = async (valid) => {
@@ -1372,6 +1375,9 @@ const BountyDetail = () => {
     try {
       tx = await executeRewardAssignment(valid);
       setDistributionPhase("Recording reward claims");
+      showToast.loading("Transaction confirmed. Syncing reward records...", {
+        id: toastId,
+      });
     } catch (error) {
       const txHash = error.transactionHash;
       if (txHash && error.transactionStatus === "reverted") {
@@ -1429,7 +1435,7 @@ const BountyDetail = () => {
     setShowDistributeModal(false);
 
     try {
-      await synchronizeRewardAssignment(pendingRecord);
+      await synchronizeRewardAssignment(pendingRecord, { toastId });
     } catch (error) {
       console.error("Distribution synchronization failed:", error);
       showToast.info(
