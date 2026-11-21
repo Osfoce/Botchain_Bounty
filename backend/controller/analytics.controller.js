@@ -409,7 +409,7 @@ const getContributorAnalytics = async (wallet, now, req) => {
   ];
   const bounties = bountyIds.length
     ? await Bounty.find({ _id: { $in: bountyIds } })
-        .select("category reward createdAt startDate deadline lifecycleStatus")
+        .select("category reward rewardWei network createdAt startDate deadline lifecycleStatus")
         .lean()
     : [];
   return makePersonalResponse({
@@ -426,7 +426,7 @@ const getCreatorAnalytics = async (wallet, now, req) => {
   const bounties = await Bounty.find({
     creator: { $regex: `^${wallet}$`, $options: "i" },
   })
-    .select("category reward createdAt startDate deadline lifecycleStatus")
+    .select("category reward rewardWei network createdAt startDate deadline lifecycleStatus")
     .lean();
   const bountyIds = bounties.map((bounty) => bounty._id);
   const [submissions, rewards] = bountyIds.length
@@ -467,7 +467,7 @@ const getPlatformAnalytics = async (req, res) => {
 
 const getWalletAnalytics = async (req, res) => {
   const { role, wallet } = req.params;
-  if (!["creator", "contributor"].includes(role)) {
+  if (role && !["creator", "contributor", "me", "my"].includes(role)) {
     return res.status(400).json({ message: "Unsupported analytics role" });
   }
   if (!WALLET_PATTERN.test(wallet)) {
@@ -477,10 +477,25 @@ const getWalletAnalytics = async (req, res) => {
   try {
     const normalizedWallet = wallet.toLowerCase();
     const now = new Date();
-    const result =
-      role === "creator"
-        ? await getCreatorAnalytics(normalizedWallet, now, req)
-        : await getContributorAnalytics(normalizedWallet, now, req);
+    let result;
+    if (role === "creator") {
+      result = await getCreatorAnalytics(normalizedWallet, now, req);
+    } else if (role === "contributor") {
+      result = await getContributorAnalytics(normalizedWallet, now, req);
+    } else {
+      const [creator, contributor] = await Promise.all([
+        getCreatorAnalytics(normalizedWallet, now, req),
+        getContributorAnalytics(normalizedWallet, now, req),
+      ]);
+      result = {
+        overview: {
+          bountiesCreated: creator.overview.bountiesCreated,
+          totalContributions: contributor.overview.totalContributions,
+        },
+        creator,
+        contributor,
+      };
+    }
     return res.status(200).json(result);
   } catch (error) {
     logRequestError(req, "wallet_analytics_failed", error);

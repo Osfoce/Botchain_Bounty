@@ -4,6 +4,11 @@ import apiClient from "../services/apiClient";
 import { useAuth } from "../hooks/useAuth";
 import { useAccount } from "wagmi";
 import { useNavigate } from "react-router-dom";
+import { isConfiguredAdminWallet } from "../utils/admin";
+import {
+  getAnalyticsErrorMessage,
+  hasAnalyticsContent,
+} from "../utils/analytics";
 
 import {
   FiActivity,
@@ -426,15 +431,23 @@ export default function Analytics({ dark = true, setDark }) {
   const { address, isConnected } = useAccount();
   const { isAuthenticated } = useAuth();
   const navigate = useNavigate();
+  const isAdmin =
+    isConnected && Boolean(address) && isConfiguredAdminWallet(address);
 
-  const [role, setRole] = useState("contributor");
+  const [role, setRole] = useState("my");
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [unavailable, setUnavailable] = useState(false);
   const [showScrollTop, setShowScrollTop] = useState(false);
 
-  const platform = role === "platform";
+  const currentRole = role === "platform" && !isAdmin ? "my" : role;
+  const platform = currentRole === "platform";
+
+  useEffect(() => {
+    if (role !== currentRole) setRole(currentRole);
+  }, [currentRole, role]);
 
   // Show the scroll-to-top button after the user scrolls down.
   useEffect(() => {
@@ -464,13 +477,14 @@ export default function Analytics({ dark = true, setDark }) {
 
     if (!address) return "";
 
-    return `${API_URL}/analytics/${role}/${address}`;
-  }, [platform, role, address]);
+    return `${API_URL}/analytics/me/${address}`;
+  }, [platform, currentRole, address]);
 
   const fetchAnalytics = useCallback(
     async (isRefresh = false, signal) => {
       if (!endpoint) {
         setData(null);
+        setUnavailable(false);
         setError(
           !API_URL
             ? "The API URL is not configured."
@@ -483,6 +497,7 @@ export default function Analytics({ dark = true, setDark }) {
 
       if (!platform && !isAuthenticated) {
         setData(null);
+        setUnavailable(false);
         setError("Sign in with your wallet to view personal analytics.");
         setLoading(false);
         setRefreshing(false);
@@ -495,29 +510,44 @@ export default function Analytics({ dark = true, setDark }) {
       setLoading(true);
 
       setError("");
+      setUnavailable(false);
 
       try {
         const response = await apiClient.get(endpoint, { signal });
+        const payload = response.data;
         if (
-          !response.data ||
-          typeof response.data !== "object" ||
-          !response.data.overview ||
-          typeof response.data.overview !== "object"
+          !payload ||
+          typeof payload !== "object" ||
+          Array.isArray(payload) ||
+          Object.keys(payload).length === 0
+        ) {
+          setData(null);
+          setError("");
+          setUnavailable(true);
+          return;
+        }
+        if (
+          !payload.overview ||
+          typeof payload.overview !== "object" ||
+          Array.isArray(payload.overview)
         ) {
           throw new Error("The analytics service returned an invalid response.");
         }
-        setData(response.data);
+        if (!hasAnalyticsContent(payload)) {
+          setData(null);
+          setError("");
+          setUnavailable(true);
+          return;
+        }
+        setData(payload);
+        setUnavailable(false);
       } catch (err) {
         if (signal?.aborted) return;
         console.error("Error fetching analytics:", err);
 
         setData(null);
-        setError(
-          err.response?.data?.message ||
-            err.response?.data?.error ||
-            err.message ||
-            "Unable to load analytics right now. Please try again."
-        );
+        setUnavailable(false);
+        setError(getAnalyticsErrorMessage(err));
       } finally {
         if (!signal?.aborted) {
           setLoading(false);
@@ -639,7 +669,7 @@ export default function Analytics({ dark = true, setDark }) {
           footer: "Reported metric",
         },
       ]
-    : role === "creator"
+    : currentRole === "creator"
       ? [
           {
             label: "Bounties created",
@@ -733,17 +763,25 @@ export default function Analytics({ dark = true, setDark }) {
           },
         ];
 
-  const pageTitle = platform
-    ? "Platform analytics"
-    : role === "creator"
-      ? "Creator analytics"
-      : "Contributor analytics";
+  const pageTitle = platform ? "Platform analytics" : "My Analytics";
 
   const pageDescription = platform
     ? "Understand platform activity, participation, and bounty performance."
-    : role === "creator"
-      ? "Track your bounties, submissions, and reward distribution."
-      : "See your contributions, submission progress, and claimed rewards.";
+    : "Your bounties, submissions, and rewards in one place.";
+
+  const creatorData = data?.creator;
+  const contributorData = data?.contributor;
+  const creatorOverview = creatorData?.overview || {};
+  const creatorSubmissions = creatorData?.submissions || {};
+  const contributorOverview = contributorData?.overview || {};
+  const contributorSubmissions = contributorData?.submissions || {};
+  const contributorRewards = contributorData?.rewards || {};
+  const hasCreatorActivity = Number(creatorOverview.bountiesCreated) > 0;
+  const hasSubmissionActivity = Number(contributorOverview.totalSubmissions) > 0;
+  const hasRewardActivity =
+    Number(contributorRewards.assigned) > 0 ||
+    Number(contributorRewards.claimed) > 0;
+  const hasContributorActivity = hasSubmissionActivity || hasRewardActivity;
 
   return (
     <div
@@ -760,7 +798,7 @@ export default function Analytics({ dark = true, setDark }) {
 
           <div className="relative flex flex-col gap-6 xl:flex-row xl:items-end xl:justify-between">
             <div className="min-w-0">
-              <Eyebrow>YOUR DATA / YOUR PROGRESS</Eyebrow>
+              <Eyebrow>{platform ? "PLATFORM ACTIVITY" : "YOUR ACTIVITY"}</Eyebrow>
 
               <h1 className="mt-3 text-3xl font-black tracking-[-0.045em] sm:text-4xl lg:text-5xl">
                 {pageTitle}
@@ -778,7 +816,7 @@ export default function Analytics({ dark = true, setDark }) {
               <div className="mt-5 flex flex-wrap items-center gap-2 text-[10px] font-semibold sm:text-xs">
                 <span className="inline-flex items-center gap-2 rounded-full border border-[#00D6A0]/20 bg-[#00D6A0]/[0.08] px-3 py-2 text-[#00A87D]">
                   <span className="h-1.5 w-1.5 rounded-full bg-[#00D6A0]" />
-                  Analytics overview
+                  {platform ? "Platform overview" : "Your activity"}
                 </span>
 
                 <span
@@ -807,11 +845,10 @@ export default function Analytics({ dark = true, setDark }) {
                 }`}
               >
                 {[
-                  { value: "contributor", label: "Contributor" },
-                  { value: "creator", label: "Creator" },
-                  { value: "platform", label: "Platform" },
+                  { value: "my", label: "My Analytics" },
+                  ...(isAdmin ? [{ value: "platform", label: "Platform" }] : []),
                 ].map((item) => {
-                  const active = role === item.value;
+                  const active = currentRole === item.value;
 
                   return (
                     <button
@@ -861,7 +898,7 @@ export default function Analytics({ dark = true, setDark }) {
                   <FiRefreshCw
                     className={refreshing ? "animate-spin" : ""}
                   />
-                  {refreshing ? "Refreshing..." : "Refresh data"}
+                  {refreshing ? "Refreshing..." : "Refresh"}
                 </button>
               </div>
             </div>
@@ -902,6 +939,23 @@ export default function Analytics({ dark = true, setDark }) {
               ))}
             </div>
           </div>
+        ) : unavailable ? (
+          <div
+            role="status"
+            className={`flex min-h-64 flex-col items-center justify-center rounded-3xl border px-5 py-10 text-center ${
+              dark
+                ? "border-white/10 bg-white/[0.025]"
+                : "border-black/[0.06] bg-white"
+            }`}
+          >
+            <FiBarChart2
+              className={`text-3xl ${dark ? "text-white/35" : "text-gray-400"}`}
+            />
+            <h2 className="mt-4 text-lg font-bold">Analytics unavailable</h2>
+            <p className={`mt-2 text-sm ${dark ? "text-white/50" : "text-gray-500"}`}>
+              There is no activity to show yet.
+            </p>
+          </div>
         ) : error ? (
           <div
             role="alert"
@@ -912,7 +966,7 @@ export default function Analytics({ dark = true, setDark }) {
             }`}
           >
             <FiXCircle className="text-3xl text-red-500" />
-            <h2 className="mt-4 text-lg font-bold">Analytics unavailable</h2>
+            <h2 className="mt-4 text-lg font-bold">Couldn’t load analytics</h2>
             <p
               className={`mt-2 max-w-lg text-sm leading-6 ${
                 dark ? "text-white/60" : "text-gray-600"
@@ -932,6 +986,56 @@ export default function Analytics({ dark = true, setDark }) {
           </div>
         ) : (
           <>
+            {!platform ? (
+              <div className="space-y-6 sm:space-y-8">
+                {hasCreatorActivity && (
+                  <Card dark={dark} accent>
+                    <SectionTitle number="01" label="Your bounties" title="Bounties you created" dark={dark} />
+                    <p className={`mb-5 text-xs leading-5 sm:text-sm ${dark ? "text-white/45" : "text-gray-500"}`}>
+                      Activity from bounties created by your wallet. Reward budget is separate from rewards contributors have claimed.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+                      <MetricCard dark={dark} icon={FiLayers} label="Bounties created" value={number(creatorOverview.bountiesCreated)} description="Bounties you published" />
+                      <MetricCard dark={dark} icon={FiZap} label="Active bounties" value={number(creatorOverview.activeBounties)} description="Open opportunities" />
+                      <MetricCard dark={dark} icon={FiActivity} label="Submissions received" value={number(creatorOverview.totalSubmissions)} description={`${number(creatorSubmissions.accepted)} accepted · ${number(creatorSubmissions.pending)} pending · ${number(creatorSubmissions.rejected)} rejected`} />
+                      <MetricCard dark={dark} icon={FiDollarSign} label="Bounty budget" value={amount(creatorOverview.totalRewardBudget)} description="Total reward amount set for your bounties" />
+                    </div>
+                  </Card>
+                )}
+
+                {hasSubmissionActivity && (
+                  <Card dark={dark}>
+                    <SectionTitle number={hasCreatorActivity ? "02" : "01"} label="Your participation" title="Your submissions" dark={dark} />
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:gap-4">
+                      <MetricCard dark={dark} icon={FiLayers} label="Submissions" value={number(contributorOverview.totalSubmissions)} description="Work you submitted" />
+                      <MetricCard dark={dark} icon={FiCheckCircle} label="Accepted" value={`${number(contributorSubmissions.accepted)} of ${number(contributorOverview.totalSubmissions)}`} description="Your submissions accepted" />
+                      <MetricCard dark={dark} icon={FiClock} label="Pending" value={number(contributorSubmissions.pending)} description="Awaiting review" />
+                      <MetricCard dark={dark} icon={FiXCircle} label="Rejected" value={number(contributorSubmissions.rejected)} description="Not selected" />
+                    </div>
+
+                  </Card>
+                )}
+
+                {hasRewardActivity && (
+                  <Card dark={dark}>
+                    <SectionTitle number={String(Number(hasCreatorActivity) + Number(hasSubmissionActivity) + 1).padStart(2, "0")} label="Your earnings" title="Your rewards" dark={dark} />
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
+                      <MetricCard dark={dark} icon={FiDollarSign} label="Assigned rewards" value={number(contributorRewards.assigned)} description="Rewards assigned to you" />
+                      <MetricCard dark={dark} icon={FiCheckCircle} label="Claimed" value={number(contributorRewards.claimed)} description="Rewards you have claimed" />
+                      <MetricCard dark={dark} icon={FiClock} label="Not yet claimed" value={number(Math.max(0, contributorRewards.assigned - contributorRewards.claimed))} description="Assigned rewards still unclaimed" />
+                    </div>
+                  </Card>
+                )}
+
+                {!hasCreatorActivity && !hasContributorActivity && (
+                  <div className={`rounded-3xl border p-8 text-center ${dark ? "border-white/10 bg-white/[0.025]" : "border-black/[0.06] bg-white"}`}>
+                    <h2 className="text-lg font-bold">No activity yet</h2>
+                    <p className={`mt-2 text-sm ${dark ? "text-white/50" : "text-gray-500"}`}>Your bounties, submissions, and rewards will appear here when you have activity.</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+            <>
             {/* Metrics: three per row, including on mobile */}
             <section className="mb-8 sm:mb-10">
               <div className="mb-4 flex flex-wrap items-end justify-between gap-3 sm:mb-5">
@@ -1414,6 +1518,8 @@ export default function Analytics({ dark = true, setDark }) {
                 </div>
               </div>
             </section>
+            </>
+            )}
           </>
         )}
       </main>

@@ -243,8 +243,9 @@ const requestSchemas = {
     .strict(),
   paginationQuery: z.object(pagination).strict(),
   analyticsParams: z
-    .object({ role: z.enum(["creator", "contributor"]), wallet })
+    .object({ role: z.enum(["creator", "contributor", "me", "my"]), wallet })
     .strict(),
+  analyticsWalletParams: z.object({ wallet }).strict(),
 };
 
 const validateRequest = (schemas) => (req, res, next) => {
