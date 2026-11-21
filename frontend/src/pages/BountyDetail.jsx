@@ -38,9 +38,15 @@ import {
   getExplorerUrl,
 } from "../utils/chains.address";
 import { supportedChains } from "../rainbowChains";
-import { useAccount, useChainId, useSwitchChain } from "wagmi";
+import {
+  useAccount,
+  useChainId,
+  useSwitchChain,
+  useWatchContractEvent,
+} from "wagmi";
 import { createPublicClient, formatEther, http } from "viem";
 import { useBounty } from "../hooks/useBounty";
+import { BOUNTY_ABI } from "../utils/abi";
 import { formatAmount } from "../utils/format";
 import { BountyDetailSkeleton } from "../components/UI/Skeleton";
 import { safeExternalUrl } from "../utils/safeExternalUrl";
@@ -542,12 +548,63 @@ const BountyDetail = () => {
 
   const refreshRewardStatus = useCallback(async () => {
     if (!id) return;
-    await Promise.allSettled([
+    const [bountyResult] = await Promise.allSettled([
+      apiClient.get(`/bounty/${id}`),
       loadWinnersData(id),
       refetchClaimable(),
       refetchOnChainClaimed(),
     ]);
+    if (bountyResult.status === "fulfilled") {
+      const updated = bountyResult.value.data.bounty || bountyResult.value.data;
+      setBounty((previous) => ({ ...previous, ...updated }));
+    }
   }, [id, loadWinnersData, refetchClaimable, refetchOnChainClaimed]);
+
+  const refreshAfterBountyEvent = useCallback((logs) => {
+    if (!logs.some((log) => String(log.args?.bountyId) === String(blockchainId))) {
+      return;
+    }
+    // Chain events reach every open bounty page, so all viewers refresh the
+    // database projection as soon as winner assignment or a claim is confirmed.
+    const refresh = () => {
+      void Promise.allSettled([
+        refreshCreatorReview(true),
+        refreshRewardStatus(),
+      ]);
+    };
+    refresh();
+    // The event can arrive just before the backend finishes projecting it.
+    // Follow up shortly so other viewers pick up the committed DB state too.
+    window.setTimeout(refresh, 1500);
+    window.setTimeout(refresh, 5000);
+  }, [blockchainId, refreshCreatorReview, refreshRewardStatus]);
+
+  const bountyContractAddress = bounty
+    ? getBountyContract(Number(bounty.network))
+    : undefined;
+  const bountyEventWatchEnabled = Boolean(
+    bountyContractAddress && blockchainId !== null,
+  );
+
+  useWatchContractEvent({
+    address: bountyContractAddress,
+    abi: BOUNTY_ABI,
+    chainId: bounty?.network ? Number(bounty.network) : undefined,
+    eventName: "RewardsAssigned",
+    enabled: bountyEventWatchEnabled,
+    onLogs: refreshAfterBountyEvent,
+    onError: (error) => console.warn("Could not watch reward assignment events:", error),
+  });
+
+  useWatchContractEvent({
+    address: bountyContractAddress,
+    abi: BOUNTY_ABI,
+    chainId: bounty?.network ? Number(bounty.network) : undefined,
+    eventName: "RewardClaimed",
+    enabled: bountyEventWatchEnabled,
+    onLogs: refreshAfterBountyEvent,
+    onError: (error) => console.warn("Could not watch reward claim events:", error),
+  });
 
   const syncClaimRecord = useCallback(async (record, { automatic = false } = {}) => {
     if (!record || !address || !isAuthenticated || claimSyncInFlightRef.current) return false;
@@ -1207,7 +1264,6 @@ const BountyDetail = () => {
           txHash: record.txHash,
           blockchainId: record.blockchainId,
           chainId: record.chainId,
-          bountyContract: record.bountyContract,
         }),
       ));
     } catch (error) {
@@ -1368,6 +1424,9 @@ const BountyDetail = () => {
       createdAt: new Date().toISOString(),
     };
     persistPendingDistribution(pendingRecord);
+    // The chain has confirmed the distribution. Close the review modal even if
+    // the MongoDB projection needs a retry; recovery remains available below.
+    setShowDistributeModal(false);
 
     try {
       await synchronizeRewardAssignment(pendingRecord);
@@ -1640,7 +1699,13 @@ const BountyDetail = () => {
   }
 
   const canClaim = () => {
-    if (isCreator || hasUserClaimedOffChain) return false;
+    if (
+      isCreator ||
+      hasUserClaimedOffChain ||
+      pendingClaimSync ||
+      isClaiming ||
+      isClaimSyncing
+    ) return false;
 
     if (blockchainId !== null) {
       return Boolean(
@@ -1883,7 +1948,9 @@ const BountyDetail = () => {
             </span>
           </div>
 
-          {pendingDistributionSync && (
+          {pendingDistributionSync &&
+            (pendingDistributionSync.status === "pending_confirmation" ||
+              !distributing) && (
             <section
               className="mb-6 rounded-2xl border border-amber-400/40 bg-amber-50 p-4 text-amber-950 dark:bg-amber-500/10 dark:text-amber-100"
               aria-live="polite"
