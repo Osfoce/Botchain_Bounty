@@ -736,3 +736,14 @@ synchronization is a recoverable projection of that action.**
 Once the chain confirms winner assignment, every subsequent retry must
 resume synchronization using the original transaction/event identity. It
 must never ask the smart contract to assign those winners again.
+
+
+
+
+
+theres a problem, the distribution and claim works onchain and but the ui dosen't reflect this immeditely, also upon sucessful distribution, the distribute modal should close automatically. it should show the user that won in the ui for everyone to see and upon claiming, the user is meant to see claimed and everything updated on the db. but after claiming, i noticed the claim butn is still showing and when i click again, it shows error 409. review the distribution and claim flow and how its updated onchain and provide the cause and the possible solution.
+
+also will the status of the claimed bounty chanfe to competed after this update you provided?
+when bounties are claimed bu users, the bounty is marked as completed and every user that won gets an accepted flag and for those that didn't, they get the not accepted (rejected or the correcponding marker the project provides).
+
+add both the distribution and claim flow correction and this user and bounty status and lifecycle status in an md file, make it a milestone that gets peimission to go to the next milestone and start implimenttion on the files needed

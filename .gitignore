@@ -1,3 +1,4 @@
 # Ignore all markdown documentation files
 *.md
 !EARNINGS_USD_MILESTONES.md
+!docs/bounty_lifecycle.md

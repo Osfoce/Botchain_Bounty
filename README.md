@@ -70,6 +70,8 @@ Configure Vercel's `VITE_ADMIN_WALLETS` with the same comma-separated public wal
 
 Security milestone details are documented in [SECURITY_AUTHENTICATION.md](./SECURITY_AUTHENTICATION.md), [SECURITY_AUTHORIZATION.md](./SECURITY_AUTHORIZATION.md), [SECURITY_PRIVACY.md](./SECURITY_PRIVACY.md), [SECURITY_BLOCKCHAIN_VERIFICATION.md](./SECURITY_BLOCKCHAIN_VERIFICATION.md), [SECURITY_FINANCIAL_INTEGRITY.md](./SECURITY_FINANCIAL_INTEGRITY.md), [SECURITY_API_HARDENING.md](./SECURITY_API_HARDENING.md), [SECURITY_FILE_UPLOADS.md](./SECURITY_FILE_UPLOADS.md), [SECURITY_DATA_LIFECYCLE.md](./SECURITY_DATA_LIFECYCLE.md), and [SECURITY_OPERATIONS.md](./SECURITY_OPERATIONS.md).
 
+The distribution and claim lifecycle, including on-chain confirmation and recoverable database synchronization, is documented in [docs/bounty_lifecycle.md](./docs/bounty_lifecycle.md).
+
 ## Checks
 
 ```bash
