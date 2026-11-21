@@ -2206,7 +2206,7 @@ const BountyDetail = () => {
       <span className="rounded-full bg-amber-200/70 px-2 py-1 uppercase tracking-wide dark:bg-amber-400/20">
         Deadline extended
       </span>
-      <span>Now {formatDateTime(bounty.deadline)}</span>
+      <span>{formatDateTime(bounty.deadline)}</span>
       <span className="font-normal opacity-80">
         (Previous: {formatDateTime(bounty.deadlineExtendedFrom)})
       </span>
